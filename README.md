@@ -6,6 +6,25 @@
 [![Windows Terminal](https://img.shields.io/badge/Windows%20Terminal-Recommended-brightgreen.svg)](https://github.com/microsoft/terminal)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+## 🎬 Demo
+
+<div align="center">
+
+### See PowerFlow in Action!
+
+<!-- Upload demo-video.mp4 to GitHub Issues to get the CDN link, then replace this line: -->
+<!-- https://github.com/Syntax-Read3r/powerflow/assets/USER_ID/VIDEO_ID.mp4 -->
+
+![PowerFlow Demo](assets/demo-pic.png)
+
+### Feature Screenshots
+
+<img src="assets/demo-pic-1.png" width="45%" alt="PowerFlow Git Workflow"/> <img src="assets/demo-pic-2.png" width="45%" alt="PowerFlow File Operations"/>
+
+_🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to get the embeddable link_
+
+</div>
+
 ## ✨ Features
 
 ### 🧭 Smart Navigation System
@@ -36,7 +55,7 @@
 - **Auto-Dependency Management**: Automatically installs required tools
 - **Comprehensive Help**: Built-in documentation system
 
-## 🎬 Quick Demo
+## 💻 Code Examples
 
 ```powershell
 # Smart navigation - finds projects intelligently
