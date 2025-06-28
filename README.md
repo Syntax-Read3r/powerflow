@@ -316,7 +316,7 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 ## 📝 Changelog
 
-### v6.0 (Current)
+### v1.0 (Current)
 
 - Enhanced rollback branch workflow
 - Improved GitHub integration with secure token storage
