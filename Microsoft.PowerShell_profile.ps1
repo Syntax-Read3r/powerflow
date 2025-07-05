@@ -7,12 +7,12 @@
 # 
 # Repository: https://github.com/Syntax-Read3r/powerflow
 # Documentation: See README.md for complete feature list and usage examples
-# Version: 1.0.0
-# Release Date: 2024-01-XX
+# Version: 1.0.2
+# Release Date: 4-07-2025
 # ============================================================================
 
 # Version management
-$script:POWERFLOW_VERSION = "1.0.2"
+$script:POWERFLOW_VERSION = "1.0.3"
 $script:POWERFLOW_REPO = "Syntax-Read3r/powerflow"
 $script:CHECK_PROFILE_UPDATES = $true
 $script:CHECK_DEPENDENCIES = $true
@@ -492,7 +492,26 @@ function op {
 .EXAMPLE
     git-a     # Opens beautiful add-commit-push interface
 #>
+<#
+.SYNOPSIS
+    Beautiful interactive Git add-commit-push workflow with optional version release
+.DESCRIPTION
+    Performs git add ., git commit -m, and git push with a beautiful interface.
+    Shows current status, previous commits for context, and provides confirmations.
+    When -VersionRelease is specified, also creates and pushes a version tag.
+.PARAMETER VersionRelease
+    Create and push version tag after successful commit (alias: -vr)
+.EXAMPLE
+    git-a                    # Normal workflow: add → commit → push
+    git-a -VersionRelease    # Release workflow: add → commit → push → tag → push tag  
+    git-a -vr               # Same as above (shorthand)
+#>
 function git-a {
+    param(
+        [Alias("vr")]
+        [switch]$VersionRelease  # -VersionRelease or -vr to trigger version tagging
+    )
+    
     # Check if we're in a git repository
     if (-not (git rev-parse --git-dir 2>$null)) {
         Write-Host "❌ Not in a Git repository" -ForegroundColor Red
@@ -538,10 +557,24 @@ function git-a {
         }
     }
 
+    # Show tagging info if -VersionRelease is specified
+    $workflowHeader = if ($VersionRelease) {
+        "🚀 Git Add → Commit → Push → Tag v$script:POWERFLOW_VERSION Workflow"
+    } else {
+        "🚀 Git Add → Commit → Push Workflow"
+    }
+
     # Minimalistic formatted display for fzf
     $formLines = @(
         "",
-        "🌿 Branch: $branch",
+        "🌿 Branch: $branch"
+    )
+    
+    if ($VersionRelease) {
+        $formLines += "🏷️ Will create tag: v$script:POWERFLOW_VERSION"
+    }
+    
+    $formLines += @(
         "",
         "📋 Files to be committed:"
     ) + $fileLines + @(
@@ -559,7 +592,7 @@ function git-a {
         --border=rounded `
         --height=80% `
         --prompt="📝 Commit Message: " `
-        --header="🚀 Git Add → Commit → Push Workflow" `
+        --header="$workflowHeader" `
         --header-first `
         --color="header:bold:blue,prompt:bold:green,border:cyan,spinner:yellow" `
         --margin=1 `
@@ -568,7 +601,6 @@ function git-a {
         --expect=enter
     
     # Extract the commit message from fzf output
-    # --print-query returns the typed query on first line
     $commitMessage = ""
     if ($fzfOutput) {
         $lines = @($fzfOutput)
@@ -602,11 +634,35 @@ function git-a {
 
     Write-Host "🚀 Pushing to remote..." -ForegroundColor Yellow
     git push
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "✅ Successfully pushed to '$branch'" -ForegroundColor Green
-    } else {
+    if ($LASTEXITCODE -ne 0) {
         Write-Host "❌ git push failed" -ForegroundColor Red
         Write-Host "💡 You may need to set upstream or resolve conflicts" -ForegroundColor DarkGray
+        return
+    }
+    Write-Host "✅ Successfully pushed to '$branch'" -ForegroundColor Green
+
+    # Tag and push tag if -VersionRelease parameter is specified
+    if ($VersionRelease) {
+        $tagName = "v$script:POWERFLOW_VERSION"
+        
+        Write-Host "🏷️ Creating tag $tagName..." -ForegroundColor Cyan
+        git tag $tagName
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ git tag failed" -ForegroundColor Red
+            Write-Host "💡 Tag may already exist. Use 'git tag -d $tagName' to delete it first" -ForegroundColor DarkGray
+            return
+        }
+        Write-Host "✅ Tag $tagName created successfully" -ForegroundColor Green
+
+        Write-Host "🚀 Pushing tag to remote..." -ForegroundColor Cyan
+        git push origin $tagName
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ Successfully pushed tag $tagName" -ForegroundColor Green
+            Write-Host "🎉 This will trigger the GitHub Actions release workflow!" -ForegroundColor Magenta
+        } else {
+            Write-Host "❌ git push tag failed" -ForegroundColor Red
+            Write-Host "💡 You may need to delete the local tag and try again" -ForegroundColor DarkGray
+        }
     }
 }
 
