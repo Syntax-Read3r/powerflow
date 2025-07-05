@@ -3,7 +3,7 @@ name: PowerFlow Release
 on:
   push:
     tags:
-      - 'v1.0.1'  # Triggers on version tags like v1.0.0, v1.2.3, etc.
+      - 'v*'  # ✅ FIX: Triggers on ANY version tag like v1.0.1, v1.0.2, v2.0.0, etc.
 
 env:
   REPO_NAME: powerflow
@@ -88,12 +88,15 @@ jobs:
         
       - name: 📝 Generate Install Script
         run: |
-          $installScript = @'
+          $version = "${{ needs.validate.outputs.version }}"
+          $tagName = "${{ needs.validate.outputs.tag_name }}"
+          
+          $installScript = @"
           #Requires -Version 5.1
           
           <#
           .SYNOPSIS
-              PowerFlow Installation Script v${{ needs.validate.outputs.version }}
+              PowerFlow Installation Script v$version
           .DESCRIPTION
               Installs PowerFlow PowerShell profile with all dependencies
           .PARAMETER Force
@@ -103,74 +106,74 @@ jobs:
               .\install.ps1 -Force
           #>
           
-          param([switch]$Force)
+          param([switch]`$Force)
           
-          $ErrorActionPreference = "Stop"
+          `$ErrorActionPreference = "Stop"
           
-          Write-Host "🚀 PowerFlow v${{ needs.validate.outputs.version }} Installation" -ForegroundColor Cyan
+          Write-Host "🚀 PowerFlow v$version Installation" -ForegroundColor Cyan
           Write-Host "=================================================" -ForegroundColor Cyan
           
           # Check PowerShell version
-          if ($PSVersionTable.PSVersion.Major -lt 5) {
+          if (`$PSVersionTable.PSVersion.Major -lt 5) {
               Write-Host "❌ PowerShell 5.1 or higher required" -ForegroundColor Red
               Write-Host "💡 Download PowerShell 7: https://aka.ms/powershell" -ForegroundColor Yellow
               exit 1
           }
           
           # Get profile path
-          $profilePath = $PROFILE
-          $profileDir = Split-Path $profilePath -Parent
+          `$profilePath = `$PROFILE
+          `$profileDir = Split-Path `$profilePath -Parent
           
-          Write-Host "📁 Profile location: $profilePath" -ForegroundColor White
+          Write-Host "📁 Profile location: `$profilePath" -ForegroundColor White
           
           # Check if profile exists
-          if ((Test-Path $profilePath) -and -not $Force) {
+          if ((Test-Path `$profilePath) -and -not `$Force) {
               Write-Host "⚠️  PowerShell profile already exists!" -ForegroundColor Yellow
-              $choice = Read-Host "Overwrite existing profile? (y/n)"
-              if ($choice -ne 'y') {
+              `$choice = Read-Host "Overwrite existing profile? (y/n)"
+              if (`$choice -ne 'y') {
                   Write-Host "❌ Installation cancelled" -ForegroundColor Red
                   exit 1
               }
               
               # Create backup
-              $backupPath = "$profilePath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-              Copy-Item $profilePath $backupPath
-              Write-Host "💾 Backup created: $backupPath" -ForegroundColor Cyan
+              `$backupPath = "`$profilePath.backup.`$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+              Copy-Item `$profilePath `$backupPath
+              Write-Host "💾 Backup created: `$backupPath" -ForegroundColor Cyan
           }
           
           # Create profile directory if needed
-          if (-not (Test-Path $profileDir)) {
+          if (-not (Test-Path `$profileDir)) {
               Write-Host "📂 Creating profile directory..." -ForegroundColor Yellow
-              New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
+              New-Item -ItemType Directory -Path `$profileDir -Force | Out-Null
           }
           
           # Download latest profile
           try {
               Write-Host "⬇️  Downloading PowerFlow profile..." -ForegroundColor Yellow
-              $downloadUrl = "https://github.com/Syntax-Read3r/powerflow/releases/download/${{ needs.validate.outputs.tag_name }}/Microsoft.PowerShell_profile.ps1"
+              `$downloadUrl = "https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/Microsoft.PowerShell_profile.ps1"
               
               # Try release asset first, fallback to raw GitHub
               try {
-                  Invoke-RestMethod -Uri $downloadUrl -OutFile $profilePath -ErrorAction Stop
+                  Invoke-RestMethod -Uri `$downloadUrl -OutFile `$profilePath -ErrorAction Stop
               } catch {
                   Write-Host "   📡 Trying alternative download..." -ForegroundColor DarkGray
-                  $fallbackUrl = "https://raw.githubusercontent.com/Syntax-Read3r/powerflow/${{ needs.validate.outputs.tag_name }}/Microsoft.PowerShell_profile.ps1"
-                  Invoke-RestMethod -Uri $fallbackUrl -OutFile $profilePath -ErrorAction Stop
+                  `$fallbackUrl = "https://raw.githubusercontent.com/Syntax-Read3r/powerflow/$tagName/Microsoft.PowerShell_profile.ps1"
+                  Invoke-RestMethod -Uri `$fallbackUrl -OutFile `$profilePath -ErrorAction Stop
               }
               
               Write-Host "✅ Profile downloaded successfully" -ForegroundColor Green
           } catch {
-              Write-Host "❌ Failed to download profile: $($_.Exception.Message)" -ForegroundColor Red
+              Write-Host "❌ Failed to download profile: `$(`$_.Exception.Message)" -ForegroundColor Red
               Write-Host "💡 Manual download: https://github.com/Syntax-Read3r/powerflow/releases" -ForegroundColor Yellow
               exit 1
           }
           
           Write-Host ""
-          Write-Host "🎉 PowerFlow v${{ needs.validate.outputs.version }} installed successfully!" -ForegroundColor Green
-          Write-Host "🔄 Restart PowerShell or run: . `$PROFILE" -ForegroundColor Cyan
+          Write-Host "🎉 PowerFlow v$version installed successfully!" -ForegroundColor Green
+          Write-Host "🔄 Restart PowerShell or run: . ```$PROFILE" -ForegroundColor Cyan
           Write-Host "💡 Type 'pwsh-h' for help after restart" -ForegroundColor Yellow
           Write-Host "🌟 Repository: https://github.com/Syntax-Read3r/powerflow" -ForegroundColor DarkGray
-          '@
+          "@
           
           Set-Content "install.ps1" $installScript -Encoding UTF8
           Write-Host "✅ Generated install.ps1"
@@ -178,44 +181,46 @@ jobs:
         
       - name: 📝 Generate Uninstall Script
         run: |
-          $uninstallScript = @'
+          $version = "${{ needs.validate.outputs.version }}"
+          
+          $uninstallScript = @"
           <#
           .SYNOPSIS
-              PowerFlow Uninstallation Script v${{ needs.validate.outputs.version }}
+              PowerFlow Uninstallation Script v$version
           .DESCRIPTION
               Removes PowerFlow profile and optionally cleans up dependencies
           #>
           
-          Write-Host "🗑️  PowerFlow v${{ needs.validate.outputs.version }} Uninstall" -ForegroundColor Yellow
+          Write-Host "🗑️  PowerFlow v$version Uninstall" -ForegroundColor Yellow
           Write-Host "=============================================" -ForegroundColor Yellow
           
-          $profilePath = $PROFILE
+          `$profilePath = `$PROFILE
           
-          if (-not (Test-Path $profilePath)) {
-              Write-Host "ℹ️  No PowerShell profile found at: $profilePath" -ForegroundColor Yellow
+          if (-not (Test-Path `$profilePath)) {
+              Write-Host "ℹ️  No PowerShell profile found at: `$profilePath" -ForegroundColor Yellow
               exit 0
           }
           
           # Check if it's PowerFlow profile
-          $content = Get-Content $profilePath -Raw -ErrorAction SilentlyContinue
-          if ($content -and $content -notmatch "PowerFlow") {
+          `$content = Get-Content `$profilePath -Raw -ErrorAction SilentlyContinue
+          if (`$content -and `$content -notmatch "PowerFlow") {
               Write-Host "ℹ️  Profile doesn't appear to be PowerFlow" -ForegroundColor Yellow
-              $continue = Read-Host "Remove anyway? (y/n)"
-              if ($continue -ne 'y') {
+              `$continue = Read-Host "Remove anyway? (y/n)"
+              if (`$continue -ne 'y') {
                   Write-Host "❌ Uninstall cancelled" -ForegroundColor Yellow
                   exit 0
               }
           }
           
           # Backup before removal
-          $backupPath = "$profilePath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-          Write-Host "💾 Creating backup: $backupPath" -ForegroundColor Cyan
-          Copy-Item $profilePath $backupPath -ErrorAction SilentlyContinue
+          `$backupPath = "`$profilePath.backup.`$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+          Write-Host "💾 Creating backup: `$backupPath" -ForegroundColor Cyan
+          Copy-Item `$profilePath `$backupPath -ErrorAction SilentlyContinue
           
           # Remove profile
-          Remove-Item $profilePath -Force
+          Remove-Item `$profilePath -Force
           Write-Host "✅ PowerFlow profile removed" -ForegroundColor Green
-          Write-Host "💾 Backup saved to: $backupPath" -ForegroundColor Cyan
+          Write-Host "💾 Backup saved to: `$backupPath" -ForegroundColor Cyan
           
           # Ask about dependencies
           Write-Host "`n🔧 Remove installed dependencies?" -ForegroundColor Yellow
@@ -223,11 +228,11 @@ jobs:
           Write-Host "   • fzf, zoxide, lsd" -ForegroundColor DarkGray
           Write-Host "   • FiraCode Nerd Font" -ForegroundColor DarkGray
           
-          $removeDeps = Read-Host "Remove dependencies via Scoop? (y/n)"
-          if ($removeDeps -eq 'y') {
+          `$removeDeps = Read-Host "Remove dependencies via Scoop? (y/n)"
+          if (`$removeDeps -eq 'y') {
               if (Get-Command scoop -ErrorAction SilentlyContinue) {
                   Write-Host "🧹 Removing Scoop packages..." -ForegroundColor Yellow
-                  scoop uninstall starship fzf zoxide lsd FiraCode-NF 2>$null
+                  scoop uninstall starship fzf zoxide lsd FiraCode-NF 2>`$null
                   Write-Host "✅ Dependencies removed" -ForegroundColor Green
               } else {
                   Write-Host "⚠️  Scoop not found - manual dependency removal required" -ForegroundColor Yellow
@@ -236,7 +241,7 @@ jobs:
           
           Write-Host "`n✅ PowerFlow uninstall complete" -ForegroundColor Green
           Write-Host "🙏 Thanks for trying PowerFlow!" -ForegroundColor Cyan
-          '@
+          "@
           
           Set-Content "uninstall.ps1" $uninstallScript -Encoding UTF8
           Write-Host "✅ Generated uninstall.ps1"
@@ -299,16 +304,11 @@ jobs:
           
           # Save release notes to file
           Set-Content "RELEASE_NOTES.md" $releaseNotes -Encoding UTF8
-          
-          # Output for GitHub Actions (handle multiline)
-          $releaseNotesEscaped = $releaseNotes -replace '%', '%25' -replace '\r', '%0D' -replace '\n', '%0A'
-          Write-Output "notes=$releaseNotesEscaped" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          
           Write-Host "✅ Generated release notes"
         shell: pwsh
         
       - name: 📤 Upload Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4  # ✅ FIX: Updated to v4
         with:
           name: release-files
           path: |
@@ -329,52 +329,26 @@ jobs:
         uses: actions/checkout@v4
         
       - name: 📥 Download Release Files
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4  # ✅ FIX: Updated to v4
         with:
           name: release-files
           path: ./release-files
           
+      # ✅ FIX: Modern release action instead of deprecated ones
       - name: 🚀 Create GitHub Release
-        uses: actions/create-release@v1
-        id: create_release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ needs.validate.outputs.tag_name }}
-          release_name: "PowerFlow ${{ needs.validate.outputs.tag_name }}"
+          name: "PowerFlow ${{ needs.validate.outputs.tag_name }}"
           body_path: ./release-files/RELEASE_NOTES.md
           draft: false
           prerelease: false
-          
-      - name: 📎 Upload Profile File
-        uses: actions/upload-release-asset@v1
+          files: |
+            ./release-files/${{ env.PROFILE_FILE }}
+            ./release-files/install.ps1
+            ./release-files/uninstall.ps1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release-files/${{ env.PROFILE_FILE }}
-          asset_name: ${{ env.PROFILE_FILE }}
-          asset_content_type: text/plain
-          
-      - name: 📎 Upload Install Script
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release-files/install.ps1
-          asset_name: install.ps1
-          asset_content_type: text/plain
-          
-      - name: 📎 Upload Uninstall Script
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release-files/uninstall.ps1
-          asset_name: uninstall.ps1
-          asset_content_type: text/plain
 
   post-release:
     name: 📢 Post-Release Tasks
@@ -391,12 +365,3 @@ jobs:
           echo "🎉 PowerFlow ${{ needs.validate.outputs.tag_name }} released successfully!"
           echo "📦 Release URL: https://github.com/Syntax-Read3r/powerflow/releases/tag/${{ needs.validate.outputs.tag_name }}"
           echo "📥 Install command: irm https://github.com/Syntax-Read3r/powerflow/releases/download/${{ needs.validate.outputs.tag_name }}/install.ps1 | iex"
-          
-      # Optional: Could add Discord/Slack notifications, update documentation, etc.
-      # - name: 📢 Notify Discord/Slack
-      #   run: |
-      #     # Add webhook notifications here
-      
-      # - name: 📝 Update Documentation
-      #   run: |
-      #     # Auto-update documentation with new version
