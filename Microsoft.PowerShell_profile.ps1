@@ -21,6 +21,58 @@ $script:CHECK_UPDATES = $true
 # Suppress progress bars for faster installation
 $ProgressPreference = 'SilentlyContinue'
 
+# ============================================================================
+# ENHANCED PROFILE UPDATE CHECKING
+# ============================================================================
+
+function Check-PowerFlowUpdates {
+    if (-not $script:CHECK_PROFILE_UPDATES) { return }
+    
+    # Check if we've already prompted for this version today
+    $updateCheckFile = "$env:TEMP\.powerflow_update_check"
+    $today = Get-Date -Format "yyyy-MM-dd"
+    
+    if (Test-Path $updateCheckFile) {
+        $lastCheck = Get-Content $updateCheckFile -ErrorAction SilentlyContinue
+        if ($lastCheck -eq $today) {
+            return # Already checked today
+        }
+    }
+    
+    try {
+        # Check for PowerFlow updates
+        $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/$script:POWERFLOW_REPO/releases/latest" -TimeoutSec 5 -ErrorAction Stop
+        $latestVersion = [Version]($latestRelease.tag_name -replace '^v')
+        $currentVersion = [Version]$script:POWERFLOW_VERSION
+        
+        if ($latestVersion -gt $currentVersion) {
+            Write-Host "🚀 PowerFlow update available: v$currentVersion → v$latestVersion" -ForegroundColor Cyan
+            Write-Host "📍 Release: $($latestRelease.html_url)" -ForegroundColor DarkGray
+            
+            $choice = Read-Host "🔄 Update now? (y/n/s=skip today)"
+            
+            switch ($choice) {
+                "y" {
+                    powerflow-update
+                }
+                "s" {
+                    Write-Host "⏭️  Skipping PowerFlow update check for today" -ForegroundColor Yellow
+                    $today | Set-Content $updateCheckFile
+                }
+                default {
+                    Write-Host "⏭️  PowerFlow update skipped" -ForegroundColor DarkGray
+                }
+            }
+        } else {
+            # Save successful check to avoid daily spam
+            $today | Set-Content $updateCheckFile
+        }
+    } catch {
+        # Silent fail for update checks to avoid slowing down profile loading
+        Write-Host "⚠️  Could not check for PowerFlow updates (network/API limit)" -ForegroundColor DarkGray
+    }
+}
+
 function Initialize-Dependencies {
     if (-not $script:CHECK_DEPENDENCIES) { return }
     
@@ -386,6 +438,7 @@ pause
 try {
     Initialize-Dependencies
     Check-PowerShellUpdates
+    Check-PowerFlowUpdates
 } catch {
     Write-Host "⚠️  Initialization warning: $($_.Exception.Message)" -ForegroundColor Yellow
 }
@@ -4592,6 +4645,231 @@ function pwsh-settings {
     }
 }
 
+
+# ============================================================================
+# POWERFLOW VERSION MANAGEMENT FUNCTIONS
+# ============================================================================
+# Add these functions to your Microsoft.PowerShell_profile.ps1
+
+<#
+.SYNOPSIS
+    Get detailed PowerFlow version information
+.DESCRIPTION
+    Shows current PowerFlow version, repository info, and installation status
+.EXAMPLE
+    Get-PowerFlowVersion     # Shows detailed version info
+#>
+function Get-PowerFlowVersion {
+    Write-Host ""
+    Write-Host "╭─ 🚀 POWERFLOW VERSION INFO ─────────────────────────────────────────────╮" -ForegroundColor Cyan
+    Write-Host "│                                                                          │" -ForegroundColor Cyan
+    Write-Host "│  📦 Version: $script:POWERFLOW_VERSION".PadRight(73) + "│" -ForegroundColor Cyan
+    Write-Host "│  📍 Repository: $script:POWERFLOW_REPO".PadRight(73) + "│" -ForegroundColor Cyan
+    Write-Host "│  📄 Profile: $PROFILE".PadRight(73) + "│" -ForegroundColor Cyan
+    
+    # Check installation status
+    $profileExists = Test-Path $PROFILE
+    $depsInstalled = @("starship", "fzf", "zoxide", "lsd", "git") | ForEach-Object {
+        Get-Command $_ -ErrorAction SilentlyContinue
+    } | Measure-Object | Select-Object -ExpandProperty Count
+    
+    Write-Host "│  ✅ Profile Loaded: $profileExists".PadRight(73) + "│" -ForegroundColor Cyan
+    Write-Host "│  🔧 Dependencies: $depsInstalled/5 installed".PadRight(73) + "│" -ForegroundColor Cyan
+    
+    # Check last update
+    if (Test-Path $script:BookmarkFile) {
+        $bookmarkCount = (Get-Bookmarks).Count
+        Write-Host "│  🔖 Bookmarks: $bookmarkCount configured".PadRight(73) + "│" -ForegroundColor Cyan
+    }
+    
+    Write-Host "│                                                                          │" -ForegroundColor Cyan
+    Write-Host "╰──────────────────────────────────────────────────────────────────────────╯" -ForegroundColor Cyan
+    Write-Host ""
+}
+
+<#
+.SYNOPSIS
+    Show PowerFlow version (short format)
+.DESCRIPTION
+    Quick version display for status checks
+.EXAMPLE
+    powerflow-version     # Shows version info
+#>
+function powerflow-version {
+    Write-Host "🚀 PowerFlow v$script:POWERFLOW_VERSION" -ForegroundColor Cyan
+    Write-Host "📍 Repository: $script:POWERFLOW_REPO" -ForegroundColor DarkGray
+    Write-Host "📄 Profile: $PROFILE" -ForegroundColor DarkGray
+}
+
+<#
+.SYNOPSIS
+    Check for PowerFlow profile updates
+.DESCRIPTION
+    Checks GitHub repository for newer versions and offers to update
+.EXAMPLE
+    powerflow-update     # Check for updates interactively
+#>
+function powerflow-update {
+    Write-Host "🔍 Checking for PowerFlow updates..." -ForegroundColor Cyan
+    
+    try {
+        # Get latest release info from GitHub
+        $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/$script:POWERFLOW_REPO/releases/latest" -TimeoutSec 10 -ErrorAction Stop
+        $latestVersion = $latestRelease.tag_name -replace '^v', ''
+        $currentVersion = $script:POWERFLOW_VERSION
+        
+        Write-Host "📦 Current version: v$currentVersion" -ForegroundColor Green
+        Write-Host "🌐 Latest version: v$latestVersion" -ForegroundColor Green
+        
+        # Compare versions
+        if ([Version]$latestVersion -gt [Version]$currentVersion) {
+            Write-Host ""
+            Write-Host "🚀 PowerFlow update available!" -ForegroundColor Yellow
+            Write-Host "📍 Release notes: $($latestRelease.html_url)" -ForegroundColor DarkGray
+            Write-Host ""
+            Write-Host "Changes in v$latestVersion:" -ForegroundColor Cyan
+            
+            # Show release notes (first 500 chars)
+            $releaseNotes = $latestRelease.body
+            if ($releaseNotes.Length -gt 500) {
+                $releaseNotes = $releaseNotes.Substring(0, 500) + "..."
+            }
+            Write-Host $releaseNotes -ForegroundColor DarkGray
+            Write-Host ""
+            
+            $choice = Read-Host "🔄 Update PowerFlow now? (y/n)"
+            
+            if ($choice -eq 'y' -or $choice -eq 'Y') {
+                Write-Host "📦 Updating PowerFlow..." -ForegroundColor Yellow
+                
+                try {
+                    # Backup current profile
+                    $backupPath = "$PROFILE.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+                    Copy-Item $PROFILE $backupPath -Force
+                    Write-Host "💾 Backed up current profile to: $backupPath" -ForegroundColor Green
+                    
+                    # Download new profile
+                    $newProfileUrl = "https://raw.githubusercontent.com/$script:POWERFLOW_REPO/main/Microsoft.PowerShell_profile.ps1"
+                    Invoke-RestMethod -Uri $newProfileUrl -OutFile $PROFILE
+                    
+                    Write-Host "✅ PowerFlow updated successfully!" -ForegroundColor Green
+                    Write-Host "🔄 Restart PowerShell or run '. `$PROFILE' to load the new version" -ForegroundColor Cyan
+                    
+                } catch {
+                    Write-Host "❌ Update failed: $($_.Exception.Message)" -ForegroundColor Red
+                    Write-Host "🔄 Restoring from backup..." -ForegroundColor Yellow
+                    
+                    if (Test-Path $backupPath) {
+                        Copy-Item $backupPath $PROFILE -Force
+                        Write-Host "✅ Profile restored from backup" -ForegroundColor Green
+                    }
+                }
+            } else {
+                Write-Host "⏭️  Update cancelled" -ForegroundColor Yellow
+            }
+            
+        } elseif ([Version]$latestVersion -eq [Version]$currentVersion) {
+            Write-Host "✅ PowerFlow is up to date!" -ForegroundColor Green
+        } else {
+            Write-Host "🚀 You're running a development version (v$currentVersion > v$latestVersion)" -ForegroundColor Cyan
+        }
+        
+    } catch {
+        if ($_.Exception.Message -match "404") {
+            Write-Host "❌ PowerFlow repository not found. Check repository URL." -ForegroundColor Red
+        } elseif ($_.Exception.Message -match "403") {
+            Write-Host "❌ GitHub API rate limit exceeded. Try again later." -ForegroundColor Red
+        } else {
+            Write-Host "⚠️  Could not check for updates: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "🌐 Check manually: https://github.com/$script:POWERFLOW_REPO/releases" -ForegroundColor DarkGray
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+    PowerFlow recovery and diagnostics
+.DESCRIPTION
+    Provides recovery options when PowerFlow has issues
+.EXAMPLE
+    pwsh-recovery     # Shows recovery options
+#>
+function pwsh-recovery {
+    Write-Host ""
+    Write-Host "🚑 PowerFlow Recovery Options:" -ForegroundColor Red
+    Write-Host "═══════════════════════════════" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "🔄 Quick Fixes:" -ForegroundColor Cyan
+    Write-Host "  1. Reload profile: . `$PROFILE" -ForegroundColor DarkGray
+    Write-Host "  2. Check dependencies: Get-Command starship,fzf,zoxide,lsd,git" -ForegroundColor DarkGray
+    Write-Host "  3. Reinstall tools: scoop install starship fzf zoxide lsd git" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "🔧 Recovery Actions:" -ForegroundColor Cyan
+    Write-Host "  4. Reinstall PowerFlow: irm https://raw.githubusercontent.com/$script:POWERFLOW_REPO/main/install.ps1 | iex" -ForegroundColor DarkGray
+    Write-Host "  5. Reset to safe mode: Remove-Item `$PROFILE; . `$PROFILE" -ForegroundColor DarkGray
+    Write-Host "  6. Edit profile manually: code `$PROFILE" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "📋 Diagnostics:" -ForegroundColor Cyan
+    Write-Host "  7. Version info: Get-PowerFlowVersion" -ForegroundColor DarkGray
+    Write-Host "  8. Check for updates: powerflow-update" -ForegroundColor DarkGray
+    Write-Host "  9. Full help: pwsh-h" -ForegroundColor DarkGray
+    Write-Host ""
+    
+    $choice = Read-Host "Choose an option (1-9) or 'q' to quit"
+    
+    switch ($choice) {
+        "1" { 
+            Write-Host "🔄 Reloading profile..." -ForegroundColor Yellow
+            . $PROFILE
+        }
+        "2" { 
+            Write-Host "🔍 Checking dependencies..." -ForegroundColor Yellow
+            $tools = @("starship", "fzf", "zoxide", "lsd", "git")
+            foreach ($tool in $tools) {
+                $found = Get-Command $tool -ErrorAction SilentlyContinue
+                Write-Host "  $tool : $(if ($found) { '✅ Found' } else { '❌ Missing' })" -ForegroundColor $(if ($found) { 'Green' } else { 'Red' })
+            }
+        }
+        "3" { 
+            Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
+            scoop install starship fzf zoxide lsd git
+        }
+        "4" { 
+            Write-Host "🔄 Reinstalling PowerFlow..." -ForegroundColor Yellow
+            irm "https://raw.githubusercontent.com/$script:POWERFLOW_REPO/main/install.ps1" | iex
+        }
+        "5" {
+            $confirm = Read-Host "⚠️  Remove current profile? This will reset PowerFlow. (y/n)"
+            if ($confirm -eq 'y') {
+                Remove-Item $PROFILE -Force
+                Write-Host "✅ Profile removed. Restart PowerShell to use default profile." -ForegroundColor Green
+            }
+        }
+        "6" { 
+            code $PROFILE
+        }
+        "7" { 
+            Get-PowerFlowVersion
+        }
+        "8" { 
+            powerflow-update
+        }
+        "9" { 
+            pwsh-h
+        }
+        "q" { 
+            Write-Host "👋 Recovery menu closed" -ForegroundColor DarkGray
+        }
+        default { 
+            Write-Host "❌ Invalid option" -ForegroundColor Red
+        }
+    }
+}
+
+
+
+
+
 # ============================================================================
 # COMPREHENSIVE HELP SYSTEM
 # ============================================================================
@@ -4738,11 +5016,19 @@ function pwsh-h {
 │  send-keys <keys>    → send keyboard shortcuts to terminal                   │
 └──────────────────────────────────────────────────────────────────────────────┘
 
+
+
 ┌─ ⚙️  CONFIGURATION & SETTINGS ───────────────────────────────────────────────┐
 │  pwsh-profile        → open PowerShell profile in VS Code                    │
 │  pwsh-starship       → open Starship prompt config                           │
 │  pwsh-settings       → open Windows Terminal settings.json                   │
 │  pwsh-h              → show this help menu                                   │
+│  pwsh-recovery       → PowerFlow recovery and diagnostics menu               │
+│                                                                              │
+│  🔄 VERSION MANAGEMENT:                                                      │
+│  Get-PowerFlowVersion → detailed PowerFlow version and status info           │
+│  powerflow-version   → quick version display                                 │
+│  powerflow-update    → check for and install PowerFlow updates               │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌─ 🔧 DEBUGGING & TESTING ─────────────────────────────────────────────────────┐
