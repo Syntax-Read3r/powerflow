@@ -557,9 +557,39 @@ function git-a {
         }
     }
 
+    # Determine next version if -VersionRelease is specified
+    $nextTag = ""
+    if ($VersionRelease) {
+        Write-Host "🔍 Determining next version from repository..." -ForegroundColor Cyan
+        
+        # Get the latest version tag from git
+        $latestTag = git describe --tags --abbrev=0 2>$null
+        
+        if ($latestTag -and $latestTag -match '^v?(\d+)\.(\d+)\.(\d+)$') {
+            # Parse current version
+            $major = [int]$matches[1]
+            $minor = [int]$matches[2] 
+            $patch = [int]$matches[3]
+            
+            # Auto-increment patch version
+            $newPatch = $patch + 1
+            $newVersion = "$major.$minor.$newPatch"
+            $nextTag = "v$newVersion"
+            
+            Write-Host "📈 Latest tag: $latestTag → Next tag: $nextTag" -ForegroundColor Green
+        } else {
+            # No existing tags or invalid format, start with v1.0.0
+            $nextTag = "v1.0.0"
+            if ($latestTag) {
+                Write-Host "⚠️  Found tag '$latestTag' but it doesn't match semantic versioning" -ForegroundColor Yellow
+            }
+            Write-Host "🆕 Will create initial tag: $nextTag" -ForegroundColor Green
+        }
+    }
+
     # Show tagging info if -VersionRelease is specified
     $workflowHeader = if ($VersionRelease) {
-        "🚀 Git Add → Commit → Push → Tag v$script:POWERFLOW_VERSION Workflow"
+        "🚀 Git Add → Commit → Push → Tag $nextTag Workflow"
     } else {
         "🚀 Git Add → Commit → Push Workflow"
     }
@@ -571,7 +601,7 @@ function git-a {
     )
     
     if ($VersionRelease) {
-        $formLines += "🏷️ Will create tag: v$script:POWERFLOW_VERSION"
+        $formLines += "🏷️ Will create tag: $nextTag"
     }
     
     $formLines += @(
@@ -643,21 +673,19 @@ function git-a {
 
     # Tag and push tag if -VersionRelease parameter is specified
     if ($VersionRelease) {
-        $tagName = "v$script:POWERFLOW_VERSION"
-        
-        Write-Host "🏷️ Creating tag $tagName..." -ForegroundColor Cyan
-        git tag $tagName
+        Write-Host "🏷️ Creating tag $nextTag..." -ForegroundColor Cyan
+        git tag $nextTag
         if ($LASTEXITCODE -ne 0) {
             Write-Host "❌ git tag failed" -ForegroundColor Red
-            Write-Host "💡 Tag may already exist. Use 'git tag -d $tagName' to delete it first" -ForegroundColor DarkGray
+            Write-Host "💡 Tag may already exist. Use 'git tag -d $nextTag' to delete it first" -ForegroundColor DarkGray
             return
         }
-        Write-Host "✅ Tag $tagName created successfully" -ForegroundColor Green
+        Write-Host "✅ Tag $nextTag created successfully" -ForegroundColor Green
 
         Write-Host "🚀 Pushing tag to remote..." -ForegroundColor Cyan
-        git push origin $tagName
+        git push origin $nextTag
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "✅ Successfully pushed tag $tagName" -ForegroundColor Green
+            Write-Host "✅ Successfully pushed tag $nextTag" -ForegroundColor Green
             Write-Host "🎉 This will trigger the GitHub Actions release workflow!" -ForegroundColor Magenta
         } else {
             Write-Host "❌ git push tag failed" -ForegroundColor Red
