@@ -38,6 +38,7 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 ### 🎯 Enhanced Git Workflow
 
 - **Beautiful Add-Commit-Push**: Interactive workflow with visual feedback
+- **Repository-Based Versioning**: Auto-increment versions from git tags
 - **Rollback System**: Create rollback branches from any commit safely
 - **Interactive Branch Manager**: Pick, create, delete branches with visual interface
 - **GitHub Integration**: Browse, clone, and manage your repositories with token security
@@ -69,22 +70,23 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 # Smart navigation - finds projects intelligently
 nav my-react-app
 
-# Enhanced Git workflow
-git-a  # Beautiful add → commit → push interface
+# Enhanced Git workflow with auto-versioning
+git-a               # Beautiful add → commit → push interface
+git-a -vr           # Same workflow + auto-increment version tag
 
 # Cut and paste files
-mv important-file    # Cuts file
+mv important-file   # Cuts file
 # Navigate to destination
-mv-t                 # Pastes file
+mv-t               # Pastes file
 
 # Interactive Git log
-git-l               # Beautiful log viewer with actions
+git-l              # Beautiful log viewer with actions
 
 # GitHub repo browser
-gh-l                # Browse your repos with activity stats
+gh-l               # Browse your repos with activity stats
 
 # Check for updates
-powerflow-update    # Built-in update system
+powerflow-update   # Built-in update system
 ```
 
 ## ⚡ Quick Installation
@@ -170,6 +172,7 @@ nav .. src           # Go up one level, then into 'src' directory
 ```powershell
 # Enhanced add-commit-push
 git-a                # Interactive workflow with file preview
+git-a -vr            # Same workflow + auto-version tagging
 
 # Rollback system
 git-rb abc123        # Create rollback branch from commit
@@ -210,6 +213,124 @@ gh-l-status          # Check if token is saved
 gh-l-reset           # Remove saved token
 ```
 
+## 🔧 Version Control Setup
+
+### Repository-Based Versioning
+
+PowerFlow uses **smart repository-based versioning** for releases. Instead of hardcoded version numbers, it automatically determines the next version from your Git tags.
+
+#### How It Works
+
+```powershell
+# Check your current tags
+git tag --list --sort=-version:refname
+
+# Use git-a -vr for version releases
+git-a -vr   # Automatically increments from latest tag
+```
+
+**Example Flow:**
+- **Latest tag**: `v1.0.3` → **Next tag**: `v1.0.4`
+- **Latest tag**: `v2.1.5` → **Next tag**: `v2.1.6`
+- **No tags**: Creates `v1.0.0`
+
+#### Setting Up Development Environment
+
+For PowerFlow development and contributions:
+
+```powershell
+# 1. Fork and clone the repository
+git clone https://github.com/your-username/powerflow.git
+cd powerflow
+
+# 2. Set up upstream remote
+git remote add upstream https://github.com/Syntax-Read3r/powerflow.git
+
+# 3. Create development branch
+git checkout -b feature/your-feature-name
+
+# 4. Make your changes and test
+# Edit Microsoft.PowerShell_profile.ps1
+# Test your changes thoroughly
+
+# 5. Commit and push your changes
+git-a                # Use PowerFlow's own workflow!
+
+# 6. Create pull request to upstream
+```
+
+#### Version Release Workflow
+
+For maintainers creating releases:
+
+```powershell
+# 1. Ensure you're on main branch with latest changes
+git checkout main
+git pull upstream main
+
+# 2. Use PowerFlow's version release workflow
+git-a -vr           # Auto-increments version and creates tag
+
+# This will:
+# - Create a commit with your changes
+# - Auto-increment version from latest git tag  
+# - Create new version tag (e.g., v1.0.4)
+# - Push commit and tag to remote
+# - Trigger GitHub Actions release workflow
+```
+
+#### Manual Version Control
+
+If you need to create specific versions:
+
+```powershell
+# Create specific version tag
+git tag v2.0.0
+git push origin v2.0.0
+
+# Delete incorrect tags
+git tag -d v1.0.4           # Delete locally
+git push origin :v1.0.4     # Delete remotely
+
+# View tag history
+git tag --list --sort=-version:refname
+```
+
+#### GitHub Actions Integration
+
+PowerFlow includes automated release workflows:
+
+- **🔍 Validation**: Checks profile syntax and version consistency
+- **📦 Build**: Creates install scripts and release assets
+- **🚀 Release**: Creates GitHub release with downloadable files
+- **🔔 Notifications**: Updates auto-update system
+
+**Release Process:**
+1. Push version tag → Triggers workflow
+2. Workflow validates and builds release
+3. Creates GitHub release with install scripts
+4. Users get auto-update notifications
+
+#### Best Practices
+
+**For Contributors:**
+- Always test your changes thoroughly
+- Use descriptive commit messages
+- Create feature branches for new work
+- Don't create version tags (maintainers only)
+
+**For Maintainers:**
+- Use `git-a -vr` for version releases
+- Ensure CHANGELOG.md is updated
+- Test release workflow in development
+- Monitor GitHub Actions for build status
+
+**Version Tag Format:**
+- ✅ `v1.0.0` - Semantic versioning with 'v' prefix
+- ✅ `v1.2.3` - Major.Minor.Patch format
+- ❌ `1.0.0` - Missing 'v' prefix
+- ❌ `v1.0` - Incomplete version number
+
 ## 📚 Complete Feature Reference
 
 ### Smart Navigation & Bookmarks
@@ -228,6 +349,7 @@ gh-l-reset           # Remove saved token
 | Command           | Description                            |
 | ----------------- | -------------------------------------- |
 | `git-a`           | Beautiful add → commit → push workflow |
+| `git-a -vr`       | Add → commit → push → auto-version tag |
 | `git-rb <commit>` | Create rollback branch from commit     |
 | `git-rba`         | Rollback branch add-commit-push        |
 | `git-mrb`         | Merge rollback branch to main          |
