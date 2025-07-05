@@ -4663,8 +4663,8 @@ function Get-PowerFlowVersion {
     Write-Host ""
     Write-Host "╭─ 🚀 POWERFLOW VERSION INFO ─────────────────────────────────────────────╮" -ForegroundColor Cyan
     Write-Host "│                                                                          │" -ForegroundColor Cyan
-    Write-Host "│  📦 Version: $script:POWERFLOW_VERSION".PadRight(73) + "│" -ForegroundColor Cyan
-    Write-Host "│  📍 Repository: $script:POWERFLOW_REPO".PadRight(73) + "│" -ForegroundColor Cyan
+   Write-Host "│  📦 Version: ${script:POWERFLOW_VERSION}".PadRight(73) + "│" -ForegroundColor Cyan
+Write-Host "│  📍 Repository: ${script:POWERFLOW_REPO}".PadRight(73) + "│" -ForegroundColor Cyan
     Write-Host "│  📄 Profile: $PROFILE".PadRight(73) + "│" -ForegroundColor Cyan
     
     # Check installation status
@@ -4696,8 +4696,8 @@ function Get-PowerFlowVersion {
     powerflow-version     # Shows version info
 #>
 function powerflow-version {
-    Write-Host "🚀 PowerFlow v$script:POWERFLOW_VERSION" -ForegroundColor Cyan
-    Write-Host "📍 Repository: $script:POWERFLOW_REPO" -ForegroundColor DarkGray
+    Write-Host "🚀 PowerFlow v${script:POWERFLOW_VERSION}" -ForegroundColor Cyan
+    Write-Host "📍 Repository: ${script:POWERFLOW_REPO}" -ForegroundColor DarkGray
     Write-Host "📄 Profile: $PROFILE" -ForegroundColor DarkGray
 }
 
@@ -4714,12 +4714,12 @@ function powerflow-update {
     
     try {
         # Get latest release info from GitHub
-        $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/$script:POWERFLOW_REPO/releases/latest" -TimeoutSec 10 -ErrorAction Stop
+        $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/${script:POWERFLOW_REPO}/releases/latest" -TimeoutSec 10 -ErrorAction Stop
         $latestVersion = $latestRelease.tag_name -replace '^v', ''
         $currentVersion = $script:POWERFLOW_VERSION
         
-        Write-Host "📦 Current version: v$currentVersion" -ForegroundColor Green
-        Write-Host "🌐 Latest version: v$latestVersion" -ForegroundColor Green
+        Write-Host "📦 Current version: v${currentVersion}" -ForegroundColor Green
+        Write-Host "🌐 Latest version: v${latestVersion}" -ForegroundColor Green
         
         # Compare versions
         if ([Version]$latestVersion -gt [Version]$currentVersion) {
@@ -4727,7 +4727,7 @@ function powerflow-update {
             Write-Host "🚀 PowerFlow update available!" -ForegroundColor Yellow
             Write-Host "📍 Release notes: $($latestRelease.html_url)" -ForegroundColor DarkGray
             Write-Host ""
-            Write-Host "Changes in v$latestVersion:" -ForegroundColor Cyan
+            Write-Host "Changes in v${latestVersion}:" -ForegroundColor Cyan
             
             # Show release notes (first 500 chars)
             $releaseNotes = $latestRelease.body
@@ -4749,7 +4749,7 @@ function powerflow-update {
                     Write-Host "💾 Backed up current profile to: $backupPath" -ForegroundColor Green
                     
                     # Download new profile
-                    $newProfileUrl = "https://raw.githubusercontent.com/$script:POWERFLOW_REPO/main/Microsoft.PowerShell_profile.ps1"
+                    $newProfileUrl = "https://raw.githubusercontent.com/${script:POWERFLOW_REPO}/main/Microsoft.PowerShell_profile.ps1"
                     Invoke-RestMethod -Uri $newProfileUrl -OutFile $PROFILE
                     
                     Write-Host "✅ PowerFlow updated successfully!" -ForegroundColor Green
@@ -4771,7 +4771,7 @@ function powerflow-update {
         } elseif ([Version]$latestVersion -eq [Version]$currentVersion) {
             Write-Host "✅ PowerFlow is up to date!" -ForegroundColor Green
         } else {
-            Write-Host "🚀 You're running a development version (v$currentVersion > v$latestVersion)" -ForegroundColor Cyan
+            Write-Host "🚀 You're running a development version (v${currentVersion} > v${latestVersion})" -ForegroundColor Cyan
         }
         
     } catch {
@@ -4781,7 +4781,7 @@ function powerflow-update {
             Write-Host "❌ GitHub API rate limit exceeded. Try again later." -ForegroundColor Red
         } else {
             Write-Host "⚠️  Could not check for updates: $($_.Exception.Message)" -ForegroundColor Yellow
-            Write-Host "🌐 Check manually: https://github.com/$script:POWERFLOW_REPO/releases" -ForegroundColor DarkGray
+            Write-Host "🌐 Check manually: https://github.com/${script:POWERFLOW_REPO}/releases" -ForegroundColor DarkGray
         }
     }
 }
