@@ -4952,7 +4952,6 @@ function pwsh-h {
 │  🎯 CORE NAVIGATION:                                                         │
 │  nav <project>       → smart project search in ~/Code and bookmarked dirs    │
 │  nav -verbose        → detailed search output for troubleshooting            │
-│  z <project>         → alias for nav                                         │
 │                                                                              │
 │  🔖 BOOKMARK MANAGEMENT:                                                     │
 │  nav b <bookmark>    → navigate to bookmark                                  │
