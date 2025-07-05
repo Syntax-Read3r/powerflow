@@ -7,14 +7,14 @@
 # 
 # Repository: https://github.com/Syntax-Read3r/powerflow
 # Documentation: See README.md for complete feature list and usage examples
-# Version: 1.0
+# Version: 1.0.0
+# Release Date: 2024-01-XX
 # ============================================================================
 
-# ============================================================================
-# CONFIGURATION & DEPENDENCY MANAGEMENT
-# ============================================================================
-
-# Configuration: Set to $false to skip dependency checks for faster loading
+# Version management
+$script:POWERFLOW_VERSION = "1.0.2"
+$script:POWERFLOW_REPO = "Syntax-Read3r/powerflow"
+$script:CHECK_PROFILE_UPDATES = $true
 $script:CHECK_DEPENDENCIES = $true
 $script:CHECK_UPDATES = $true
 

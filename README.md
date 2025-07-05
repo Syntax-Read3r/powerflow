@@ -2,9 +2,10 @@
 
 > A beautiful, intelligent PowerShell profile that supercharges your terminal experience with smart navigation, enhanced Git workflows, and productivity-focused tools.
 
-[![PowerShell](https://img.shields.io/badge/PowerShell-7.0+-blue.svg)](https://github.com/PowerShell/PowerShell)
+[![Latest Release](https://img.shields.io/github/v/release/Syntax-Read3r/powerflow)](https://github.com/Syntax-Read3r/powerflow/releases)
+[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue.svg)](https://github.com/PowerShell/PowerShell)
 [![Windows Terminal](https://img.shields.io/badge/Windows%20Terminal-Recommended-brightgreen.svg)](https://github.com/microsoft/terminal)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## 🎬 Demo
 
@@ -48,12 +49,19 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 - **Interactive Rename**: Beautiful interface for renaming files
 - **Safety Checks**: Prevents accidental deletion and data loss
 
+### 🎨 Beautiful Interface
+
+- **FiraCode Nerd Font**: Auto-installed for perfect icon display
+- **Starship Prompt**: Cross-shell prompt with Git integration
+- **Color-Coded Output**: Consistent visual feedback throughout
+- **Auto-Update System**: Keeps PowerFlow current with latest features
+
 ### 🪟 Terminal Enhancement
 
 - **Tab Management**: Create, switch, and close Windows Terminal tabs
-- **Beautiful Interfaces**: Consistent emoji indicators and color schemes
 - **Auto-Dependency Management**: Automatically installs required tools
 - **Comprehensive Help**: Built-in documentation system
+- **Performance Optimized**: Fast loading with smart caching
 
 ## 💻 Code Examples
 
@@ -74,58 +82,73 @@ git-l               # Beautiful log viewer with actions
 
 # GitHub repo browser
 gh-l                # Browse your repos with activity stats
+
+# Check for updates
+powerflow-update    # Built-in update system
 ```
 
-## 🛠 Installation
+## ⚡ Quick Installation
 
-### Prerequisites
+### One-Line Install (Recommended)
 
-- **PowerShell 7.0+** (recommended)
-- **Windows Terminal** (for best experience)
-- **Git** (for Git features)
+```powershell
+irm https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/install.ps1 | iex
+```
 
-### Quick Install
+That's it! PowerFlow will:
+- ✅ Install all dependencies automatically
+- ✅ Configure FiraCode Nerd Font
+- ✅ Set up bookmarks and navigation
+- ✅ Enable auto-updates
+- ✅ Provide helpful setup guidance
 
-1. **Backup your existing profile** (if you have one):
+### Alternative Installation
 
-   ```powershell
-   Copy-Item $PROFILE "$PROFILE.backup" -ErrorAction SilentlyContinue
-   ```
-
-2. **Download and install PowerFlow**:
-
-   ```powershell
-   # Download the profile
-   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/Microsoft.PowerShell_profile.ps1" -OutFile $PROFILE
-
-   # Reload your profile
-   . $PROFILE
-   ```
-
-3. **First run setup**:
-   PowerFlow will automatically:
-   - Install required dependencies (Scoop, Starship, fzf, etc.)
-   - Initialize default bookmarks
-   - Configure the environment
+```powershell
+# Download and run install script
+Invoke-RestMethod -Uri "https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/install.ps1" -OutFile "install.ps1"
+.\install.ps1
+```
 
 ### Manual Installation
 
-1. Clone the repository:
+```powershell
+# 1. Create profile directory if needed
+$profileDir = Split-Path $PROFILE -Parent
+if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force }
 
-   ```bash
-   git clone https://github.com/Syntax-Read3r/powerflow.git
-   ```
+# 2. Download PowerFlow profile
+Invoke-RestMethod -Uri "https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/Microsoft.PowerShell_profile.ps1" -OutFile $PROFILE
 
-2. Copy the profile to your PowerShell profile location:
+# 3. Reload profile
+. $PROFILE
+```
 
-   ```powershell
-   Copy-Item "powerflow/Microsoft.PowerShell_profile.ps1" $PROFILE
-   ```
+### Prerequisites
 
-3. Reload your profile:
-   ```powershell
-   . $PROFILE
-   ```
+- **PowerShell 5.1+** (PowerShell 7+ recommended)
+- **Windows 10/11** or Windows Server 2016+
+- **Internet connection** (for automatic dependency installation)
+
+**📖 [Complete Installation Guide](docs/installation.md)** - Detailed instructions, troubleshooting, and advanced options
+
+## 🚀 What Happens After Installation?
+
+PowerFlow automatically sets up your environment:
+
+1. **🎨 Installs FiraCode Nerd Font** - For beautiful icons and symbols
+2. **📦 Installs Dependencies** - Starship, fzf, zoxide, lsd via Scoop
+3. **🔖 Creates Default Bookmarks** - Quick access to common directories
+4. **🔄 Enables Auto-Updates** - Stay current with latest features
+5. **💡 Shows Setup Tips** - Guides you through Windows Terminal configuration
+
+### Final Setup Step
+
+**Configure Windows Terminal Font:**
+1. Open Windows Terminal → Settings (`Ctrl+,`)
+2. Go to your PowerShell profile → Appearance
+3. Set **Font face** to `FiraCode Nerd Font`
+4. Restart terminal and enjoy! 🎉
 
 ## 🎯 Quick Start Guide
 
@@ -182,7 +205,7 @@ ls -t                # Tree view with smart depth
 gh-l                 # List repos with activity stats
 gh-l 20              # Show top 20 repos
 
-# Token management
+# Token management (automatic secure storage)
 gh-l-status          # Check if token is saved
 gh-l-reset           # Remove saved token
 ```
@@ -207,6 +230,7 @@ gh-l-reset           # Remove saved token
 | `git-a`           | Beautiful add → commit → push workflow |
 | `git-rb <commit>` | Create rollback branch from commit     |
 | `git-rba`         | Rollback branch add-commit-push        |
+| `git-mrb`         | Merge rollback branch to main          |
 | `git-l`           | Interactive log viewer with actions    |
 | `git-b`           | Branch picker and manager              |
 | `git-s`           | Interactive status viewer              |
@@ -220,6 +244,14 @@ gh-l-reset           # Remove saved token
 | `rn [file]` | Interactive file rename              |
 | `rm <file>` | Smart file removal with fuzzy search |
 | `ls -t`     | Tree view with smart depth           |
+
+### Version Management
+
+| Command              | Description                      |
+| -------------------- | -------------------------------- |
+| `powerflow-version`  | Show PowerFlow version info      |
+| `powerflow-update`   | Check for PowerFlow updates     |
+| `Get-PowerFlowVersion` | Detailed version information   |
 
 ### Terminal Management
 
@@ -240,136 +272,142 @@ gh-l-reset           # Remove saved token
 
 ## 🔧 Configuration
 
-### Dependencies
+### Auto-Installed Dependencies
 
 PowerFlow automatically installs these tools via Scoop:
 
-- **Starship**: Cross-shell prompt
-- **fzf**: Fuzzy finder
-- **zoxide**: Smart directory navigation
-- **lsd**: Modern ls replacement
-- **git**: Version control
+- **Starship**: Cross-shell prompt with Git integration
+- **fzf**: Fuzzy finder for interactive selection
+- **zoxide**: Smart directory navigation with learning
+- **lsd**: Modern ls replacement with icons
+- **git**: Version control system
+- **FiraCode Nerd Font**: Beautiful font with programming ligatures
 
 ### Customization
 
-Edit your profile to customize:
-
 ```powershell
-pwsh-profile  # Opens profile in VS Code
+pwsh-profile  # Opens profile in VS Code for editing
 ```
 
 ### Disable Features
 
-You can disable specific features by editing these variables at the top of the profile:
+Edit these variables at the top of the profile:
 
 ```powershell
-$script:CHECK_DEPENDENCIES = $false  # Skip dependency checks
-$script:CHECK_UPDATES = $false       # Skip PowerShell update checks
+$script:CHECK_DEPENDENCIES = $false    # Skip dependency checks
+$script:CHECK_UPDATES = $false         # Skip PowerShell update checks  
+$script:CHECK_PROFILE_UPDATES = $false # Skip PowerFlow update checks
+```
+
+## 🔄 Auto-Update System
+
+PowerFlow includes intelligent update management:
+
+- **Daily Update Checks** - Respectful, once-per-day maximum
+- **Version Notifications** - Beautiful interface when updates available
+- **One-Click Updates** - Automatic backup and update process
+- **Rollback Safety** - Easy recovery if issues occur
+
+```powershell
+# Manual update commands
+powerflow-update        # Force check for updates
+powerflow-version       # Show current version info
 ```
 
 ## 🛡️ Safety Features
 
-- **Current branch protection**: Prevents deletion of active Git branches
-- **Confirmation prompts**: For destructive operations like file deletion
-- **Backup suggestions**: Warns before potentially destructive actions
-- **Path validation**: Ensures operations target valid locations
-- **Error handling**: Graceful handling of missing dependencies or permissions
+- **Automatic Backups**: Profile backed up before updates
+- **Current Branch Protection**: Prevents deletion of active Git branches
+- **Confirmation Prompts**: For destructive operations like file deletion
+- **Path Validation**: Ensures operations target valid locations
+- **Error Handling**: Graceful handling of missing dependencies
+- **Corporate-Friendly**: Works in restricted environments
 
-## 🎨 Customization Examples
+## 📖 Documentation
 
-### Custom Bookmarks
+- **📦 [Installation Guide](docs/installation.md)** - Complete setup instructions
+- **🚨 [Troubleshooting](docs/troubleshooting.md)** - Fix common issues quickly  
+- **🎯 [Features Guide](docs/features.md)** - Detailed feature documentation
+- **💡 [Contributing](CONTRIBUTING.md)** - How to contribute to PowerFlow
+
+## 🆘 Need Help?
+
+### Quick Self-Help
 
 ```powershell
-# Add your frequently used directories
-nav create-b projects "$HOME\Development\Projects"
-nav create-b docs "$HOME\Documents\Work"
-nav create-b scripts "$HOME\Scripts"
+pwsh-h              # Complete help menu
+powerflow-version   # Version and status info
+Get-Command starship, fzf, zoxide, lsd, git  # Check dependencies
 ```
-
-### Git Aliases
-
-```powershell
-# The profile includes many Git aliases, or add your own:
-function git-sync { git pull; git push }
-function git-clean { git-f }
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
-### Development Setup
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-### Areas for Contribution
-
-- Additional Git workflow improvements
-- More file operation enhancements
-- Cross-platform compatibility
-- Performance optimizations
-- New navigation features
-
-## 📝 Changelog
-
-### v1.0 (Current)
-
-- Enhanced rollback branch workflow
-- Improved GitHub integration with secure token storage
-- Smart file operations with fuzzy search
-- Beautiful interactive interfaces
-- Comprehensive help system
-
-### Previous Versions
-
-See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
-
-## 🆘 Troubleshooting
 
 ### Common Issues
 
-**Profile doesn't load**
+**Icons show as squares?** → Install FiraCode Nerd Font and configure Windows Terminal  
+**Commands not found?** → Run PowerShell as Administrator for first setup  
+**Profile won't load?** → Check execution policy: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
 
-- Ensure PowerShell execution policy allows script execution:
-  ```powershell
-  Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-  ```
+**🚨 [Full Troubleshooting Guide](docs/troubleshooting.md)** - Solutions for all common problems
 
-**Dependencies fail to install**
+### Community Support
 
-- Run PowerShell as Administrator for the first setup
-- Check internet connection for Scoop package manager
+- **🐛 [Report Issues](https://github.com/Syntax-Read3r/powerflow/issues)** - Bug reports and feature requests
+- **💬 [Discussions](https://github.com/Syntax-Read3r/powerflow/discussions)** - General questions and community chat
+- **📚 [Documentation](docs/)** - Complete guides and references
 
-**Fuzzy search not working**
+## 🤝 Contributing
 
-- Ensure fzf is installed: `scoop install fzf`
-- Restart PowerShell after dependency installation
+Contributions are welcome! PowerFlow is community-driven and benefits from diverse perspectives.
 
-**Git commands not working**
+### Quick Contributing Guide
 
-- Ensure Git is installed and in PATH
-- Check if you're in a Git repository
+1. **Fork the repository** and create a feature branch
+2. **Make your changes** with clear, well-commented code  
+3. **Test thoroughly** on different Windows/PowerShell versions
+4. **Update documentation** if needed
+5. **Submit a pull request** with a clear description
 
-### Getting Help
+### Areas for Contribution
 
-- Use `pwsh-h` for the complete help menu
-- Check function documentation: `Get-Help git-a -Detailed`
-- Open an issue on GitHub for bugs or feature requests
+- 🚀 Additional Git workflow improvements
+- 📁 More file operation enhancements  
+- 🌐 Cross-platform compatibility
+- ⚡ Performance optimizations
+- 🔧 New navigation features
+- 📖 Documentation improvements
+- 🎨 UI/UX enhancements
+
+**📄 [Contributing Guidelines](CONTRIBUTING.md)** - Detailed contribution instructions
+
+## 🚀 Releases & Updates
+
+PowerFlow uses semantic versioning and automated releases:
+
+- **🏷️ [Latest Release](https://github.com/Syntax-Read3r/powerflow/releases/latest)** - Current stable version
+- **📋 [All Releases](https://github.com/Syntax-Read3r/powerflow/releases)** - Complete version history  
+- **📝 [Changelog](CHANGELOG.md)** - Detailed changes by version
+- **🔔 Auto-Updates** - Get notified of new versions automatically
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+PowerFlow is licensed under the [MIT License](LICENSE) - see the LICENSE file for details.
+
+### What this means:
+- ✅ **Use** - Personal, commercial, any purpose
+- ✅ **Modify** - Change the code however you want  
+- ✅ **Distribute** - Share your modifications
+- ✅ **Private Use** - Use in private/internal projects
+- ℹ️ **Attribution** - Keep the license notice (that's it!)
 
 ## 🙏 Acknowledgments
 
-- **Starship** - For the beautiful cross-shell prompt
-- **fzf** - For the amazing fuzzy finding capabilities
-- **Windows Terminal** - For the excellent terminal experience
-- **PowerShell Team** - For the powerful shell environment
+PowerFlow builds on amazing open-source projects:
+
+- **[Starship](https://starship.rs/)** - Beautiful cross-shell prompt
+- **[fzf](https://github.com/junegunn/fzf)** - Amazing fuzzy finding capabilities
+- **[zoxide](https://github.com/ajeetdsouza/zoxide)** - Smart directory navigation
+- **[lsd](https://github.com/Peltoche/lsd)** - Modern file listing with icons
+- **[Windows Terminal](https://github.com/microsoft/terminal)** - Excellent terminal experience
+- **[PowerShell](https://github.com/PowerShell/PowerShell)** - Powerful cross-platform shell
 
 ## 🌟 Star History
 
@@ -381,4 +419,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   <strong>Made with ❤️ for the PowerShell community</strong>
   <br>
   <sub>If PowerFlow improves your workflow, consider giving it a ⭐!</sub>
+  <br><br>
+  
+  **🚀 Ready to supercharge your terminal?**
+  
+  ```powershell
+  irm https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/install.ps1 | iex
+  ```
 </div>
