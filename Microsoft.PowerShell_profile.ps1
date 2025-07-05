@@ -4945,7 +4945,7 @@ function pwsh-h {
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                    🐚 POWERSHELL COMMAND REFERENCE                           ║
-║                         Enhanced Profile v6.0                                ║
+║                         PowerFlow version 1.0.3                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 ┌─ 🧭 SMART NAVIGATION & BOOKMARKS ────────────────────────────────────────────┐
@@ -4967,8 +4967,11 @@ function pwsh-h {
 │                                                                              │
 │  ⬆️ PARENT NAVIGATION:                                                       │
 │  ..                  → go up one level (fast!)                               │
+│  .. <dir>            → go up one level, then navigate to directory           │
 │  ...                 → go up two levels (fast!)                              │
+│  ... <dir>           → go up two levels, then navigate to directory          │
 │  ....                → go up three levels (fast!)                            │
+│  .... <dir>          → go up three levels, then navigate to directory        │
 │  ~                   → go to home directory                                  │
 │                                                                              │
 │  📍 LOCATION UTILITIES:                                                      │
@@ -5024,6 +5027,8 @@ function pwsh-h {
 ┌─ 🎯 ENHANCED GIT WORKFLOW ───────────────────────────────────────────────────┐
 │  🚀 ADD-COMMIT-PUSH WORKFLOW:                                                │
 │  git-a               → 🎨 beautiful add → commit → push workflow             │
+│  git-a -VersionRelease → 🏷️ release workflow: add → commit → push → tag → push tag │
+│  git-a -vr           → 🏷️ shorthand for -VersionRelease (triggers GitHub Actions) │
 │  git-a-plus          → enhanced version with multiple modes:                 │
 │    git-aq            → ⚡ quick mode (minimal prompts)                        │
 │    git-ad            → 🔍 dry run mode (preview changes)                     │
@@ -5096,6 +5101,7 @@ function pwsh-h {
 │  🔖 Persistent Bookmarks  → Saved across sessions in JSON file               │
 │  ✂️ Cut-Paste Workflow   → mv cuts files, mv-t pastes, mv-c cancels          │
 │  🔄 Git Rollback System  → Create rollback branches from any commit          │
+│  🏷️ Automated Releases   → One-command releases with GitHub Actions         │
 │  🐙 GitHub Integration   → Browse, clone, delete repos with token security   │
 │  🌟 Starship Prompt      → Beautiful, informative prompt with Git info       │
 │  📋 Clipboard Integration → All interactive tools copy results to clipboard  │
