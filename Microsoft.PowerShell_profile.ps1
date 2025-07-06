@@ -25,13 +25,35 @@ $ProgressPreference = 'SilentlyContinue'
 # ENHANCED PROFILE UPDATE CHECKING
 # ============================================================================
 
+
 function Check-PowerFlowUpdates {
     if (-not $script:CHECK_PROFILE_UPDATES) { return }
     
-    # Check if we've already prompted for this version today
+    # Check if we've already prompted for this version today OR if we're in a rate limit cooldown
     $updateCheckFile = "$env:TEMP\.powerflow_update_check"
+    $rateLimitFile = "$env:TEMP\.powerflow_rate_limit"
     $today = Get-Date -Format "yyyy-MM-dd"
     
+    # Check for existing rate limit cooldown
+    if (Test-Path $rateLimitFile) {
+        try {
+            $rateLimitData = Get-Content $rateLimitFile | ConvertFrom-Json
+            $cooldownUntil = [DateTime]$rateLimitData.cooldownUntil
+            
+            if ((Get-Date) -lt $cooldownUntil) {
+                # Still in cooldown period, skip silently
+                return
+            } else {
+                # Cooldown expired, remove the file
+                Remove-Item $rateLimitFile -ErrorAction SilentlyContinue
+            }
+        } catch {
+            # If rate limit file is corrupted, remove it
+            Remove-Item $rateLimitFile -ErrorAction SilentlyContinue
+        }
+    }
+    
+    # Check for daily update check
     if (Test-Path $updateCheckFile) {
         $lastCheck = Get-Content $updateCheckFile -ErrorAction SilentlyContinue
         if ($lastCheck -eq $today) {
@@ -40,8 +62,8 @@ function Check-PowerFlowUpdates {
     }
     
     try {
-        # Check for PowerFlow updates
-        $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/$script:POWERFLOW_REPO/releases/latest" -TimeoutSec 5 -ErrorAction Stop
+        # Check for PowerFlow updates with shorter timeout to fail fast
+        $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/$script:POWERFLOW_REPO/releases/latest" -TimeoutSec 3 -ErrorAction Stop
         $latestVersion = [Version]($latestRelease.tag_name -replace '^v')
         $currentVersion = [Version]$script:POWERFLOW_VERSION
         
@@ -68,10 +90,132 @@ function Check-PowerFlowUpdates {
             $today | Set-Content $updateCheckFile
         }
     } catch {
-        # Silent fail for update checks to avoid slowing down profile loading
-        Write-Host "⚠️  Could not check for PowerFlow updates (network/API limit)" -ForegroundColor DarkGray
+        # Handle different types of errors intelligently
+        $errorMessage = $_.Exception.Message
+        
+        if ($errorMessage -match "403|rate.?limit|API.?limit" -or $_.Exception.Response.StatusCode -eq 403) {
+            # This is specifically a rate limit error
+            # Set a longer cooldown period (3 days) to avoid spam
+            $cooldownUntil = (Get-Date).AddDays(3).ToString("o")
+            $rateLimitData = @{
+                lastAttempt = (Get-Date).ToString("o")
+                cooldownUntil = $cooldownUntil
+                reason = "GitHub API rate limit"
+            }
+            
+            try {
+                $rateLimitData | ConvertTo-Json | Set-Content $rateLimitFile
+            } catch {
+                # If we can't write the cooldown file, just skip silently
+            }
+            
+            # Show a one-time informative message
+            Write-Host "ℹ️  Update check temporarily disabled (GitHub API limit). Will retry in 3 days." -ForegroundColor DarkGray
+        } else {
+            # For other network errors (timeouts, DNS issues, etc.), fail completely silently
+            # This avoids spam when users have network issues or are offline
+            # Don't set any cooldown files - just skip this attempt
+        }
     }
 }
+
+function powerflow-update {
+    Write-Host "🔍 Checking for PowerFlow updates..." -ForegroundColor Cyan
+    
+    # Clear any existing rate limit cooldowns since this is a manual check
+    $rateLimitFile = "$env:TEMP\.powerflow_rate_limit"
+    if (Test-Path $rateLimitFile) {
+        Remove-Item $rateLimitFile -ErrorAction SilentlyContinue
+    }
+    
+    try {
+        # Get latest release info from GitHub
+        $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/${script:POWERFLOW_REPO}/releases/latest" -TimeoutSec 10 -ErrorAction Stop
+        $latestVersion = $latestRelease.tag_name -replace '^v', ''
+        $currentVersion = $script:POWERFLOW_VERSION
+        
+        Write-Host "📦 Current version: v${currentVersion}" -ForegroundColor Green
+        Write-Host "🌐 Latest version: v${latestVersion}" -ForegroundColor Green
+        
+        # Compare versions
+        if ([Version]$latestVersion -gt [Version]$currentVersion) {
+            Write-Host ""
+            Write-Host "🚀 PowerFlow update available!" -ForegroundColor Yellow
+            Write-Host "📍 Release notes: $($latestRelease.html_url)" -ForegroundColor DarkGray
+            Write-Host ""
+            Write-Host "Changes in v${latestVersion}:" -ForegroundColor Cyan
+            
+            # Show release notes (first 500 chars)
+            $releaseNotes = $latestRelease.body
+            if ($releaseNotes.Length -gt 500) {
+                $releaseNotes = $releaseNotes.Substring(0, 500) + "..."
+            }
+            Write-Host $releaseNotes -ForegroundColor DarkGray
+            Write-Host ""
+            
+            $choice = Read-Host "🔄 Update PowerFlow now? (y/n)"
+            
+            if ($choice -eq 'y' -or $choice -eq 'Y') {
+                Write-Host "📦 Updating PowerFlow..." -ForegroundColor Yellow
+                
+                try {
+                    # Backup current profile
+                    $backupPath = "$PROFILE.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+                    Copy-Item $PROFILE $backupPath -Force
+                    Write-Host "💾 Backed up current profile to: $backupPath" -ForegroundColor Green
+                    
+                    # Try release asset first, then fallback to raw GitHub
+                    $downloadUrl = "https://github.com/${script:POWERFLOW_REPO}/releases/download/v${latestVersion}/Microsoft.PowerShell_profile.ps1"
+                    
+                    try {
+                        Invoke-RestMethod -Uri $downloadUrl -OutFile $PROFILE -ErrorAction Stop
+                    } catch {
+                        Write-Host "   📡 Trying alternative download method..." -ForegroundColor DarkGray
+                        $fallbackUrl = "https://raw.githubusercontent.com/${script:POWERFLOW_REPO}/v${latestVersion}/Microsoft.PowerShell_profile.ps1"
+                        Invoke-RestMethod -Uri $fallbackUrl -OutFile $PROFILE -ErrorAction Stop
+                    }
+                    
+                    Write-Host "✅ PowerFlow updated successfully!" -ForegroundColor Green
+                    Write-Host "🔄 Restart PowerShell or run '. `$PROFILE' to load the new version" -ForegroundColor Cyan
+                    
+                } catch {
+                    Write-Host "❌ Update failed: $($_.Exception.Message)" -ForegroundColor Red
+                    Write-Host "🔄 Restoring from backup..." -ForegroundColor Yellow
+                    
+                    if (Test-Path $backupPath) {
+                        Copy-Item $backupPath $PROFILE -Force
+                        Write-Host "✅ Profile restored from backup" -ForegroundColor Green
+                    }
+                }
+            } else {
+                Write-Host "⏭️  Update cancelled" -ForegroundColor Yellow
+            }
+            
+        } elseif ([Version]$latestVersion -eq [Version]$currentVersion) {
+            Write-Host "✅ PowerFlow is up to date!" -ForegroundColor Green
+        } else {
+            Write-Host "🚀 You're running a development version (v${currentVersion} > v${latestVersion})" -ForegroundColor Cyan
+        }
+        
+    } catch {
+        $errorMessage = $_.Exception.Message
+        
+        if ($errorMessage -match "403|rate.?limit|API.?limit" -or $_.Exception.Response.StatusCode -eq 403) {
+            Write-Host "❌ GitHub API rate limit exceeded. Try again in an hour." -ForegroundColor Red
+            Write-Host "💡 Manual download: https://github.com/${script:POWERFLOW_REPO}/releases" -ForegroundColor Yellow
+        } elseif ($_.Exception.Message -match "404") {
+            Write-Host "❌ PowerFlow repository not found. Check repository URL." -ForegroundColor Red
+        } else {
+            Write-Host "⚠️  Could not check for updates: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "🌐 Check manually: https://github.com/${script:POWERFLOW_REPO}/releases" -ForegroundColor DarkGray
+        }
+    }
+}
+
+
+
+
+
 
 function Initialize-Dependencies {
     if (-not $script:CHECK_DEPENDENCIES) { return }

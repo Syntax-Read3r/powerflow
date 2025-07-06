@@ -337,6 +337,62 @@ scoop uninstall *
 
 ---
 
+## 🐧 Ubuntu/WSL Installation
+
+PowerFlow also supports Ubuntu and WSL environments with a comprehensive bash profile.
+
+### Quick Install (Ubuntu/WSL)
+```bash
+# Download and install the enhanced .bashrc
+curl -o ~/.bashrc https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/ubuntu/.bashrc
+source ~/.bashrc
+```
+
+### Manual Install (Ubuntu/WSL)
+```bash
+# Backup existing .bashrc
+cp ~/.bashrc ~/.bashrc.backup
+
+# Download PowerFlow .bashrc
+wget -O ~/.bashrc https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/ubuntu/.bashrc
+
+# Source the new profile
+source ~/.bashrc
+```
+
+### Ubuntu Features
+- **Smart navigation** - `nav <project>` for intelligent project search
+- **Bookmark management** - Create and manage directory bookmarks
+- **Auto-dependency installation** - Automatically installs required tools
+- **Enhanced file operations** - Beautiful directory listings and file management
+- **WSL integration** - Seamless Windows Explorer integration
+
+### Ubuntu Dependencies
+PowerFlow automatically installs these tools on first run:
+- **Required**: curl, wget, git, jq, fzf, xclip
+- **Optional**: starship, zoxide, lsd (for enhanced experience)
+
+### Ubuntu Usage
+```bash
+# Navigation
+nav <project>        # Find and navigate to project
+nav b <bookmark>     # Navigate to bookmark
+nav create-b <name>  # Create bookmark
+
+# Enhanced file operations
+lsl                  # Beautiful directory listing
+lst                  # Tree view
+here                 # Current directory info
+
+# System management
+wsl_help            # Show comprehensive help
+wsl_recovery        # Recovery and diagnostics
+```
+
+For complete Ubuntu documentation, see [ubuntu/README.md](../ubuntu/README.md).
+
+---
+
 ## 🔄 Updating PowerFlow
 
 PowerFlow includes an automatic update system:

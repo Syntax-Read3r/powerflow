@@ -1,5 +1,7 @@
 ## Features
 
+> 🐧 **Cross-Platform Support**: PowerFlow now supports both Windows (PowerShell) and Ubuntu/WSL (Bash) environments with feature parity across platforms.
+
 ### 🧭 Smart Navigation System
 - **Intelligent project search** - Quickly navigate to projects with fuzzy matching across ~/Code and bookmarked directories
 - **Persistent bookmarks** - Save frequently used directories with memorable names, persisted across sessions
@@ -40,3 +42,4 @@
 - **PowerShell profile enhancement** - Extends native PowerShell with productivity-focused aliases and functions  
 - **Cross-session persistence** - Bookmarks, settings, and preferences maintained across PowerShell sessions
 - **Auto-update system** - Built-in version checking and update mechanisms for seamless maintenance
+- **Ubuntu/WSL support** - Full feature compatibility with Linux environments via enhanced .bashrc
