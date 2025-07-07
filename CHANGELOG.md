@@ -4,6 +4,23 @@ All notable changes to PowerFlow will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- 🖥️ **Cross-Platform Terminal Integration**: Enhanced `open-nt` function with shell switching
+  - **PowerShell from Ubuntu**: `open-nt pwsh` or `open-nt p` to launch PowerShell tabs from Ubuntu
+  - **Ubuntu from PowerShell**: `open-nt ubuntu` or `open-nt u` to launch Ubuntu tabs from PowerShell
+  - **Smart Path Conversion**: Automatically converts WSL paths ↔ Windows paths when switching shells
+  - **Command Prompt Support**: `open-nt cmd` to open Command Prompt tabs from either environment
+  - **Fallback Handling**: Graceful degradation when Windows Terminal is unavailable
+- 🐧 **Ubuntu `open-nt` Function**: Complete implementation for Ubuntu/WSL environments
+  - **Cross-shell navigation**: Launch any shell from Ubuntu terminal
+  - **Windows Terminal integration**: Seamless tab management across environments
+  - **Path translation**: Intelligent handling of /mnt/ paths to Windows drive letters
+
+### Enhanced
+- **PowerShell `open-nt`**: Extended existing function with cross-platform shell selection
+- **Ubuntu Help System**: Updated `wsl_help` to include `open-nt` cross-platform usage
+- **Documentation**: Comprehensive coverage of cross-platform terminal features
+
 ### Planning
 - Additional database providers
 - Testing framework integration

@@ -129,15 +129,171 @@ export NVM_DIR="$HOME/.nvm"
 # Version: 1.0.0
 # ============================================================================
 
+# ============================================================================
+# 🎯 USER CONFIGURATION - EASILY CUSTOMIZABLE SETTINGS
+# ============================================================================
+
+# Starting directory - Change this to your preferred startup location
+# Examples: 
+#   export WSL_START_DIRECTORY="/mnt/c/Users/_munya/Code"           # Windows Code folder
+#   export WSL_START_DIRECTORY="$HOME/projects"                    # Linux projects folder  
+#   export WSL_START_DIRECTORY="/mnt/c/Users/_munya/Documents"     # Windows Documents
+#   export WSL_START_DIRECTORY=""                                  # Disable auto-navigation (stay in $HOME)
+export WSL_START_DIRECTORY="/mnt/c/Users/_munya/Code"
+
+# Profile behavior settings
+export WSL_PROFILE_VERSION="1.0.0"
+export CHECK_DEPENDENCIES=true          # Auto-install missing tools
+export CHECK_UPDATES=true               # Check for profile updates
+export SHOW_STARTUP_MESSAGE=true        # Show welcome message on first load
+
 # Enhanced color support and profile version
 export TERM=xterm-256color
 export CLICOLOR=1
-export WSL_PROFILE_VERSION="1.0.0"
-export CHECK_DEPENDENCIES=true
-export CHECK_UPDATES=true
 
 # Suppress progress bars for faster installation
 export DEBIAN_FRONTEND=noninteractive
+
+# ============================================================================
+# WINDOWS TERMINAL DETECTION & INTEGRATION
+# ============================================================================
+
+# Check if we're running in Windows Terminal
+is_windows_terminal() {
+    [[ -n "$WT_SESSION" ]] || [[ -n "$WT_PROFILE_ID" ]]
+}
+
+# ============================================================================
+# ENHANCED PREDICTIVE TEXT & READLINE CONFIGURATION
+# ============================================================================
+
+# Enhanced readline configuration for better predictive text
+if [[ -f /etc/inputrc ]]; then
+    bind -f /etc/inputrc
+fi
+
+# Advanced readline configuration for PowerShell-like experience
+bind 'set show-all-if-ambiguous on'           # Show completions immediately
+bind 'set completion-ignore-case on'          # Case-insensitive completion
+bind 'set completion-map-case on'             # Treat - and _ as equivalent
+bind 'set show-all-if-unmodified on'          # Show completions without bell
+bind 'set menu-complete-display-prefix on'    # Show common prefix in menu
+bind 'set colored-stats on'                   # Color completion stats
+bind 'set visible-stats on'                   # Show file type indicators
+bind 'set mark-symlinked-directories on'      # Mark symlinked directories
+bind 'set colored-completion-prefix on'       # Color the completion prefix
+bind 'set menu-complete-display-prefix on'    # Display prefix in menu completion
+
+# History-based predictive autocompletion (like PowerShell)
+bind '"\e[A": history-search-backward'        # Up arrow for history search
+bind '"\e[B": history-search-forward'         # Down arrow for history search
+bind '"\C-p": history-search-backward'        # Ctrl+P for history search
+bind '"\C-n": history-search-forward'         # Ctrl+N for history search
+
+# Enhanced tab completion behavior
+bind 'TAB:menu-complete'                      # Tab cycles through completions
+bind '"\e[Z": menu-complete-backward'         # Shift+Tab cycles backward
+
+# Better history handling
+export HISTSIZE=10000                         # Increased history size
+export HISTFILESIZE=20000                     # Increased history file size
+export HISTCONTROL=ignoreboth:erasedups       # Ignore duplicates and spaces
+export HISTTIMEFORMAT='%F %T '                # Add timestamps to history
+shopt -s histappend                            # Append to history file
+shopt -s cmdhist                               # Store multi-line commands as one
+shopt -s histreedit                            # Allow re-editing of failed history substitution
+shopt -s histverify                            # Verify history expansion before executing
+
+# Immediately save history after each command (for multi-session sync)
+PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND$'\n'}history -a; history -c; history -r"
+
+# ============================================================================
+# FZF INTEGRATION & CONFIGURATION
+# ============================================================================
+
+# FZF configuration for enhanced fuzzy finding
+export FZF_DEFAULT_OPTS='
+  --height 40% 
+  --layout=reverse 
+  --border
+  --margin=1 
+  --padding=1
+  --color=fg:#e4e4e4,bg:#1e1e1e,hl:#569cd6
+  --color=fg+:#ffffff,bg+:#333333,hl+:#4ec9b0
+  --color=info:#ce9178,prompt:#4ec9b0,pointer:#f44747
+  --color=marker:#f44747,spinner:#ce9178,header:#569cd6
+  --prompt="🔍 "
+  --pointer="→"
+  --marker="✓"
+  --bind="ctrl-u:preview-up,ctrl-d:preview-down"
+  --bind="ctrl-/:toggle-preview"
+  --bind="alt-up:preview-page-up,alt-down:preview-page-down"
+'
+
+# FZF for file search (Ctrl+T)
+export FZF_CTRL_T_OPTS="
+  --preview 'if [ -d {} ]; then lsd --tree --depth=2 --color=always {} 2>/dev/null || ls -la {} 2>/dev/null; else bat --style=numbers --color=always {} 2>/dev/null || cat {} 2>/dev/null; fi'
+  --preview-window=right:50%
+  --bind='ctrl-/:toggle-preview'
+  --header='📁 Files & Directories | Ctrl+T: Select | Ctrl+/: Toggle Preview'
+"
+
+# FZF for command history (Ctrl+R) 
+export FZF_CTRL_R_OPTS="
+  --preview 'echo {}'
+  --preview-window=down:3:wrap
+  --header='📚 Command History | Ctrl+R: Select | Enter: Execute'
+  --color=header:italic
+"
+
+# FZF for directory navigation (Alt+C)
+export FZF_ALT_C_OPTS="
+  --preview 'lsd --tree --depth=2 --color=always {} 2>/dev/null || ls -la {} 2>/dev/null'
+  --preview-window=right:50%
+  --header='📂 Directory Navigation | Alt+C: Select | Ctrl+/: Toggle Preview'
+"
+
+# Initialize FZF key bindings and completion
+setup_fzf_integration() {
+    # Check if fzf is available
+    if command -v fzf >/dev/null 2>&1; then
+        # Try to source fzf key bindings from common locations
+        local fzf_keybindings=""
+        local fzf_completion=""
+        
+        # Common locations for fzf files
+        local fzf_locations=(
+            "/usr/share/fzf"
+            "/usr/share/doc/fzf/examples"
+            "$HOME/.fzf"
+            "/opt/fzf"
+        )
+        
+        for location in "${fzf_locations[@]}"; do
+            if [[ -f "$location/key-bindings.bash" ]]; then
+                fzf_keybindings="$location/key-bindings.bash"
+            fi
+            if [[ -f "$location/completion.bash" ]]; then
+                fzf_completion="$location/completion.bash"
+            fi
+        done
+        
+        # Source the files if found
+        if [[ -n "$fzf_keybindings" ]]; then
+            source "$fzf_keybindings"
+            echo "🎯 FZF key bindings loaded: Ctrl+T (files), Ctrl+R (history), Alt+C (dirs)" >&2
+        else
+            echo "⚠️  FZF key bindings not found. Manual setup required." >&2
+        fi
+        
+        if [[ -n "$fzf_completion" ]]; then
+            source "$fzf_completion"
+        fi
+        
+    else
+        echo "⚠️  FZF not found. Will be installed on next profile load." >&2
+    fi
+}
 
 # ============================================================================
 # DEPENDENCY MANAGEMENT & AUTO-INSTALLATION
@@ -180,15 +336,17 @@ initialize_dependencies() {
         "jq:jq"
         "fzf:fzf"
         "xclip:xclip"
+        "xdotool:xdotool"
     )
     
     local optional_tools=(
         "starship:starship"
         "zoxide:zoxide"
         "lsd:lsd"
+        "bat:bat"
     )
     
-    local missing_tools=()
+    local missing_required=()
     local missing_optional=()
     
     # Check required tools
@@ -197,7 +355,7 @@ initialize_dependencies() {
         local command_name="${tool_info##*:}"
         
         if ! command -v "$command_name" >/dev/null 2>&1; then
-            missing_tools+=("$tool_info")
+            missing_required+=("$tool_info")
         fi
     done
     
@@ -211,34 +369,90 @@ initialize_dependencies() {
         fi
     done
     
-    # Install missing required tools
-    if [[ ${#missing_tools[@]} -gt 0 ]]; then
-        echo "📦 Installing missing required tools: ${missing_tools[*]}" >&2
-        
-        # Update package list first
-        echo "   Updating package list..." >&2
-        sudo apt update >/dev/null 2>&1
-        
-        for tool_info in "${missing_tools[@]}"; do
+    # Prompt for required tools installation
+    if [[ ${#missing_required[@]} -gt 0 ]]; then
+        echo "" >&2
+        echo "⚠️  Missing required tools for full functionality:" >&2
+        for tool_info in "${missing_required[@]}"; do
             local tool_name="${tool_info%%:*}"
-            install_tool "$tool_name"
+            echo "   ❌ $tool_name" >&2
         done
+        echo "" >&2
+        echo "🔧 These tools enable:" >&2
+        echo "   • fzf: Fuzzy file/history search (Ctrl+T, Ctrl+R, Alt+C)" >&2
+        echo "   • xdotool: Terminal tab switching (next-t, prev-t)" >&2
+        echo "   • jq: Bookmark management" >&2
+        echo "   • xclip: Clipboard integration" >&2
+        echo "" >&2
+        
+        read -p "📦 Install required tools now? (y/n): " install_required >&2
+        
+        if [[ "$install_required" =~ ^[Yy]$ ]]; then
+            echo "🔄 Installing required tools..." >&2
+            echo "   Updating package list..." >&2
+            if sudo apt update >/dev/null 2>&1; then
+                local install_success=true
+                for tool_info in "${missing_required[@]}"; do
+                    local tool_name="${tool_info%%:*}"
+                    install_tool "$tool_name" || install_success=false
+                done
+                
+                if [[ "$install_success" == "true" ]]; then
+                    echo "✅ Required tools installed successfully!" >&2
+                else
+                    echo "⚠️  Some required tools failed to install. Check output above." >&2
+                fi
+            else
+                echo "❌ Failed to update package list. Installation skipped." >&2
+            fi
+        else
+            echo "⏭️  Required tools installation skipped." >&2
+            echo "💡 Run 'force_install_deps' anytime to install them later." >&2
+        fi
     fi
     
-    # Install missing optional tools
+    # Prompt for optional tools installation
     if [[ ${#missing_optional[@]} -gt 0 ]]; then
-        echo "🛠️  Installing optional tools for enhanced experience..." >&2
-        
+        echo "" >&2
+        echo "🛠️  Optional tools available for enhanced experience:" >&2
         for tool_info in "${missing_optional[@]}"; do
             local tool_name="${tool_info%%:*}"
-            install_optional_tool "$tool_name"
+            echo "   📦 $tool_name" >&2
         done
+        echo "" >&2
+        echo "🌟 These tools provide:" >&2
+        echo "   • starship: Beautiful prompt with Git info" >&2
+        echo "   • lsd: Modern directory listings with icons" >&2
+        echo "   • bat: Syntax-highlighted file preview" >&2
+        echo "   • zoxide: Smart directory jumping" >&2
+        echo "" >&2
+        
+        read -p "🎨 Install optional tools for enhanced experience? (y/n): " install_optional >&2
+        
+        if [[ "$install_optional" =~ ^[Yy]$ ]]; then
+            echo "🔄 Installing optional tools..." >&2
+            local install_success=true
+            for tool_info in "${missing_optional[@]}"; do
+                local tool_name="${tool_info%%:*}"
+                install_optional_tool "$tool_name" || install_success=false
+            done
+            
+            if [[ "$install_success" == "true" ]]; then
+                echo "✅ Optional tools installed successfully!" >&2
+            else
+                echo "⚠️  Some optional tools failed to install. Check output above." >&2
+            fi
+        else
+            echo "⏭️  Optional tools installation skipped." >&2
+            echo "💡 Run 'force_install_deps' anytime to install them later." >&2
+        fi
     fi
     
     # Show completion message
-    if [[ ${#missing_tools[@]} -gt 0 ]] || [[ ${#missing_optional[@]} -gt 0 ]]; then
-        echo "✅ Dependency installation complete" >&2
+    if [[ ${#missing_required[@]} -gt 0 ]] || [[ ${#missing_optional[@]} -gt 0 ]]; then
+        echo "" >&2
         echo "🔄 Restart your terminal or run 'source ~/.bashrc' to use new tools" >&2
+        echo "💡 Type 'wsl_help' to see all available commands" >&2
     fi
 }
 
@@ -249,7 +463,7 @@ install_tool() {
     echo "   Installing $tool..." >&2
     
     case "$tool" in
-        "curl"|"wget"|"git"|"jq"|"fzf"|"xclip")
+        "curl"|"wget"|"git"|"jq"|"fzf"|"xclip"|"xdotool")
             if sudo apt install -y "$tool" >/dev/null 2>&1; then
                 echo "   ✅ $tool installed" >&2
             else
@@ -269,6 +483,17 @@ install_optional_tool() {
     echo "   Installing $tool..." >&2
     
     case "$tool" in
+        "bat")
+            if sudo apt install -y bat >/dev/null 2>&1; then
+                echo "   ✅ bat installed" >&2
+                # Create alias for bat if it's installed as batcat
+                if command -v batcat >/dev/null 2>&1 && ! command -v bat >/dev/null 2>&1; then
+                    echo "alias bat='batcat'" >> ~/.bash_aliases
+                fi
+            else
+                echo "   ❌ Failed to install bat" >&2
+            fi
+            ;;
         "starship")
             if curl -sS https://starship.rs/install.sh | sh -s -- --yes >/dev/null 2>&1; then
                 echo "   ✅ starship installed" >&2
@@ -320,119 +545,11 @@ check_wsl_profile_updates() {
     echo "$today" > "$update_check_file"
 }
 
-# ============================================================================
-# VERSION MANAGEMENT & RECOVERY
-# ============================================================================
-
-# WSL Profile version management
-get_wsl_profile_version() {
-    echo "📦 WSL Enhanced Profile v$WSL_PROFILE_VERSION"
-    echo "🔧 Dependencies: $(check_dependency_status)"
-    echo "📁 Bookmarks: $(get_bookmark_count) configured"
-}
-
-check_dependency_status() {
-    local tools=("curl" "wget" "git" "jq" "fzf" "xclip" "starship" "zoxide" "lsd")
-    local installed=0
-    
-    for tool in "${tools[@]}"; do
-        if command -v "$tool" >/dev/null 2>&1; then
-            ((installed++))
-        fi
-    done
-    
-    echo "$installed/${#tools[@]} installed"
-}
-
-get_bookmark_count() {
-    if [[ -f "$BOOKMARK_FILE" ]]; then
-        jq 'length' "$BOOKMARK_FILE" 2>/dev/null || echo "0"
-    else
-        echo "0"
-    fi
-}
-
-# WSL Profile recovery and diagnostics
-wsl_recovery() {
-    echo
-    echo "🚑 WSL Profile Recovery Options:"
-    echo "════════════════════════════════"
-    echo
-    echo "🔄 Quick Fixes:"
-    echo "  1. Reload profile: source ~/.bashrc"
-    echo "  2. Check dependencies: check_dependency_status"
-    echo "  3. Reinstall tools: rm ~/.wsl_init_check && source ~/.bashrc"
-    echo
-    echo "🔧 Recovery Actions:"
-    echo "  4. Reset bookmarks: rm ~/.wsl_bookmarks.json && source ~/.bashrc"
-    echo "  5. Full dependency reinstall: sudo apt update && sudo apt install curl wget git jq fzf xclip"
-    echo "  6. Edit profile manually: nano ~/.bashrc"
-    echo
-    echo "📋 Diagnostics:"
-    echo "  7. Version info: get_wsl_profile_version"
-    echo "  8. Test navigation: nav list"
-    echo "  9. Full help: wsl_help"
-    echo
-    
-    read -p "Choose an option (1-9) or 'q' to quit: " choice
-    
-    case "$choice" in
-        1)
-            echo "🔄 Reloading profile..."
-            source ~/.bashrc
-            ;;
-        2)
-            echo "🔍 Checking dependencies..."
-            local tools=("curl" "wget" "git" "jq" "fzf" "xclip" "starship" "zoxide" "lsd")
-            for tool in "${tools[@]}"; do
-                if command -v "$tool" >/dev/null 2>&1; then
-                    echo "  $tool : ✅ Found"
-                else
-                    echo "  $tool : ❌ Missing"
-                fi
-            done
-            ;;
-        3)
-            echo "📦 Reinstalling dependencies..."
-            rm -f ~/.wsl_init_check
-            initialize_dependencies
-            ;;
-        4)
-            read -p "⚠️  Remove all bookmarks? This will reset your navigation bookmarks. (y/n): " confirm
-            if [[ "$confirm" =~ ^[Yy]$ ]]; then
-                rm -f ~/.wsl_bookmarks.json
-                initialize_default_bookmarks
-                echo "✅ Bookmarks reset to defaults"
-            fi
-            ;;
-        5)
-            echo "🔄 Full dependency reinstall..."
-            sudo apt update
-            sudo apt install -y curl wget git jq fzf xclip
-            ;;
-        6)
-            if command -v nano >/dev/null 2>&1; then
-                nano ~/.bashrc
-            else
-                echo "💡 Edit ~/.bashrc with your preferred editor"
-            fi
-            ;;
-        7)
-            get_wsl_profile_version
-            ;;
-        8)
-            nav list
-            ;;
-        9)
-            wsl_help
-            ;;
-        q|Q)
-            echo "👋 Recovery menu closed"
-            ;;
-        *)
-            echo "❌ Invalid option"
-            ;;
-    esac
+# Force install dependencies function
+force_install_deps() {
+    echo "🔄 Force installing all dependencies..." >&2
+    rm -f ~/.wsl_init_check
+    initialize_dependencies
 }
 
 # ============================================================================
@@ -552,199 +669,14 @@ remove_bookmark() {
     fi
 }
 
-# Rename bookmark
-rename_bookmark() {
-    local old_name="$1"
-    local new_name="$2"
-    
-    if [[ -z "$old_name" ]] || [[ -z "$new_name" ]]; then
-        echo "❌ Error: Both old and new bookmark names are required"
-        echo "💡 Usage: nav rename-b <oldname> <newname> or nav rb <oldname> <newname>"
-        return 1
-    fi
-    
-    if ! command -v jq >/dev/null 2>&1; then
-        echo "❌ Error: jq is required for bookmark management"
-        return 1
-    fi
-    
-    local bookmarks=$(get_bookmarks)
-    local old_path=$(echo "$bookmarks" | jq -r --arg name "${old_name,,}" '.[$name] // empty')
-    local new_exists=$(echo "$bookmarks" | jq -r --arg name "${new_name,,}" '.[$name] // empty')
-    
-    if [[ -z "$old_path" ]]; then
-        echo "❌ Bookmark '$old_name' not found"
-        return 1
-    fi
-    
-    if [[ -n "$new_exists" ]]; then
-        echo "❌ Bookmark '$new_name' already exists"
-        return 1
-    fi
-    
-    local updated_bookmarks=$(echo "$bookmarks" | jq --arg old "${old_name,,}" --arg new "${new_name,,}" '. + {($new): .[$old]} | del(.[$old])')
-    save_bookmarks "$updated_bookmarks"
-    echo "📝 Bookmark renamed: '$old_name' → '$new_name'"
-}
-
-# Show interactive bookmark list
-show_bookmark_list() {
-    if ! command -v jq >/dev/null 2>&1; then
-        echo "❌ Error: jq is required for bookmark management"
-        echo "💡 Install with: sudo apt install jq"
-        return 1
-    fi
-    
-    local bookmarks=$(get_bookmarks)
-    
-    if [[ $(echo "$bookmarks" | jq 'length') -eq 0 ]]; then
-        echo "📚 No bookmarks found"
-        return
-    fi
-    
-    echo "📚 Available Bookmarks:"
-    echo "═══════════════════════"
-    
-    local bookmark_array=()
-    local index=1
-    
-    while IFS= read -r line; do
-        local name=$(echo "$line" | cut -d: -f1)
-        local path=$(echo "$line" | cut -d: -f2-)
-        local status="❌"
-        [[ -d "$path" ]] && status="✅"
-        
-        echo "$index. $status $name → $path"
-        bookmark_array+=("$name:$path")
-        ((index++))
-    done < <(echo "$bookmarks" | jq -r 'to_entries[] | "\(.key):\(.value)"' | sort)
-    
-    echo
-    echo "💡 Actions:"
-    echo "   Enter number to navigate | 'c <name>' to create | 'd <name>' to delete | 'r <old> <new>' to rename | 'q' to quit"
-    
-    while true; do
-        echo
-        read -p "Choice: " input
-        
-        case "$input" in
-            q|Q)
-                break
-                ;;
-            [0-9]*)
-                if [[ "$input" -ge 1 ]] && [[ "$input" -le "${#bookmark_array[@]}" ]]; then
-                    local selected="${bookmark_array[$((input-1))]}"
-                    local selected_name=$(echo "$selected" | cut -d: -f1)
-                    local selected_path=$(echo "$selected" | cut -d: -f2-)
-                    
-                    if [[ -d "$selected_path" ]]; then
-                        cd "$selected_path"
-                        echo "📍 Navigated to: $selected_name"
-                        break
-                    else
-                        echo "❌ Path no longer exists: $selected_path"
-                    fi
-                else
-                    echo "❌ Invalid choice. Please enter a number between 1 and ${#bookmark_array[@]}"
-                fi
-                ;;
-            c\ *)
-                local bookmark_name="${input#c }"
-                add_bookmark "$bookmark_name"
-                ;;
-            d\ *)
-                local bookmark_name="${input#d }"
-                remove_bookmark "$bookmark_name"
-                ;;
-            r\ *)
-                local names="${input#r }"
-                local old_name=$(echo "$names" | cut -d' ' -f1)
-                local new_name=$(echo "$names" | cut -d' ' -f2)
-                rename_bookmark "$old_name" "$new_name"
-                ;;
-            *)
-                echo "❌ Invalid input. Try again or 'q' to quit."
-                ;;
-        esac
-    done
-}
-
-# ============================================================================
-# SMART PROJECT SEARCH SYSTEM
-# ============================================================================
-
-# Search for nested projects (advanced search with fuzzy matching)
-search_nested_projects() {
-    local project_name="$1"
-    local base_dir="$2"
-    local verbose="$3"
-    
-    [[ "$verbose" == "true" ]] && echo "🔍 Starting nested search for '$project_name' in: $base_dir"
-    
-    if [[ ! -d "$base_dir" ]]; then
-        [[ "$verbose" == "true" ]] && echo "❌ Base directory not found: $base_dir"
-        return 1
-    fi
-    
-    # Convert search term for parent folder matching (chess-guru -> chess guru)
-    local parent_search_term="${project_name//-/ }"
-    [[ "$verbose" == "true" ]] && echo "🔄 Parent search term: '$parent_search_term'"
-    
-    # Search subdirectories
-    while IFS= read -r -d '' subdir; do
-        local subdir_name=$(basename "$subdir")
-        [[ "$verbose" == "true" ]] && echo "  📂 Checking: $subdir_name"
-        
-        # Check if this subdirectory name matches our parent search term
-        if [[ "$subdir_name" == *"$parent_search_term"* ]] || [[ "$subdir_name" == "$parent_search_term" ]]; then
-            [[ "$verbose" == "true" ]] && echo "  ⚡ Found potential parent: $subdir_name"
-            
-            # Look inside this subdirectory for the actual project
-            while IFS= read -r -d '' innerdir; do
-                local inner_name=$(basename "$innerdir")
-                [[ "$verbose" == "true" ]] && echo "    🔍 Inner dir: $inner_name"
-                
-                # Check for exact match first
-                if [[ "$inner_name" == "$project_name" ]]; then
-                    [[ "$verbose" == "true" ]] && echo "    ⭐ EXACT MATCH FOUND!"
-                    echo "$innerdir"
-                    return 0
-                fi
-                
-                # Check for fuzzy match
-                if [[ "$inner_name" == *"$project_name"* ]]; then
-                    [[ "$verbose" == "true" ]] && echo "    ⚡ FUZZY MATCH FOUND!"
-                    echo "$innerdir"
-                    return 0
-                fi
-            done < <(find "$subdir" -maxdepth 1 -type d -print0 2>/dev/null)
-        fi
-    done < <(find "$base_dir" -maxdepth 1 -type d -print0 2>/dev/null)
-    
-    return 1
-}
-
-# ============================================================================
-# MAIN NAVIGATION FUNCTION
-# ============================================================================
-
-# Main nav function (complete port from PowerShell)
+# Main nav function (simplified version for core functionality)
 nav() {
     local command="$1"
     local param1="$2"
     local param2="$3"
-    local verbose=false
     
     # Initialize bookmarks on first run
     initialize_default_bookmarks
-    
-    # Check for verbose flag
-    for arg in "$@"; do
-        if [[ "$arg" == "-verbose" ]]; then
-            verbose=true
-            break
-        fi
-    done
     
     # If no command provided, show help
     if [[ -z "$command" ]]; then
@@ -754,16 +686,9 @@ nav() {
         echo "  nav b <bookmark>             Navigate to bookmark"
         echo "  nav create-b <name> | cb     Create bookmark (current dir)"
         echo "  nav delete-b <name> | db     Delete bookmark"
-        echo "  nav rename-b <old> <new>     Rename bookmark"
-        echo "  nav list | l                 Show interactive bookmark list"
-        echo "  Use -verbose for detailed output"
+        echo "  nav list | l                 Show bookmarks"
         return
     fi
-    
-    [[ "$verbose" == "true" ]] && echo "=== NAV FUNCTION ==="
-    [[ "$verbose" == "true" ]] && echo "Command: '$command'"
-    [[ "$verbose" == "true" ]] && echo "Param1: '$param1'"
-    [[ "$verbose" == "true" ]] && echo "Param2: '$param2'"
     
     # Handle bookmark management commands
     case "$command" in
@@ -775,12 +700,16 @@ nav() {
             remove_bookmark "$param1"
             return
             ;;
-        rename-b|rb)
-            rename_bookmark "$param1" "$param2"
-            return
-            ;;
         list|l)
-            show_bookmark_list
+            if ! command -v jq >/dev/null 2>&1; then
+                echo "❌ Error: jq is required for bookmark management"
+                return 1
+            fi
+            
+            local bookmarks=$(get_bookmarks)
+            echo "📚 Available Bookmarks:"
+            echo "═══════════════════════"
+            echo "$bookmarks" | jq -r 'to_entries[] | "\(.key) → \(.value)"' | sort
             return
             ;;
     esac
@@ -795,7 +724,6 @@ nav() {
         
         if ! command -v jq >/dev/null 2>&1; then
             echo "❌ Error: jq is required for bookmark navigation"
-            echo "💡 Install with: sudo apt install jq"
             return 1
         fi
         
@@ -810,302 +738,51 @@ nav() {
                 return
             else
                 echo "❌ Bookmark path no longer exists: $bookmark_path"
-                echo "💡 Use 'nav delete-b $param1' to remove invalid bookmark"
                 return 1
             fi
         else
             echo "❌ Bookmark '$param1' not found"
-            echo "💡 Use 'nav list' to see available bookmarks"
             return 1
         fi
     fi
     
-    # === PROJECT SEARCH LOGIC ===
-    
-    local current_path="$(pwd)"
-    local search_dir="$current_path"
-    
-    # Check if we're in a bookmarked location
-    if command -v jq >/dev/null 2>&1; then
-        local bookmarks=$(get_bookmarks)
-        local is_in_bookmarked_location=false
-        local parent_bookmark=""
-        
-        while IFS= read -r line; do
-            local bookmark_name=$(echo "$line" | cut -d: -f1)
-            local bookmark_path=$(echo "$line" | cut -d: -f2-)
-            
-            if [[ "$current_path" == "$bookmark_path"* ]]; then
-                is_in_bookmarked_location=true
-                parent_bookmark="$bookmark_path"
-                break
-            fi
-        done < <(echo "$bookmarks" | jq -r 'to_entries[] | "\(.key):\(.value)"')
-        
-        # Only default to Code bookmark if we're in a completely unrelated location
-        if [[ "$is_in_bookmarked_location" == "false" ]]; then
-            local code_bookmark=$(echo "$bookmarks" | jq -r '.code // empty')
-            if [[ -n "$code_bookmark" ]]; then
-                search_dir="$code_bookmark"
-                [[ "$verbose" == "true" ]] && echo "Not in bookmarked location, defaulting to Code directory"
-            fi
-        else
-            [[ "$verbose" == "true" ]] && echo "In bookmarked location ($parent_bookmark), searching from current directory: $current_path"
-        fi
-    fi
-    
-    local path="$command"  # The project name to search for
-    
-    # Handle special shortcuts first
-    case "$path" in
-        "~")
-            cd "$HOME"
-            echo "🏠 Navigated to Home"
-            return
-            ;;
-        "code")
-            if command -v jq >/dev/null 2>&1; then
-                local code_path=$(echo "$(get_bookmarks)" | jq -r '.code // empty')
-                if [[ -n "$code_path" ]]; then
-                    cd "$code_path"
-                    echo "💻 Navigated to Code"
-                else
-                    echo "❌ Code bookmark not found"
-                fi
-            else
-                echo "❌ jq required for bookmark navigation"
-            fi
-            return
-            ;;
-        "projects")
-            if command -v jq >/dev/null 2>&1; then
-                local code_path=$(echo "$(get_bookmarks)" | jq -r '.code // empty')
-                if [[ -n "$code_path" ]]; then
-                    cd "$code_path/Projects"
-                    echo "📂 Navigated to Projects"
-                else
-                    echo "❌ Code bookmark not found"
-                fi
-            else
-                echo "❌ jq required for bookmark navigation"
-            fi
-            return
-            ;;
-    esac
-    
-    # Try direct path first
-    if [[ -d "$path" ]]; then
-        cd "$path"
-        echo "📁 Navigated to: $path"
+    # Simple project search - check if it's a direct path first
+    if [[ -d "$command" ]]; then
+        cd "$command"
+        echo "📁 Navigated to: $command"
         return
     fi
     
-    [[ "$verbose" == "true" ]] && echo "Search directory: $search_dir"
-    [[ "$verbose" == "true" ]] && echo "Search directory exists: $(test -d "$search_dir" && echo "true" || echo "false")"
-    
-    if [[ ! -d "$search_dir" ]]; then
-        echo "❌ Search directory not found!"
-        return 1
-    fi
-    
-    # First, check top-level directories in search location
-    [[ "$verbose" == "true" ]] && echo
-    [[ "$verbose" == "true" ]] && echo "Listing top-level directories in ${search_dir}:"
-    
-    local found_match=false
-    
-    # Check for direct matches in top-level directories
-    while IFS= read -r -d '' topdir; do
-        local topdir_name=$(basename "$topdir")
-        [[ "$verbose" == "true" ]] && echo "  📁 $topdir_name"
-        
-        if [[ "$topdir_name" == "$path" ]]; then
-            cd "$topdir"
-            echo "🎯 Found project: $path"
-            found_match=true
-            break
-        fi
-        
-        if [[ "$topdir_name" == *"$path"* ]]; then
-            cd "$topdir"
-            echo "🎯 Found similar project: $topdir_name"
-            echo "💡 Searched for: $path"
-            found_match=true
-            break
-        fi
-    done < <(find "$search_dir" -maxdepth 1 -type d -print0 2>/dev/null)
-    
-    [[ "$found_match" == "true" ]] && return
-    
-    # === ADVANCED SEARCH LOGIC ===
-    
+    # Search in Code directory if available
     if command -v jq >/dev/null 2>&1; then
-        local code_bookmark=$(echo "$(get_bookmarks)" | jq -r '.code // empty')
-        if [[ "$search_dir" == "$code_bookmark" ]]; then
-            [[ "$verbose" == "true" ]] && echo
-            [[ "$verbose" == "true" ]] && echo "Searching for '$path' in Projects folder:"
-            
-            local projects_dir="$search_dir/Projects"
-            if [[ -d "$projects_dir" ]]; then
-                [[ "$verbose" == "true" ]] && echo "Projects directory exists: ✅"
-                
-                # Search in Projects subdirectories
-                while IFS= read -r -d '' subdir; do
-                    local subdir_name=$(basename "$subdir")
-                    [[ "$verbose" == "true" ]] && echo "  📂 $subdir_name"
-                    
-                    while IFS= read -r -d '' innerdir; do
-                        local inner_name=$(basename "$innerdir")
-                        
-                        if [[ "$inner_name" == "$path" ]]; then
-                            cd "$innerdir"
-                            echo "🎯 Found project: $path in $subdir_name"
-                            found_match=true
-                            break 2
-                        fi
-                        
-                        [[ "$verbose" == "true" ]] && {
-                            local match=""
-                            [[ "$inner_name" == "$path" ]] && match=" ⭐ EXACT MATCH!"
-                            [[ "$inner_name" == *"$path"* ]] && [[ "$inner_name" != "$path" ]] && match=" ⚡ FUZZY MATCH!"
-                            echo "    💼 $inner_name$match"
-                        }
-                    done < <(find "$subdir" -maxdepth 1 -type d -print0 2>/dev/null)
-                    
-                    [[ "$found_match" == "true" ]] && break
-                done < <(find "$projects_dir" -maxdepth 1 -type d -print0 2>/dev/null)
-                
-                [[ "$found_match" == "true" ]] && return
-                
-                # Fuzzy search if no exact match
-                while IFS= read -r -d '' subdir; do
-                    while IFS= read -r -d '' innerdir; do
-                        local inner_name=$(basename "$innerdir")
-                        if [[ "$inner_name" == *"$path"* ]]; then
-                            cd "$innerdir"
-                            echo "🎯 Found similar project: $inner_name in $(basename "$subdir")"
-                            echo "💡 Searched for: $path"
-                            found_match=true
-                            break 2
-                        fi
-                    done < <(find "$subdir" -maxdepth 1 -type d -print0 2>/dev/null)
-                done < <(find "$projects_dir" -maxdepth 1 -type d -print0 2>/dev/null)
-                
-                [[ "$found_match" == "true" ]] && return
-                
-                # Nested search
-                [[ "$verbose" == "true" ]] && echo "🔍 Trying nested search in Projects..."
-                local nested_result=$(search_nested_projects "$path" "$projects_dir" "$verbose")
-                if [[ -n "$nested_result" ]]; then
-                    cd "$nested_result"
-                    local relative_path="${nested_result#$projects_dir/}"
-                    echo "🎯 Found nested project: $path"
-                    echo "📍 Location: Projects/$relative_path"
-                    return
-                fi
-                
-                # Search other directories
-                local other_search_dirs=("Applications" "Learning Area" "React Native" "Deblotter" "pass-book")
-                
-                for dir_name in "${other_search_dirs[@]}"; do
-                    local other_search_dir="$search_dir/$dir_name"
-                    if [[ -d "$other_search_dir" ]]; then
-                        [[ "$verbose" == "true" ]] && echo "Searching in $dir_name..."
-                        
-                        # Exact matches
-                        while IFS= read -r -d '' subdir; do
-                            local sub_name=$(basename "$subdir")
-                            if [[ "$sub_name" == "$path" ]]; then
-                                cd "$subdir"
-                                echo "🎯 Found project: $path in $dir_name"
-                                found_match=true
-                                break 2
-                            fi
-                        done < <(find "$other_search_dir" -maxdepth 1 -type d -print0 2>/dev/null)
-                        
-                        [[ "$found_match" == "true" ]] && break
-                        
-                        # Fuzzy matches
-                        while IFS= read -r -d '' subdir; do
-                            local sub_name=$(basename "$subdir")
-                            if [[ "$sub_name" == *"$path"* ]]; then
-                                cd "$subdir"
-                                echo "🎯 Found similar project: $sub_name in $dir_name"
-                                echo "💡 Searched for: $path"
-                                found_match=true
-                                break 2
-                            fi
-                        done < <(find "$other_search_dir" -maxdepth 1 -type d -print0 2>/dev/null)
-                        
-                        [[ "$found_match" == "true" ]] && break
-                        
-                        # Nested search
-                        [[ "$verbose" == "true" ]] && echo "🔍 Trying nested search in $dir_name..."
-                        local nested_result=$(search_nested_projects "$path" "$other_search_dir" "$verbose")
-                        if [[ -n "$nested_result" ]]; then
-                            cd "$nested_result"
-                            local relative_path="${nested_result#$other_search_dir/}"
-                            echo "🎯 Found nested project: $path in $dir_name"
-                            echo "📍 Location: $dir_name/$relative_path"
-                            found_match=true
-                            break
-                        fi
-                    fi
-                done
-                
-                [[ "$found_match" == "true" ]] && return
-            fi
-        else
-            # Search in non-Code bookmarks
-            [[ "$verbose" == "true" ]] && echo "Searching for '$path' in current bookmark location:"
-            
-            # Direct search in current directory
-            while IFS= read -r -d '' subdir; do
-                local sub_name=$(basename "$subdir")
-                if [[ "$sub_name" == "$path" ]] || [[ "$sub_name" == *"$path"* ]]; then
-                    cd "$subdir"
-                    echo "🎯 Found project: $sub_name"
-                    [[ "$sub_name" != "$path" ]] && echo "💡 Searched for: $path"
-                    found_match=true
+        local code_path=$(echo "$(get_bookmarks)" | jq -r '.code // empty')
+        if [[ -n "$code_path" ]] && [[ -d "$code_path" ]]; then
+            # Look for project in code directory
+            local found_path=""
+            while IFS= read -r -d '' dir; do
+                local dir_name=$(basename "$dir")
+                if [[ "$dir_name" == "$command" ]] || [[ "$dir_name" == *"$command"* ]]; then
+                    found_path="$dir"
                     break
                 fi
-            done < <(find "$search_dir" -maxdepth 1 -type d -print0 2>/dev/null)
+            done < <(find "$code_path" -maxdepth 2 -type d -print0 2>/dev/null)
             
-            [[ "$found_match" == "true" ]] && return
-            
-            # Nested search
-            local nested_result=$(search_nested_projects "$path" "$search_dir" "$verbose")
-            if [[ -n "$nested_result" ]]; then
-                cd "$nested_result"
-                local relative_path="${nested_result#$search_dir/}"
-                echo "🎯 Found nested project: $path"
-                echo "📍 Location: $relative_path"
+            if [[ -n "$found_path" ]]; then
+                cd "$found_path"
+                echo "🎯 Found project: $(basename "$found_path")"
                 return
             fi
         fi
     fi
     
-    # If nothing found
-    echo "❌ No matches found for: $path"
-    echo "💡 Searched in: $search_dir"
-    if command -v jq >/dev/null 2>&1; then
-        local code_bookmark=$(echo "$(get_bookmarks)" | jq -r '.code // empty')
-        if [[ "$search_dir" == "$code_bookmark" ]]; then
-            echo "💡 Searched areas:"
-            echo "   • Top-level Code directories"
-            echo "   • Projects subdirectories (including nested)"
-            echo "   • Applications, Learning Area, React Native, etc. (including nested)"
-        fi
-    fi
-    echo "💡 Use 'nav $path -verbose' for detailed search output"
-    echo "💡 Use 'nav b <bookmark>' to search in a different location"
+    echo "❌ No matches found for: $command"
 }
 
 # ============================================================================
 # ENHANCED NAVIGATION SHORTCUTS
 # ============================================================================
 
-# Parent directory shortcuts (fast!)
+# Parent directory shortcuts
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
@@ -1134,16 +811,10 @@ here() {
         fi
     done
     
-    local total_size=0
-    if command -v du >/dev/null 2>&1; then
-        total_size=$(du -sh . 2>/dev/null | cut -f1)
-    fi
-    
     echo
     echo "📍 Current Location Info:"
     echo "  📁 Path: $location"
     echo "  📊 Contents: $dirs directories, $files files"
-    [[ -n "$total_size" ]] && echo "  💾 Total Size: $total_size"
     
     # Show Git info if in repository
     if git rev-parse --git-dir >/dev/null 2>&1; then
@@ -1164,9 +835,6 @@ copy-pwd() {
     if command -v xclip >/dev/null 2>&1; then
         echo -n "$path" | xclip -selection clipboard
         echo "📋 Copied path: $path"
-    elif command -v pbcopy >/dev/null 2>&1; then
-        echo -n "$path" | pbcopy
-        echo "📋 Copied path: $path"
     else
         echo "📋 Path: $path (clipboard not available)"
     fi
@@ -1176,12 +844,6 @@ copy-pwd() {
 open-pwd() {
     local current_path="$(pwd)"
     
-    if [[ ! -d "$current_path" ]]; then
-        echo "❌ Current directory does not exist: $current_path"
-        return 1
-    fi
-    
-    # Convert WSL path to Windows path and open in Explorer
     if command -v explorer.exe >/dev/null 2>&1; then
         local windows_path=$(wslpath -w "$current_path" 2>/dev/null)
         if [[ -n "$windows_path" ]]; then
@@ -1197,207 +859,255 @@ open-pwd() {
 
 alias op='open-pwd'
 
-# Back to previous directory
-back() {
-    if [[ -n "$OLDPWD" ]]; then
-        cd "$OLDPWD"
-        echo "🔙 Navigated back to: $(pwd)"
+# ============================================================================
+# ENHANCED WINDOWS TERMINAL TAB MANAGEMENT
+# ============================================================================
+
+# Enhanced send-keys function with better error handling
+send-keys() {
+    local keys="$1"
+    
+    # First try PowerShell SendKeys if in Windows Terminal (more reliable)
+    if is_windows_terminal && command -v powershell.exe >/dev/null 2>&1; then
+        case "$keys" in
+            "^{TAB}")
+                if powershell.exe -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^{TAB}')" 2>/dev/null; then
+                    return 0
+                fi
+                ;;
+            "^+{TAB}")
+                if powershell.exe -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^+{TAB}')" 2>/dev/null; then
+                    return 0
+                fi
+                ;;
+            "^+w")
+                if powershell.exe -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^+w')" 2>/dev/null; then
+                    return 0
+                fi
+                ;;
+        esac
+    fi
+    
+    # Fallback to xdotool
+    if command -v xdotool >/dev/null 2>&1; then
+        case "$keys" in
+            "^{TAB}")
+                xdotool key ctrl+Tab
+                ;;
+            "^+{TAB}")
+                xdotool key ctrl+shift+Tab
+                ;;
+            "^+w")
+                xdotool key ctrl+shift+w
+                ;;
+            *)
+                echo "⚠️  Unsupported key combination: $keys" >&2
+                return 1
+                ;;
+        esac
     else
-        echo "❌ No previous directory in history"
+        echo "⚠️  No automation tools available. Use manual keyboard shortcuts:" >&2
+        case "$keys" in
+            "^{TAB}")
+                echo "   Press Ctrl+Tab to switch to next tab" >&2
+                ;;
+            "^+{TAB}")
+                echo "   Press Ctrl+Shift+Tab to switch to previous tab" >&2
+                ;;
+            "^+w")
+                echo "   Press Ctrl+Shift+W to close current tab" >&2
+                ;;
+        esac
+        return 1
     fi
 }
 
-alias cd-='back'
+# Switch to next terminal tab (simplified and more reliable)
+next-t() {
+    echo "➡️ Switching to next tab..." >&2
+    if send-keys "^{TAB}"; then
+        echo "✅ Switched to next tab" >&2
+    else
+        echo "💡 Use Ctrl+Tab to switch to next tab manually" >&2
+    fi
+}
+
+# Alias for next-t to match the goal of getting "next-tab" working
+alias next-tab='next-t'
+
+# Switch to previous terminal tab
+prev-t() {
+    echo "⬅️ Switching to previous tab..." >&2
+    if send-keys "^+{TAB}"; then
+        echo "✅ Switched to previous tab" >&2
+    else
+        echo "💡 Use Ctrl+Shift+Tab to switch to previous tab manually" >&2
+    fi
+}
+
+# Close current terminal tab
+close-ct() {
+    echo "🗑️ Closing current tab..." >&2
+    if send-keys "^+w"; then
+        echo "✅ Tab closed" >&2
+    else
+        echo "💡 Use Ctrl+Shift+W to close the current tab manually" >&2
+    fi
+}
+
+# Switch to specific terminal tab by index (1-9) - simplified
+open-t() {
+    local index="$1"
+    
+    if [[ -z "$index" ]] || [[ ! "$index" =~ ^[1-9]$ ]]; then
+        echo "❌ Tab index must be between 1-9" >&2
+        echo "💡 Usage: open-t <1-9>" >&2
+        return 1
+    fi
+    
+    echo "🔀 Switching to tab $index..." >&2
+    
+    # Try PowerShell first if in Windows Terminal
+    if is_windows_terminal && command -v powershell.exe >/dev/null 2>&1; then
+        if powershell.exe -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('%$index')" 2>/dev/null; then
+            echo "✅ Switched to tab $index" >&2
+            return 0
+        fi
+    fi
+    
+    # Fallback to xdotool
+    if command -v xdotool >/dev/null 2>&1; then
+        xdotool key alt+$index
+        echo "✅ Switched to tab $index" >&2
+    else
+        echo "⚠️ Press Alt+$index manually to switch to tab $index" >&2
+    fi
+}
+
+# Open new Windows Terminal tab
+open-nt() {
+    local shell="${1:-pwsh}"
+    local current_path="$(pwd)"
+    
+    # Convert WSL path to Windows path for PowerShell tabs
+    local windows_path=""
+    if command -v wslpath >/dev/null 2>&1; then
+        windows_path=$(wslpath -w "$current_path" 2>/dev/null)
+    fi
+    
+    case "${shell,,}" in
+        pwsh|powershell|ps|p)
+            echo "💻 Opening PowerShell tab..." >&2
+            if [[ -n "$windows_path" ]]; then
+                if wt -w 0 nt -p "PowerShell" --startingDirectory "$windows_path" 2>/dev/null; then
+                    echo "✅ Opened PowerShell tab in: $windows_path" >&2
+                else
+                    echo "❌ Failed to open PowerShell tab" >&2
+                fi
+            else
+                wt -w 0 nt -p "PowerShell" 2>/dev/null
+            fi
+            ;;
+        cmd|command)
+            echo "⚡ Opening Command Prompt tab..." >&2
+            if [[ -n "$windows_path" ]]; then
+                wt -w 0 nt -p "Command Prompt" --startingDirectory "$windows_path" 2>/dev/null
+                echo "✅ Opened Command Prompt tab in: $windows_path" >&2
+            else
+                wt -w 0 nt -p "Command Prompt" 2>/dev/null
+            fi
+            ;;
+        ubuntu|u|wsl|bash)
+            echo "🐧 Opening Ubuntu WSL tab..." >&2
+            if wt -w 0 nt -p "Ubuntu-20.04" 2>/dev/null; then
+                echo "✅ Opened Ubuntu tab" >&2
+                echo "📁 To navigate to current directory, run: cd '$current_path'" >&2
+            else
+                echo "❌ Failed to open Ubuntu tab" >&2
+            fi
+            ;;
+        *)
+            echo "❌ Unknown shell: $shell" >&2
+            echo "💡 Supported shells: pwsh|p, cmd, ubuntu|u" >&2
+            return 1
+            ;;
+    esac
+}
+
+# Install xdotool for enhanced terminal control
+install-xdotool() {
+    echo "📦 Installing xdotool for terminal tab control..." >&2
+    
+    if sudo apt update && sudo apt install -y xdotool; then
+        echo "✅ xdotool installed successfully!" >&2
+        echo "🎯 You can now use next-t, prev-t, and other tab functions" >&2
+    else
+        echo "❌ Failed to install xdotool" >&2
+        echo "💡 Tab functions will show manual instructions instead" >&2
+    fi
+}
 
 # ============================================================================
 # ENHANCED FILE OPERATIONS
 # ============================================================================
 
-# Enhanced ls functions (avoiding conflicts with existing alias)
+# Enhanced ls functions
 lsd-ls() {
     local path="${1:-.}"
-    local tree_flag=false
-    local depth=0
-    
-    # Parse arguments
-    for arg in "$@"; do
-        case "$arg" in
-            -t|--tree)
-                tree_flag=true
-                ;;
-            -d)
-                shift
-                depth="$1"
-                ;;
-        esac
-    done
     
     # Check if lsd is available
     if command -v lsd >/dev/null 2>&1; then
-        # Smart depth detection if not overridden
-        if [[ "$depth" -eq 0 ]]; then
-            # Check if we're dealing with node_modules or inside a Node.js project
-            if [[ "$path" == *"node_modules"* ]] || [[ -f "$path/package.json" ]] || [[ -d "$path/node_modules" ]]; then
-                depth=2
-            else
-                depth=3
-            fi
-        fi
-        
-        if [[ "$tree_flag" == "true" ]]; then
-            echo "🌳 Tree view (depth: $depth)"
-            lsd --tree --depth="$depth" --group-dirs=first --icon=always --color=always "$path"
-        else
-            echo "📁 Directory listing"
-            lsd --group-dirs=first --icon=always --color=always "$path"
-        fi
+        lsd --group-dirs=first --icon=always --color=always "$path"
     else
-        # Fallback to regular ls
-        if [[ "$tree_flag" == "true" ]]; then
-            if command -v tree >/dev/null 2>&1; then
-                tree -L "$depth" "$path"
-            else
-                echo "⚠️ lsd and tree not found. Using standard ls"
-                command ls -la --color=always "$path"
-            fi
-        else
-            command ls -la --color=always "$path"
-        fi
+        command ls -la --color=always "$path"
     fi
 }
 
 # Create aliases for enhanced ls functionality
 alias lsl='lsd-ls'           # Enhanced ls with lsd
-alias lst='lsd-ls -t'        # Tree view
+alias lst='lsd --tree --depth=3'        # Tree view
 alias lsb='lsd-ls'           # Beautiful ls (same as lsl)
-
-# Enhanced file utilities
-which() {
-    command -v "$1"
-}
-
-touch() {
-    local file="$1"
-    if [[ -z "$file" ]]; then
-        echo "❌ Usage: touch <filename>"
-        return 1
-    fi
-    command touch "$file"
-    echo "📄 Created file: $file"
-}
-
-mkdir() {
-    local dir_name="$*"
-    
-    # Check if name is empty or whitespace only
-    if [[ -z "$dir_name" ]] || [[ "$dir_name" =~ ^[[:space:]]*$ ]]; then
-        echo "❌ Directory name cannot be empty or whitespace only"
-        return 1
-    fi
-    
-    # Check for leading or trailing spaces
-    if [[ "$dir_name" =~ ^[[:space:]] ]] || [[ "$dir_name" =~ [[:space:]]$ ]]; then
-        echo "❌ Directory name cannot start or end with spaces"
-        return 1
-    fi
-    
-    # Create the directory
-    if command mkdir -p "$dir_name"; then
-        echo "📁 Directory '$dir_name' created successfully"
-    else
-        echo "❌ Failed to create directory '$dir_name'"
-        return 1
-    fi
-}
 
 # ============================================================================
 # COMPREHENSIVE HELP SYSTEM
 # ============================================================================
 
 wsl_help() {
-    local help_text=$(cat << 'EOF'
-
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                     🐧 WSL ENHANCED PROFILE REFERENCE                       ║
-║                        Navigation & Bookmark System                          ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-┌─ 🧭 SMART NAVIGATION & BOOKMARKS ────────────────────────────────────────────┐
-│  🎯 CORE NAVIGATION:                                                         │
-│  nav <project>       → smart project search in ~/Code and bookmarked dirs    │
-│  nav -verbose        → detailed search output for troubleshooting            │
-│  z <project>         → alias for nav                                         │
-│                                                                              │
-│  🔖 BOOKMARK MANAGEMENT:                                                     │
-│  nav b <bookmark>    → navigate to bookmark                                  │
-│  nav create-b <name> → create bookmark (current dir)                         │
-│  nav cb <name>       → shorthand for create-b                                │
-│  nav delete-b <name> → delete bookmark with confirmation                     │
-│  nav db <name>       → shorthand for delete-b                                │
-│  nav rename-b <old> <new> → rename existing bookmark                         │
-│  nav rb <old> <new>  → shorthand for rename-b                                │
-│  nav list            → interactive bookmark manager                          │
-│  nav l               → shorthand for list                                    │
-│                                                                              │
-│  ⬆️ PARENT NAVIGATION:                                                       │
-│  ..                  → go up one level                                       │
-│  ...                 → go up two levels                                      │
-│  ....                → go up three levels                                    │
-│  ~                   → go to home directory                                  │
-│                                                                              │
-│  📍 LOCATION UTILITIES:                                                      │
-│  here                → detailed info about current directory                 │
-│  copy-pwd            → copy current path to clipboard                        │
-│  open-pwd            → open current directory in Windows Explorer            │
-│  op                  → alias for open-pwd                                    │
-│  back                → go to previous directory                              │
-│  cd-                 → alias for back                                        │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌─ 📂 ENHANCED FILE OPERATIONS ────────────────────────────────────────────────┐
-│  📋 DIRECTORY LISTING:                                                       │
-│  ls [path]           → standard ls (keeps your original)                     │
-│  lsl [path]          → beautiful directory listing with lsd                  │
-│  lst [path]          → tree view with smart depth detection                  │
-│  lsb [path]          → beautiful ls (same as lsl)                            │
-│  la                  → list all files including hidden                       │
-│  ll                  → long list format with details                         │
-│                                                                              │
-│  📄 FILE VIEWING & UTILITIES:                                                │
-│  cat <file>          → display file contents                                 │
-│  grep <pattern>      → search text in files                                  │
-│  less <file>         → page through file content                             │
-│  which <cmd>         → show command location                                 │
-│  touch <file>        → create new empty file                                 │
-│  mkdir <dir>         → create new directory                                  │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌─ ⚙️  SYSTEM MANAGEMENT ──────────────────────────────────────────────────────┐
-│  get_wsl_profile_version → show WSL profile version and status                │
-│  wsl_recovery        → recovery and diagnostics menu                         │
-│  wsl_help            → show this help menu                                   │
-│                                                                              │
-│  🔧 DEPENDENCY MANAGEMENT:                                                   │
-│  initialize_dependencies → manually check and install dependencies           │
-│  check_dependency_status → show which tools are installed                    │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌─ 🚀 KEY FEATURES ────────────────────────────────────────────────────────────┐
-│  🔄 Auto-Installation    → Automatically installs missing dependencies       │
-│  🔖 Persistent Bookmarks → Saved across sessions in JSON file               │
-│  🎯 Smart Project Search → Fuzzy search with nested directory support        │
-│  🌟 Beautiful Prompt     → Starship prompt with Git integration              │
-│  📋 Clipboard Integration → Copy paths and results to clipboard              │
-│  🛡️  Safety Checks       → Prevents accidental operations                    │
-│  🎨 Consistent UI        → Emoji indicators and color schemes                │
-│  ⚡ Context-Aware        → Adapts to current directory and project type      │
-│  🔧 Self-Healing         → Recovery tools and dependency management          │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-EOF
-)
-    
-    echo "$help_text"
+    echo
+    echo "🐧 WSL Enhanced Profile - Quick Reference"
+    echo "═════════════════════════════════════════"
+    echo
+    echo "🧭 NAVIGATION:"
+    echo "  nav <project>        → smart project search"
+    echo "  nav b <bookmark>     → navigate to bookmark"
+    echo "  nav create-b <name>  → create bookmark"
+    echo "  nav list             → show bookmarks"
+    echo "  ..  ...  ....        → go up directories"
+    echo
+    echo "🪟 WINDOWS TERMINAL TABS:"
+    echo "  next-t               → switch to next tab"
+    echo "  next-tab             → alias for next-t"
+    echo "  prev-t               → switch to previous tab"
+    echo "  open-t <1-9>         → switch to specific tab"
+    echo "  close-ct             → close current tab"
+    echo "  open-nt <shell>      → open new tab (pwsh|cmd|ubuntu)"
+    echo
+    echo "📁 UTILITIES:"
+    echo "  here                 → current directory info"
+    echo "  copy-pwd             → copy current path"
+    echo "  open-pwd             → open in Windows Explorer"
+    echo "  lsl                  → beautiful directory listing"
+    echo "  lst                  → tree view"
+    echo
+    echo "🔍 FZF FUZZY FINDER:"
+    echo "  Ctrl+T               → fuzzy file picker"
+    echo "  Ctrl+R               → fuzzy history search"
+    echo "  Alt+C                → fuzzy directory navigation"
+    echo
+    echo "⚙️ SYSTEM:"
+    echo "  force_install_deps   → install missing tools"
+    echo "  install-xdotool      → install tab switching tool"
+    echo
 }
 
 # ============================================================================
@@ -1422,14 +1132,18 @@ if [[ "$-" == *i* ]]; then  # Only in interactive shells
         eval "$(zoxide init bash)"
     fi
     
+    # Initialize FZF integration
+    setup_fzf_integration
+    
     # Add local bin to PATH
     export PATH="$HOME/.local/bin:$PATH"
     
     # Initialize bookmarks
     initialize_default_bookmarks
     
-    # Welcome message (only show if dependencies were just installed)
-    if [[ ! -f "$HOME/.wsl_init_check" ]] || [[ "$(cat "$HOME/.wsl_init_check" 2>/dev/null)" != "$(date +%Y-%m-%d)" ]]; then
-        echo "🚀 WSL Enhanced Profile loaded! Type 'wsl_help' for help" >&2
+    # Auto-navigate to preferred starting directory when starting from HOME
+    if [[ "$(pwd)" == "$HOME" ]] && [[ -n "$WSL_START_DIRECTORY" ]] && [[ -d "$WSL_START_DIRECTORY" ]]; then
+        cd "$WSL_START_DIRECTORY"
+        echo "🏠 Auto-navigated to $(basename "$WSL_START_DIRECTORY")" >&2
     fi
 fi

@@ -42,6 +42,13 @@ PowerFlow Ubuntu integration provides a comprehensive enhanced bash profile that
 - **Non-destructive operations** - Confirmation prompts for potentially destructive actions
 - **Version management** - Track profile version and check for updates
 
+### 🖥️ Cross-Platform Terminal Integration
+- **Windows Terminal integration** - Open new tabs in different shells from Ubuntu
+- **PowerShell tab opening** - `open-nt pwsh` or `open-nt p` to launch PowerShell tabs
+- **Ubuntu tab management** - `open-nt ubuntu` or `open-nt u` for new Ubuntu instances
+- **Smart path conversion** - Automatically converts WSL paths to Windows paths when needed
+- **Command Prompt support** - `open-nt cmd` to open Command Prompt tabs
+
 ## Installation
 
 ### Quick Install
@@ -148,6 +155,11 @@ On first run, the profile will:
 | `here` | Detailed info about current directory |
 | `copy-pwd` | Copy current path to clipboard |
 | `open-pwd` | Open current directory in Windows Explorer |
+| `open-nt` | Open new Windows Terminal tab (default: bash) |
+| `open-nt pwsh` | Open new PowerShell tab |
+| `open-nt p` | Open new PowerShell tab (short form) |
+| `open-nt ubuntu` | Open new Ubuntu tab |
+| `open-nt u` | Open new Ubuntu tab (short form) |
 
 ### System Management
 
