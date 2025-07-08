@@ -18,6 +18,11 @@ $script:CHECK_PROFILE_UPDATES = $true
 $script:CHECK_DEPENDENCIES = $true
 $script:CHECK_UPDATES = $true
 
+# Database credentials configuration
+# Update these values according to your database setup
+$script:DB_USERNAME = "Change-username"
+$script:DB_PASSWORD = "Change-password"
+
 # Suppress progress bars for faster installation
 $ProgressPreference = 'SilentlyContinue'
 
@@ -5332,21 +5337,10 @@ function pwsh-recovery {
     create-next     # Opens beautiful interface to create new Next.js project
     create-n        # Shorthand alias
 #>
-<#
-.SYNOPSIS
-    Create a professional Next.js application with database selection, Docker, CI/CD, and complete project structure
-.DESCRIPTION
-    Beautiful interactive Next.js project creator with comprehensive setup including:
-    - Latest Next.js with TypeScript, Tailwind, ESLint, App Router, and src directory
-    - Database selection: PostgreSQL/Prisma, Supabase, MongoDB, MySQL, or SQLite
-    - Docker development and production configurations
-    - GitHub Actions CI/CD pipeline
-    - Professional folder structure with database-specific configurations
-    - Common dependencies and scripts pre-configured
-.EXAMPLE
-    create-next     # Opens beautiful interface to create new Next.js project
-    create-n        # Shorthand alias
-#>
+
+
+
+
 function create-next {
     # Check if Node.js and npm are available
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
@@ -5372,19 +5366,20 @@ function create-next {
     # Step 1: Get project name
     $formLines = @(
         "",
-        "🚀 Next.js Professional Project Creator",
-        "═══════════════════════════════════════",
+        "🚀 Next.js Professional Project Creator v2.2",
+        "═══════════════════════════════════════════",
         "",
-        "📦 Features to be included:",
+        "📦 Features included:",
         "   ⚡ Next.js 15+ with App Router",
         "   📘 TypeScript configuration",
         "   🎨 Tailwind CSS styling",
         "   🔍 ESLint code quality",
-        "   📁 Professional src/ directory structure",
-        "   🗄️  Database integration (next step)",
-        "   🐳 Docker development & production setup",
-        "   🚀 GitHub Actions CI/CD pipeline",
-        "   🛠️  Common development dependencies",
+        "   📁 Professional src/ structure",
+        "   🗄️  PostgreSQL + Prisma ORM",
+        "   🐳 FIXED Docker (Debian-based)",
+        "   🚀 GitHub Actions CI/CD",
+        "   📄 Functional pages with real data",
+        "   👥 Sample user database with API",
         "",
         "💬 Type your project name above and press Enter"
     )
@@ -5396,7 +5391,7 @@ function create-next {
         --border=rounded `
         --height=70% `
         --prompt="📝 Project Name: " `
-        --header="🚀 Next.js Professional Project Creator" `
+        --header="🚀 Next.js Professional Project Creator v2.2" `
         --header-first `
         --color="header:bold:blue,prompt:bold:green,border:cyan,spinner:yellow" `
         --margin=1 `
@@ -5435,40 +5430,12 @@ function create-next {
         return
     }
 
-    # Step 2: Database selection
-    $databaseOptions = @(
-        "🐘 PostgreSQL with Prisma  → Full-featured relational database with type-safe ORM",
-        "🚀 Supabase               → PostgreSQL + Auth + Real-time + Storage",
-        "🍃 MongoDB                → NoSQL document database with Mongoose ODM",
-        "🐬 MySQL with Prisma      → Popular relational database with Prisma ORM", 
-        "💎 SQLite with Prisma     → Lightweight embedded database (great for development)"
-    )
-
-    $selectedDatabase = $databaseOptions | fzf --ansi --reverse --height=40% --border --prompt="🗄️  Select Database: " `
-        --header="Choose your database solution" --header-first `
-        --color="header:bold:cyan,prompt:bold:yellow,border:green"
-
-    if (-not $selectedDatabase) {
-        Write-Host "❌ Database selection cancelled" -ForegroundColor Yellow
-        return
-    }
-
-    # Extract database type
-    $dbType = switch -Regex ($selectedDatabase) {
-        "PostgreSQL with Prisma" { "postgresql" }
-        "Supabase" { "supabase" }
-        "MongoDB" { "mongodb" }
-        "MySQL with Prisma" { "mysql" }
-        "SQLite with Prisma" { "sqlite" }
-        default { "postgresql" }
-    }
-
     Write-Host ""
     Write-Host "🚀 Creating professional Next.js project: $projectName" -ForegroundColor Cyan
-    Write-Host "🗄️  Database: $($selectedDatabase -replace '^[🐘🚀🍃🐬💎]\s+', '')" -ForegroundColor Cyan
+    Write-Host "🗄️  Database: PostgreSQL with Prisma ORM + Sample Users" -ForegroundColor Cyan
     Write-Host "════════════════════════════════════════════════════" -ForegroundColor Cyan
 
-    # Step 3: Create Next.js app
+    # Step 2: Create Next.js app
     Write-Host ""
     Write-Host "📦 [1/9] Creating Next.js application..." -ForegroundColor Yellow
     
@@ -5486,58 +5453,36 @@ function create-next {
     Set-Location $projectName
     Write-Host "📁 Navigated to project directory" -ForegroundColor Cyan
 
-    # Step 4: Create database-specific directory structure
+    # Step 3: Create directory structure
     Write-Host ""
-    Write-Host "📁 [2/9] Creating database-specific directory structure..." -ForegroundColor Yellow
+    Write-Host "📁 [2/9] Creating directory structure..." -ForegroundColor Yellow
     
-    # Base directories
-    $baseDirectories = @(
+    $directories = @(
         "src/components/ui",
         "src/components/common",
-        "src/components/forms",
         "src/components/layout",
         "src/lib/utils",
         "src/lib/hooks",
-        "src/lib/api",
         "src/lib/auth",
-        "src/types/api",
-        "src/assets/images",
-        "src/assets/icons",
-        "src/assets/styles",
+        "src/lib/database",
+        "src/types/database",
+        "prisma",
+        "prisma/migrations",
         "docs",
-        "public/data",
-        ".github/workflows",
-        "tests/unit",
-        "tests/integration",
-        "tests/e2e"
+        ".github/workflows"
     )
 
-    # Database-specific directories
-    $dbDirectories = switch ($dbType) {
-        "postgresql" { @("src/lib/database", "src/types/database", "prisma", "prisma/migrations") }
-        "mysql" { @("src/lib/database", "src/types/database", "prisma", "prisma/migrations") }
-        "sqlite" { @("src/lib/database", "src/types/database", "prisma", "prisma/migrations") }
-        "supabase" { @("src/lib/supabase", "src/types/database", "supabase", "supabase/migrations") }
-        "mongodb" { @("src/lib/database", "src/models", "src/types/models") }
-    }
-
-    $allDirectories = $baseDirectories + $dbDirectories
-
-    foreach ($dir in $allDirectories) {
+    foreach ($dir in $directories) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
         Write-Host "   📂 Created: $dir" -ForegroundColor Green
     }
 
-    # Step 5: Create database-specific configuration files
+    # Step 4: Create Prisma schema with User model
     Write-Host ""
     Write-Host "🗄️  [3/9] Creating database configuration..." -ForegroundColor Yellow
 
-    if ($dbType -eq "postgresql") {
-            # Prisma schema for PostgreSQL
-            @"
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
+    @"
+// Prisma schema for PostgreSQL
 generator client {
   provider = "prisma-client-js"
 }
@@ -5547,34 +5492,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Example models - uncomment and modify as needed
-// model User {
-//   id        String   @id @default(cuid())
-//   email     String   @unique
-//   name      String?
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-//   posts     Post[]
-// 
-//   @@map("users")
-// }
-// 
-// model Post {
-//   id        String   @id @default(cuid())
-//   title     String
-//   content   String?
-//   published Boolean  @default(false)
-//   authorId  String
-//   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-// 
-//   @@map("posts")
-// }
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  name      String
+  age       Int
+  email     String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
 "@ | Set-Content "prisma/schema.prisma"
 
-            # Database connection
-            @"
+    # Create Prisma client
+    @"
 import { PrismaClient } from '@prisma/client'
 
 const globalForPrisma = globalThis as unknown as {
@@ -5590,803 +5522,755 @@ export const prisma =
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 "@ | Set-Content "src/lib/database/prisma.ts"
 
-            $envContent = @"
-# Database
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/${projectName}?schema=public"
-
-# App Configuration
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-
-# Add your environment variables here
-"@
-    } elseif ($dbType -eq "mysql") {
-            # Prisma schema for MySQL
-            @"
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
-}
-
-// Example models - uncomment and modify as needed
-// model User {
-//   id        String   @id @default(cuid())
-//   email     String   @unique
-//   name      String?
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-//   posts     Post[]
-// 
-//   @@map("users")
-// }
-// 
-// model Post {
-//   id        String   @id @default(cuid())
-//   title     String
-//   content   String?  @db.Text
-//   published Boolean  @default(false)
-//   authorId  String
-//   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-// 
-//   @@map("posts")
-// }
-"@ | Set-Content "prisma/schema.prisma"
-
-            # Database connection (same as PostgreSQL)
-            @"
+    # Create database seed file with FIXED disconnect method (PowerShell dollar sign escaped)
+    @'
 import { PrismaClient } from '@prisma/client'
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
+const prisma = new PrismaClient()
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: ['query'],
+async function main() {
+  await prisma.user.deleteMany()
+
+  const user1 = await prisma.user.create({
+    data: {
+      username: 'johndoe',
+      name: 'John Doe',
+      age: 28,
+      email: 'john.doe@example.com',
+    },
   })
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
-"@ | Set-Content "src/lib/database/prisma.ts"
-
-            $envContent = @"
-# Database
-DATABASE_URL="mysql://root:password@localhost:3306/${projectName}"
-
-# App Configuration
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-
-# Add your environment variables here
-"@
-    } elseif ($dbType -eq "sqlite") {
-            # Prisma schema for SQLite
-            @"
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
-}
-
-// Example models - uncomment and modify as needed
-// model User {
-//   id        String   @id @default(cuid())
-//   email     String   @unique
-//   name      String?
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-//   posts     Post[]
-// }
-// 
-// model Post {
-//   id        String   @id @default(cuid())
-//   title     String
-//   content   String?
-//   published Boolean  @default(false)
-//   authorId  String
-//   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-// }
-"@ | Set-Content "prisma/schema.prisma"
-
-            # Database connection (same as others)
-            @"
-import { PrismaClient } from '@prisma/client'
-
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
-
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: ['query'],
+  const user2 = await prisma.user.create({
+    data: {
+      username: 'janebrown',
+      name: 'Jane Brown',
+      age: 34,
+      email: 'jane.brown@example.com',
+    },
   })
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
-"@ | Set-Content "src/lib/database/prisma.ts"
+  const user3 = await prisma.user.create({
+    data: {
+      username: 'mikejohnson',
+      name: 'Mike Johnson',
+      age: 29,
+      email: 'mike.johnson@example.com',
+    },
+  })
 
-            $envContent = @"
-# Database
-DATABASE_URL="file:./dev.db"
+  console.log('Seeded 3 users successfully')
+  console.log('Created:', user1.username)
+  console.log('Created:', user2.username)
+  console.log('Created:', user3.username)
+}
+
+main()
+  .catch((e) => {
+    console.error('Seeding failed:', e)
+    process.exit(1)
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })
+'@ | Set-Content "prisma/seed.ts"
+
+    # Create dual environment files for local and Docker development
+    
+    # .env.local (for local development - uses localhost)
+    @"
+# Database (Local Development)
+DATABASE_URL="postgresql://${script:DB_USERNAME}:${script:DB_PASSWORD}@localhost:5432/${projectName}?schema=public"
 
 # App Configuration
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXTAUTH_SECRET=your-secret-here
+NEXTAUTH_URL=http://localhost:3000
 
 # Add your environment variables here
-"@
-    } elseif ($dbType -eq "supabase") {
-            # Supabase configuration
-            @"
-import { createClient } from '@supabase/supabase-js'
+"@ | Set-Content ".env.local"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
-"@ | Set-Content "src/lib/supabase/client.ts"
-
-            # Supabase types
-            @"
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
-
-export interface Database {
-  public: {
-    Tables: {
-      // Define your tables here
-      // Example:
-      // users: {
-      //   Row: {
-      //     id: string
-      //     email: string
-      //     name: string | null
-      //     created_at: string
-      //     updated_at: string
-      //   }
-      //   Insert: {
-      //     id?: string
-      //     email: string
-      //     name?: string | null
-      //     created_at?: string
-      //     updated_at?: string
-      //   }
-      //   Update: {
-      //     id?: string
-      //     email?: string
-      //     name?: string | null
-      //     created_at?: string
-      //     updated_at?: string
-      //   }
-      // }
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      [_ in never]: never
-    }
-    Enums: {
-      [_ in never]: never
-    }
-  }
-}
-"@ | Set-Content "src/types/database/supabase.ts"
-
-            $envContent = @"
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+    # .env.docker (for Docker development - uses db service name)
+    @"
+# Database (Docker Development)
+DATABASE_URL="postgresql://${script:DB_USERNAME}:${script:DB_PASSWORD}@db:5432/${projectName}?schema=public"
 
 # App Configuration
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXTAUTH_SECRET=your-secret-here
+NEXTAUTH_URL=http://localhost:3000
 
 # Add your environment variables here
-"@
-    } elseif ($dbType -eq "mongodb") {
-            # MongoDB connection
-            @"
-import mongoose from 'mongoose'
+"@ | Set-Content ".env.docker"
 
-const MONGODB_URI = process.env.MONGODB_URI!
+    # Reference template (copy from local)
+    Copy-Item ".env.local" ".env.example" -Force
 
-if (!MONGODB_URI) {
-  throw new Error(
-    'Please define the MONGODB_URI environment variable inside .env.local'
-  )
-}
+    Write-Host "✅ Database configuration created for PostgreSQL" -ForegroundColor Green
 
-/**
- * Global is used here to maintain a cached connection across hot reloads
- * in development. This prevents connections growing exponentially
- * during API Route usage.
- */
-let cached = global.mongoose
+    # Step 5: Create API routes and pages
+    Write-Host ""
+    Write-Host "📄 [4/9] Creating API routes and pages..." -ForegroundColor Yellow
 
-if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null }
-}
+    # API route for users
+    New-Item -ItemType Directory -Path "src/app/api/users" -Force | Out-Null
+    @"
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/database/prisma'
 
-async function dbConnect() {
-  if (cached.conn) {
-    return cached.conn
-  }
-
-  if (!cached.promise) {
-    const opts = {
-      bufferCommands: false,
-    }
-
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      return mongoose
-    })
-  }
-
+export async function GET() {
   try {
-    cached.conn = await cached.promise
-  } catch (e) {
-    cached.promise = null
-    throw e
+    const users = await prisma.user.findMany({
+      orderBy: {
+        createdAt: 'desc'
+      }
+    })
+    
+    return NextResponse.json({
+      success: true,
+      data: users,
+      count: users.length
+    })
+  } catch (error) {
+    console.error('❌ Failed to fetch users:', error)
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'Failed to fetch users' 
+      },
+      { status: 500 }
+    )
   }
-
-  return cached.conn
 }
 
-export default dbConnect
-"@ | Set-Content "src/lib/database/mongodb.ts"
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { username, name, age, email } = body
 
-            # Example Mongoose model
-            @"
-import mongoose from 'mongoose'
+    if (!username || !name || !age) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Username, name, and age are required' 
+        },
+        { status: 400 }
+      )
+    }
 
-export interface IUser {
-  _id: string
-  email: string
-  name?: string
+    const user = await prisma.user.create({
+      data: {
+        username,
+        name,
+        age: parseInt(age),
+        email: email || null,
+      },
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: user,
+      message: 'User created successfully'
+    })
+  } catch (error) {
+    console.error('❌ Failed to create user:', error)
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'Failed to create user' 
+      },
+      { status: 500 }
+    )
+  }
+}
+"@ | Set-Content "src/app/api/users/route.ts"
+
+    # User types
+    @"
+export interface User {
+  id: string
+  username: string
+  name: string
+  age: number
+  email?: string | null
   createdAt: Date
   updatedAt: Date
 }
 
-const UserSchema = new mongoose.Schema<IUser>(
+export interface ApiResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+  message?: string
+  count?: number
+}
+"@ | Set-Content "src/types/database/user.ts"
+
+    # Home page with user data
+    @"
+import Link from 'next/link'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { UserList } from '@/components/common/UserList'
+
+export default function HomePage() {
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            Welcome to Your App
+          </h1>
+          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+            A professional Next.js application with PostgreSQL, Prisma, and real user data.
+          </p>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          <Card>
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl">⚡</CardTitle>
+              <CardDescription>Next.js 15+</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-center text-sm text-gray-600">
+                Modern React framework with App Router
+              </p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl">🗄️</CardTitle>
+              <CardDescription>PostgreSQL + Prisma</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-center text-sm text-gray-600">
+                Type-safe database with live user data
+              </p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl">🐳</CardTitle>
+              <CardDescription>Docker Ready</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-center text-sm text-gray-600">
+                Containerized development environment
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Live User Data */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>👥 Live User Data</CardTitle>
+            <CardDescription>
+              Real users from your PostgreSQL database
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <UserList />
+          </CardContent>
+        </Card>
+
+        {/* Navigation */}
+        <div className="text-center space-x-4">
+          <Button asChild>
+            <Link href="/users">View All Users</Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/about">About This App</Link>
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+"@ | Set-Content "src/app/page.tsx"
+
+    # Users page
+    New-Item -ItemType Directory -Path "src/app/users" -Force | Out-Null
+    @"
+import { UserList } from '@/components/common/UserList'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import Link from 'next/link'
+
+export default function UsersPage() {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Users</h1>
+              <p className="text-gray-600 mt-2">
+                Manage and view all users in the system
+              </p>
+            </div>
+            <Button asChild>
+              <Link href="/">← Back to Home</Link>
+            </Button>
+          </div>
+        </div>
+
+        {/* Users Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle>All Users</CardTitle>
+            <CardDescription>
+              Users stored in PostgreSQL database via Prisma ORM
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <UserList showDetails />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+"@ | Set-Content "src/app/users/page.tsx"
+
+    # About page
+    New-Item -ItemType Directory -Path "src/app/about" -Force | Out-Null
+    @"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import Link from 'next/link'
+
+export default function AboutPage() {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">About</h1>
+              <p className="text-gray-600 mt-2">
+                Learn about this Next.js application
+              </p>
+            </div>
+            <Button asChild>
+              <Link href="/">← Back to Home</Link>
+            </Button>
+          </div>
+        </div>
+
+        {/* About Content */}
+        <div className="grid gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>🚀 Technology Stack</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h3 className="font-semibold mb-2">Frontend</h3>
+                  <ul className="text-sm text-gray-600 space-y-1">
+                    <li>• Next.js 15+ with App Router</li>
+                    <li>• TypeScript for type safety</li>
+                    <li>• Tailwind CSS for styling</li>
+                    <li>• React Server Components</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">Backend</h3>
+                  <ul className="text-sm text-gray-600 space-y-1">
+                    <li>• PostgreSQL database</li>
+                    <li>• Prisma ORM</li>
+                    <li>• API Routes</li>
+                    <li>• Server-side data fetching</li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>📦 Features</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h3 className="font-semibold mb-2">Development</h3>
+                  <ul className="text-sm text-gray-600 space-y-1">
+                    <li>• Hot reload development</li>
+                    <li>• ESLint code quality</li>
+                    <li>• TypeScript intellisense</li>
+                    <li>• Docker containerization</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">Production</h3>
+                  <ul className="text-sm text-gray-600 space-y-1">
+                    <li>• Optimized builds</li>
+                    <li>• Database migrations</li>
+                    <li>• CI/CD pipeline</li>
+                    <li>• Environment management</li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>🗄️ Database Schema</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold mb-2">User Model</h3>
+                <pre className="text-sm text-gray-700">
+{`model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  name      String
+  age       Int
+  email     String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}`}
+                </pre>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>🚀 Getting Started</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-semibold mb-2">Development Commands</h3>
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                    <code className="block text-sm">npm run docker:dev</code>
+                    <code className="block text-sm">npm run prisma:studio</code>
+                    <code className="block text-sm">npm run dev</code>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">Database Commands</h3>
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                    <code className="block text-sm">npm run prisma:migrate</code>
+                    <code className="block text-sm">npm run prisma:seed</code>
+                    <code className="block text-sm">npm run prisma:generate</code>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
+}
+"@ | Set-Content "src/app/about/page.tsx"
+
+    # Create UI components
+    New-Item -ItemType Directory -Path "src/components/ui" -Force | Out-Null
+    
+    # Card component
+    @"
+import * as React from "react"
+import { cn } from "@/lib/utils"
+
+const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      "rounded-lg border bg-card text-card-foreground shadow-sm",
+      className
+    )}
+    {...props}
+  />
+))
+Card.displayName = "Card"
+
+const CardHeader = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    {...props}
+  />
+))
+CardHeader.displayName = "CardHeader"
+
+const CardTitle = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={cn(
+      "text-2xl font-semibold leading-none tracking-tight",
+      className
+    )}
+    {...props}
+  />
+))
+CardTitle.displayName = "CardTitle"
+
+const CardDescription = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => (
+  <p
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+))
+CardDescription.displayName = "CardDescription"
+
+const CardContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+))
+CardContent.displayName = "CardContent"
+
+const CardFooter = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex items-center p-6 pt-0", className)}
+    {...props}
+  />
+))
+CardFooter.displayName = "CardFooter"
+
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+"@ | Set-Content "src/components/ui/card.tsx"
+
+    # Button component
+    @"
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "@/lib/utils"
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {
-    email: {
-      type: String,
-      required: true,
-      unique: true,
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline:
+          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10",
+      },
     },
-    name: {
-      type: String,
+    defaultVariants: {
+      variant: "default",
+      size: "default",
     },
-  },
-  {
-    timestamps: true,
   }
 )
 
-export const User = mongoose.models.User || mongoose.model<IUser>('User', UserSchema)
-"@ | Set-Content "src/models/User.ts"
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
+}
 
-            $envContent = @"
-# MongoDB
-MONGODB_URI="mongodb://localhost:27017/${projectName}"
-
-# App Configuration
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-
-# Add your environment variables here
-"@
-    }
-
-    # Create .env.example file
-    $envContent | Set-Content ".env.example"
-
-    Write-Host "✅ Database configuration created for $dbType" -ForegroundColor Green
-
-    # Step 6: Create placeholder files for organization
-    Write-Host ""
-    Write-Host "📄 [4/9] Creating placeholder files..." -ForegroundColor Yellow
-    
-    # Create .gitkeep files in directories that might be empty
-    $gitkeepDirs = @(
-        "src/components/ui",
-        "src/components/common", 
-        "src/components/forms",
-        "src/components/layout",
-        "src/lib/hooks",
-        "src/lib/auth",
-        "src/types/api",
-        "src/assets/images",
-        "src/assets/icons",
-        "public/data",
-        "tests/unit",
-        "tests/integration",
-        "tests/e2e"
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button"
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
     )
+  }
+)
+Button.displayName = "Button"
 
-    if ($dbType -eq "mongodb") {
-        $gitkeepDirs += "src/types/models"
-    } else {
-        $gitkeepDirs += "src/types/database"
-    }
+export { Button, buttonVariants }
+"@ | Set-Content "src/components/ui/button.tsx"
 
-    foreach ($dir in $gitkeepDirs) {
-        New-Item -ItemType File -Path "$dir/.gitkeep" -Force | Out-Null
-    }
-
-    # Create essential documentation files
-    $dbSpecificDocs = if ($dbType -eq "postgresql") {
-        "PostgreSQL with Prisma ORM"
-    } elseif ($dbType -eq "mysql") {
-        "MySQL with Prisma ORM"
-    } elseif ($dbType -eq "sqlite") {
-        "SQLite with Prisma ORM"
-    } elseif ($dbType -eq "supabase") {
-        "Supabase (PostgreSQL + Auth + Real-time)"
-    } elseif ($dbType -eq "mongodb") {
-        "MongoDB with Mongoose ODM"
-    } else {
-        "Database integration"
-    }
-
+    # UserList component
     @"
-# API Documentation
+'use client'
 
-## Overview
-This directory contains API documentation for the $projectName project.
+import { useState, useEffect } from 'react'
+import { User, ApiResponse } from '@/types/database/user'
 
-## Database
-This project uses $dbSpecificDocs.
-
-## API Routes
-
-### Authentication
-- `POST /api/auth/login` - User login
-- `POST /api/auth/register` - User registration
-- `POST /api/auth/logout` - User logout
-- `GET /api/auth/me` - Get current user
-
-### Users
-- `GET /api/users` - Get all users
-- `GET /api/users/[id]` - Get user by ID
-- `PUT /api/users/[id]` - Update user
-- `DELETE /api/users/[id]` - Delete user
-
-## Response Format
-All API responses follow this format:
-```json
-{
-  "success": true,
-  "data": {},
-  "message": "Success message",
-  "timestamp": "2024-01-01T00:00:00.000Z"
+interface UserListProps {
+  showDetails?: boolean
 }
-```
 
-## Error Handling
-Errors are returned with appropriate HTTP status codes:
-```json
-{
-  "success": false,
-  "error": "Error message",
-  "code": "ERROR_CODE",
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-"@ | Set-Content "docs/api.md"
-
-    @"
-# Development Guide
-
-## Overview
-Welcome to the $projectName development guide. This document contains everything you need to know to contribute to this project.
-
-## Prerequisites
-- Node.js 18+ 
-- npm or yarn
-- Docker (for containerized development)
-- Git
-
-## Quick Start
-
-### Local Development
-```bash
-# Clone the repository
-git clone <repository-url>
-cd $projectName
-
-# Install dependencies
-npm install
-
-# Copy environment file
-cp .env.example .env.local
-
-# Configure your environment variables
-# Edit .env.local with your database credentials
-
-# Start development server
-npm run dev
-```
-
-### Docker Development
-```bash
-# Start with Docker (includes database)
-npm run docker:dev
-
-# View logs
-npm run docker:logs
-
-# Stop containers
-npm run docker:stop
-```
-
-## Project Structure
-```
-$projectName/
-├── src/
-│   ├── app/                 # Next.js App Router pages
-│   ├── components/          # React components
-│   │   ├── ui/             # Reusable UI components
-│   │   ├── common/         # Common components
-│   │   ├── forms/          # Form components
-│   │   └── layout/         # Layout components
-│   ├── lib/                # Utilities and configurations
-│   │   ├── utils/          # Utility functions
-│   │   ├── hooks/          # Custom React hooks
-│   │   ├── api/            # API client functions
-│   │   └── auth/           # Authentication utilities
-│   ├── types/              # TypeScript type definitions
-│   └── assets/             # Static assets
-├── docs/                   # Documentation
-├── tests/                  # Test files
-├── public/                 # Public static files
-└── prisma/                 # Database schema (if using Prisma)
-```
-
-## Code Style
-- Use TypeScript for type safety
-- Follow ESLint configuration
-- Use Prettier for code formatting
-- Write descriptive commit messages
-
-## Database Operations
-$dbSpecificDocs
-
-## Testing
-```bash
-# Run tests (when implemented)
-npm test
-
-# Run tests in watch mode
-npm run test:watch
-
-# Run tests with coverage
-npm run test:coverage
-```
-
-## Building for Production
-```bash
-# Build the application
-npm run build
-
-# Start production server
-npm start
-
-# Build Docker image
-npm run docker:build
-```
-
-## Contributing
-1. Create a feature branch from `develop`
-2. Make your changes
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Create a pull request
-
-## Git Workflow
-- `main` - Production branch
-- `develop` - Development branch
-- `feature/*` - Feature branches
-- `hotfix/*` - Hotfix branches
-
-## Environment Variables
-See `.env.example` for required environment variables.
-
-## Troubleshooting
-
-### Common Issues
-- **Port already in use**: Change the port in your `.env.local` file
-- **Database connection failed**: Check your database credentials
-- **Build errors**: Clear `.next` folder and node_modules, then reinstall
-
-### Getting Help
-- Check the documentation in `docs/`
-- Review existing issues on GitHub
-- Ask questions in team chat
-"@ | Set-Content "docs/development.md"
-
-    @"
-# Deployment Guide
-
-## Database: $dbSpecificDocs
-
-## Environments
-
-### Development
-```bash
-npm run docker:dev
-```
-
-### Staging
-```bash
-# Set environment to staging
-export NODE_ENV=staging
-
-# Build and deploy
-npm run build
-npm run docker:build
-```
-
-### Production
-```bash
-npm run docker:build
-npm run docker:start
-```
-
-## Environment Variables
-Create appropriate environment files for each environment:
-
-### `.env.local` (Development)
-```bash
-cp .env.example .env.local
-```
-
-### `.env.staging` (Staging)
-```bash
-NODE_ENV=staging
-# Add staging-specific variables
-```
-
-### `.env.production` (Production)
-```bash
-NODE_ENV=production
-# Add production-specific variables
-```
-
-## Database Migrations
-$dbSpecificInstructions
-
-## Docker Deployment
-
-### Build Images
-```bash
-# Build production image
-docker build -t $projectName:latest .
-
-# Build with version tag
-docker build -t $projectName:v1.0.0 .
-```
-
-### Run Containers
-```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
-```
-
-## CI/CD Pipeline
-The project includes GitHub Actions workflows:
-
-- **ci.yml** - Continuous Integration (testing, building)
-- **docker-build.yml** - Docker image building and registry push
-- **deploy.yml** - Production deployment
-
-### Required Secrets
-Add these secrets to your GitHub repository:
-
-```
-# For Docker registry
-GITHUB_TOKEN (automatically provided)
-
-# For deployment (add as needed)
-VERCEL_TOKEN
-VERCEL_ORG_ID  
-VERCEL_PROJECT_ID
-
-# For AWS deployment
-AWS_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY
-
-# For database
-DATABASE_URL
-```
-
-## Platform-Specific Deployment
-
-### Vercel
-1. Connect your GitHub repository
-2. Configure environment variables
-3. Deploy automatically on push to main
-
-### AWS ECS
-1. Push Docker image to ECR
-2. Update ECS service
-3. Configure load balancer
-
-### DigitalOcean
-1. Use Docker image with App Platform
-2. Configure database connection
-3. Set environment variables
-
-### Self-hosted
-1. Use docker-compose.yml
-2. Configure reverse proxy (nginx)
-3. Set up SSL certificates
-4. Configure monitoring
-
-## Monitoring & Logging
-- Application logs: `docker-compose logs -f app`
-- Database logs: `docker-compose logs -f database`
-- Health checks: `GET /api/health`
-
-## Backup & Recovery
-- Database backups: Schedule regular dumps
-- File storage: Backup uploaded files
-- Configuration: Version control all configs
-
-## Security Checklist
-- [ ] Environment variables secured
-- [ ] Database credentials rotated
-- [ ] SSL certificates configured
-- [ ] Security headers enabled
-- [ ] Input validation implemented
-- [ ] Authentication working
-- [ ] Authorization enforced
-
-## Performance Optimization
-- Enable image optimization
-- Configure caching headers
-- Use CDN for static assets
-- Database query optimization
-- Monitor application metrics
-"@ | Set-Content "docs/deployment.md"
-
-    if ($dbType -in @("postgresql", "mysql")) {
-        $dbSetupInstructions = @"
-## Database Setup ($($dbType.ToUpper()) + Prisma)
-```bash
-# Generate Prisma client
-npm run prisma:generate
-
-# Run database migrations
-npm run prisma:migrate
-
-# Open Prisma Studio
-npm run prisma:studio
-```
-"@
-    } elseif ($dbType -eq "sqlite") {
-        $dbSetupInstructions = @"
-## Database Setup (SQLite + Prisma)
-```bash
-# Generate Prisma client
-npm run prisma:generate
-
-# Push schema to database
-npm run prisma:push
-
-# Open Prisma Studio
-npm run prisma:studio
-```
-"@
-    } elseif ($dbType -eq "supabase") {
-        $dbSetupInstructions = @"
-## Database Setup (Supabase)
-1. Create a new project at https://supabase.com
-2. Copy your project URL and anon key to `.env.local`
-3. Use Supabase dashboard to create tables or run SQL migrations
-```bash
-# Install Supabase CLI (optional)
-npm install -g @supabase/cli
-
-# Login to Supabase
-supabase login
-
-# Link to your project
-supabase link --project-ref your-project-ref
-```
-"@
-    } elseif ($dbType -eq "mongodb") {
-        $dbSetupInstructions = @"
-## Database Setup (MongoDB)
-```bash
-# Start MongoDB locally with Docker
-docker run -d -p 27017:27017 --name mongodb mongo:latest
-
-# Or use MongoDB Atlas (cloud)
-# Update MONGODB_URI in .env.local with your Atlas connection string
-```
-"@
-    } else {
-        $dbSetupInstructions = "## Database Setup\nRefer to your database documentation for setup instructions."
+export function UserList({ showDetails = false }: UserListProps) {
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchUsers() {
+      try {
+        const response = await fetch('/api/users')
+        const data: ApiResponse<User[]> = await response.json()
+        
+        if (data.success && data.data) {
+          setUsers(data.data)
+        } else {
+          setError(data.error || 'Failed to fetch users')
+        }
+      } catch (err) {
+        setError('Network error: Could not fetch users')
+        console.error('Failed to fetch users:', err)
+      } finally {
+        setLoading(false)
+      }
     }
 
+    fetchUsers()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <span className="ml-2 text-gray-600">Loading users...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <div className="text-red-600 mb-2">❌ {error}</div>
+        <div className="text-sm text-gray-500">
+          Make sure your database is running and seeded
+        </div>
+      </div>
+    )
+  }
+
+  if (users.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <div className="text-gray-600 mb-2">No users found</div>
+        <div className="text-sm text-gray-500">
+          Run <code className="bg-gray-100 px-2 py-1 rounded">npm run prisma:seed</code> to add sample data
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">
+          {users.length} User{users.length !== 1 ? 's' : ''}
+        </h3>
+        <div className="text-sm text-gray-500">
+          Live from PostgreSQL
+        </div>
+      </div>
+      
+      <div className="grid gap-4">
+        {users.map((user) => (
+          <div
+            key={user.id}
+            className="border rounded-lg p-4 hover:shadow-md transition-shadow"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                  <span className="text-blue-600 font-semibold">
+                    {user.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-900">{user.name}</h4>
+                  <p className="text-sm text-gray-600">@{user.username}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-semibold text-blue-600">
+                  {user.age} years
+                </div>
+                {showDetails && user.email && (
+                  <div className="text-sm text-gray-500">{user.email}</div>
+                )}
+              </div>
+            </div>
+            
+            {showDetails && (
+              <div className="mt-3 pt-3 border-t text-xs text-gray-500">
+                <div>ID: {user.id}</div>
+                <div>Created: {new Date(user.createdAt).toLocaleDateString()}</div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+"@ | Set-Content "src/components/common/UserList.tsx"
+
+    # Utils
     @"
-# $projectName
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
 
-Professional Next.js application with $dbSpecificDocs, Docker, TypeScript, and CI/CD.
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+"@ | Set-Content "src/lib/utils/index.ts"
 
-## Quick Start
+    Write-Host "✅ Functional pages and components created" -ForegroundColor Green
 
-### Development with Docker
-```bash
-npm run docker:dev
-```
-
-### Local Development
-```bash
-npm run dev
-```
-
-## Features
-- ⚡ Next.js 15+ with App Router
-- 📘 TypeScript
-- 🎨 Tailwind CSS
-- 🔍 ESLint
-- 🗄️  $dbSpecificDocs
-- 🐳 Docker setup
-- 🚀 GitHub Actions CI/CD
-
-$dbSetupInstructions
-
-## Scripts
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run start` - Start production server
-- `npm run lint` - Run ESLint
-- `npm run docker:dev` - Start development with Docker
-- `npm run docker:build` - Build production Docker image
-- `npm run docker:start` - Start production with Docker
-"@ | Set-Content "README.md"
-
-    Write-Host "✅ Placeholder files and documentation created" -ForegroundColor Green
-
-    # Step 7: Create Docker configuration with database-specific services
+    # Step 6: Create FIXED Docker configuration (Debian-based)
     Write-Host ""
-    Write-Host "🐳 [5/9] Creating Docker configuration..." -ForegroundColor Yellow
+    Write-Host "🐳 [5/9] Creating FIXED Docker configuration..." -ForegroundColor Yellow
 
-    # Dockerfile for production (same for all databases)
+    # Fixed Production Dockerfile (Debian-based)
     @"
-# Production Dockerfile
-FROM node:20-alpine AS base
+# Production Dockerfile - FIXED for lightningcss compatibility
+FROM node:20-slim AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy package files
@@ -6400,6 +6284,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Build the application
+ENV NEXT_TELEMETRY_DISABLED 1
 RUN npm run build
 
 # Production image, copy all the files and run next
@@ -6407,11 +6292,16 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED 1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN groupadd --system --gid 1001 nodejs
+RUN useradd --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
+
+# Set the correct permission for prerender cache
+RUN mkdir .next
+RUN chown nextjs:nodejs .next
 
 # Copy built application
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
@@ -6422,33 +6312,44 @@ USER nextjs
 EXPOSE 3000
 
 ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
 
 CMD ["node", "server.js"]
 "@ | Set-Content "Dockerfile"
 
-    # Dockerfile.dev for development (same for all databases)
+    # Fixed Development Dockerfile
     @"
-# Development Dockerfile
-FROM node:20-alpine
+# Development Dockerfile - FIXED for lightningcss compatibility and Prisma
+FROM node:20-slim
+
+# Install additional packages needed for native modules
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Install dependencies
 COPY package.json package-lock.json* ./
+
+# Clear npm cache and install
+RUN npm cache clean --force
 RUN npm ci
 
-# Copy source code
+# Copy source code and schema
 COPY . .
+
+# Generate Prisma client (FIXED)
+RUN npx prisma generate
 
 EXPOSE 3000
 
 CMD ["npm", "run", "dev"]
 "@ | Set-Content "Dockerfile.dev"
 
-    # Database-specific docker-compose files
-    if ($dbType -eq "postgresql") {
-            @"
+    # Docker compose with PostgreSQL using official documentation best practices
+    @"
 version: '3.8'
 
 services:
@@ -6460,28 +6361,33 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:postgres@database:5432/${projectName}?schema=public
+      - DATABASE_URL=postgresql://${script:DB_USERNAME}:${script:DB_PASSWORD}@db:5432/${projectName}?schema=public
     depends_on:
-      - database
-    restart: unless-stopped
+      db:
+        condition: service_healthy
+    restart: always
 
-  database:
-    image: postgres:15-alpine
+  db:
+    image: postgres:17.5
+    restart: always
+    shm_size: 128mb
     environment:
-      POSTGRES_DB: $projectName
+      POSTGRES_PASSWORD: "@Crix13Mix01"
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${projectName}
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-
-volumes:
-  postgres_data:
+      - ./docker-data/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 "@ | Set-Content "docker-compose.yml"
 
-            @"
+    # Development Docker compose with automatic database setup using PostgreSQL best practices
+    @"
 version: '3.8'
 
 services:
@@ -6495,249 +6401,185 @@ services:
       - .:/app
       - /app/node_modules
       - /app/.next
-    environment:
-      - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:postgres@database:5432/${projectName}_dev?schema=public
+    env_file:
+      - .env.docker
     depends_on:
-      - database
-    command: npm run dev
+      db:
+        condition: service_healthy
+    command: sh -c "npm run db:push:docker && npm run db:seed:docker && npm run dev"
     restart: unless-stopped
 
-  database:
-    image: postgres:15-alpine
+  db:
+    image: postgres:17.5
+    restart: always
+    shm_size: 128mb
     environment:
+      POSTGRES_PASSWORD: "@Crix13Mix01"
+      POSTGRES_USER: postgres
       POSTGRES_DB: ${projectName}_dev
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     volumes:
-      - postgres_dev_data:/var/lib/postgresql/data
-    restart: unless-stopped
-
-volumes:
-  postgres_dev_data:
+      - ./docker-data/db-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 "@ | Set-Content "docker-compose-dev.yml"
-    } elseif ($dbType -eq "mysql") {
-            @"
-version: '3.8'
 
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=mysql://root:password@database:3306/${projectName}
-    depends_on:
-      - database
-    restart: unless-stopped
+    Write-Host "✅ FIXED Docker configuration created (Debian-based)" -ForegroundColor Green
 
-  database:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: $projectName
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    restart: unless-stopped
+    # Step 7: Create next.config with standalone output
+    Write-Host ""
+    Write-Host "⚙️  [6/9] Creating Next.js configuration..." -ForegroundColor Yellow
 
-volumes:
-  mysql_data:
-"@ | Set-Content "docker-compose.yml"
+    @"
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  output: 'standalone',
+  experimental: {
+    optimizeCss: false, // Helps avoid CSS build issues
+  },
+}
 
-            @"
-version: '3.8'
+module.exports = nextConfig
+"@ | Set-Content "next.config.js"
 
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    ports:
-      - "3000:3000"
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.next
-    environment:
-      - NODE_ENV=development
-      - DATABASE_URL=mysql://root:password@database:3306/${projectName}_dev
-    depends_on:
-      - database
-    command: npm run dev
-    restart: unless-stopped
+    Write-Host "✅ Next.js configuration created" -ForegroundColor Green
 
-  database:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: ${projectName}_dev
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_dev_data:/var/lib/mysql
-    restart: unless-stopped
+    # Step 8: Update package.json with all necessary scripts and dependencies
+    Write-Host ""
+    Write-Host "📦 [7/9] Updating package.json..." -ForegroundColor Yellow
 
-volumes:
-  mysql_dev_data:
-"@ | Set-Content "docker-compose-dev.yml"
-    } elseif ($dbType -eq "sqlite") {
-            @"
-version: '3.8'
+    # Read current package.json
+    $packageJson = Get-Content "package.json" | ConvertFrom-Json -AsHashtable
 
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-    volumes:
-      - sqlite_data:/app/prisma
-    restart: unless-stopped
+    # Add all necessary scripts
+    $packageJson.scripts["type-check"] = "tsc --noEmit"
+    $packageJson.scripts["docker:dev"] = "docker-compose -f docker-compose-dev.yml up --build"
+    $packageJson.scripts["docker:dev:clean"] = "docker-compose -f docker-compose-dev.yml build --no-cache && docker-compose -f docker-compose-dev.yml up"
+    $packageJson.scripts["docker:build"] = "docker-compose build"
+    $packageJson.scripts["docker:start"] = "docker-compose up -d"
+    $packageJson.scripts["docker:stop"] = "docker-compose down"
+    $packageJson.scripts["docker:logs"] = "docker-compose logs -f"
+    $packageJson.scripts["prisma:generate"] = "prisma generate"
+    $packageJson.scripts["prisma:push"] = "prisma db push"
+    $packageJson.scripts["prisma:migrate"] = "prisma migrate dev"
+    $packageJson.scripts["prisma:studio"] = "prisma studio"
+    $packageJson.scripts["prisma:seed"] = "tsx prisma/seed.ts"
+    $packageJson.scripts["prisma:reset"] = "prisma migrate reset"
+    
+    # Environment-aware database scripts (FIXED)
+    $packageJson.scripts["db:push:local"] = "dotenv -e .env.local -- prisma db push"
+    $packageJson.scripts["db:push:docker"] = "dotenv -e .env.docker -- prisma db push"
+    $packageJson.scripts["db:seed:local"] = "dotenv -e .env.local -- tsx prisma/seed.ts"
+    $packageJson.scripts["db:seed:docker"] = "dotenv -e .env.docker -- tsx prisma/seed.ts"
+    $packageJson.scripts["db:setup:local"] = "npm run prisma:generate && npm run db:push:local && npm run db:seed:local"
+    $packageJson.scripts["db:setup:docker"] = "npm run prisma:generate && npm run db:push:docker && npm run db:seed:docker"
 
-volumes:
-  sqlite_data:
-"@ | Set-Content "docker-compose.yml"
-
-            @"
-version: '3.8'
-
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    ports:
-      - "3000:3000"
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.next
-    environment:
-      - NODE_ENV=development
-    command: npm run dev
-    restart: unless-stopped
-"@ | Set-Content "docker-compose-dev.yml"
-    } elseif ($dbType -eq "supabase") {
-            @"
-version: '3.8'
-
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
-    restart: unless-stopped
-"@ | Set-Content "docker-compose.yml"
-
-            @"
-version: '3.8'
-
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    ports:
-      - "3000:3000"
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.next
-    environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
-    command: npm run dev
-    restart: unless-stopped
-"@ | Set-Content "docker-compose-dev.yml"
-    } elseif ($dbType -eq "mongodb") {
-            @"
-version: '3.8'
-
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - MONGODB_URI=mongodb://database:27017/${projectName}
-    depends_on:
-      - database
-    restart: unless-stopped
-
-  database:
-    image: mongo:7.0
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-    restart: unless-stopped
-
-volumes:
-  mongodb_data:
-"@ | Set-Content "docker-compose.yml"
-
-            @"
-version: '3.8'
-
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    ports:
-      - "3000:3000"
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.next
-    environment:
-      - NODE_ENV=development
-      - MONGODB_URI=mongodb://database:27017/${projectName}_dev
-    depends_on:
-      - database
-    command: npm run dev
-    restart: unless-stopped
-
-  database:
-    image: mongo:7.0
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_dev_data:/data/db
-    restart: unless-stopped
-
-volumes:
-  mongodb_dev_data:
-"@ | Set-Content "docker-compose-dev.yml"
+    # Add prisma seed config
+    $packageJson["prisma"] = @{
+        "seed" = "tsx prisma/seed.ts"
     }
 
-    Write-Host "✅ Docker configuration created for $dbType" -ForegroundColor Green
+    # Save updated package.json
+    $packageJson | ConvertTo-Json -Depth 10 | Set-Content "package.json"
 
-    # Step 8: Create GitHub Actions CI/CD
+    Write-Host "✅ Package.json updated with scripts" -ForegroundColor Green
+
+    # Step 9: Install dependencies
     Write-Host ""
-    Write-Host "🚀 [6/9] Creating GitHub Actions CI/CD pipeline..." -ForegroundColor Yellow
+    Write-Host "🛠️  [8/9] Installing dependencies..." -ForegroundColor Yellow
 
-    # Main CI/CD Pipeline
+    $dependencies = @("@prisma/client", "clsx", "class-variance-authority", "tailwind-merge", "@radix-ui/react-slot")
+    $devDependencies = @("prisma", "@types/node", "tsx", "dotenv-cli")
+
+    Write-Host "   Installing dependencies: $($dependencies -join ', ')" -ForegroundColor DarkGray
+    $installCommand = "npm install " + ($dependencies -join " ")
+    Invoke-Expression $installCommand
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "   Installing dev dependencies: $($devDependencies -join ', ')" -ForegroundColor DarkGray
+        $installDevCommand = "npm install --save-dev " + ($devDependencies -join " ")
+        Invoke-Expression $installDevCommand
+    }
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "✅ Dependencies installed successfully" -ForegroundColor Green
+    } else {
+        Write-Host "⚠️  Some dependencies may have failed to install" -ForegroundColor Yellow
+    }
+
+    # Step 10: Update CSS
+    Write-Host ""
+    Write-Host "🎨 [9/9] Updating CSS..." -ForegroundColor Yellow
+
+    @"
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 98%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+"@ | Set-Content "src/app/globals.css"
+
+    Write-Host "✅ CSS updated" -ForegroundColor Green
+
+    # Create GitHub Actions CI/CD
     @"
 name: CI/CD Pipeline
 
@@ -6750,6 +6592,21 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: ${projectName}_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: "@Crix13Mix01"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     
     strategy:
       matrix:
@@ -6768,6 +6625,16 @@ jobs:
     - name: Install dependencies
       run: npm ci
     
+    - name: Generate Prisma client
+      run: npm run prisma:generate
+      env:
+        DATABASE_URL: postgresql://${script:DB_USERNAME}:${script:DB_PASSWORD}@localhost:5432/${projectName}_test?schema=public
+    
+    - name: Run database migrations
+      run: npm run prisma:push
+      env:
+        DATABASE_URL: postgresql://${script:DB_USERNAME}:${script:DB_PASSWORD}@localhost:5432/${projectName}_test?schema=public
+    
     - name: Run linting
       run: npm run lint
     
@@ -6776,320 +6643,249 @@ jobs:
     
     - name: Build application
       run: npm run build
-    
-    # Uncomment when you add tests
-    # - name: Run tests
-    #   run: npm test
+      env:
+        DATABASE_URL: postgresql://${script:DB_USERNAME}:${script:DB_PASSWORD}@localhost:5432/${projectName}_test?schema=public
     
     - name: Build Docker image
       run: docker build -t $projectName:latest .
-
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-        cache: 'npm'
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Build application
-      run: npm run build
-    
-    # Add your deployment steps here
-    # - name: Deploy to production
-    #   run: echo "Add your deployment commands here"
 "@ | Set-Content ".github/workflows/ci.yml"
 
-    # Docker Build Workflow
+    # Create comprehensive README
     @"
-name: Docker Build
+# $projectName
 
-on:
-  push:
-    branches: [ main, develop ]
-    tags: [ 'v*' ]
-  pull_request:
-    branches: [ main ]
+Professional Next.js application with PostgreSQL 17.5, Prisma ORM, real user data, and optimized Docker setup.
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: `${{ github.repository }}
+## 🚀 Features
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+- ⚡ **Next.js 15+** with App Router and Server Components
+- 📘 **TypeScript** for type safety
+- 🎨 **Tailwind CSS** for styling
+- 🗄️ **PostgreSQL 17.5 + Prisma** with real user data and optimizations
+- 🐳 **Enhanced Docker** following official PostgreSQL best practices
+- 👥 **Live User Management** with API routes
+- 🔍 **ESLint** code quality
+- 🚀 **GitHub Actions** CI/CD pipeline
 
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+## 📊 Live Data
 
-    - name: Log in to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: `${{ env.REGISTRY }}
-        username: `${{ github.actor }}
-        password: `${{ secrets.GITHUB_TOKEN }}
+This app includes a functional user database with:
+- **User API** at `/api/users` (GET, POST)
+- **User Pages** displaying real data from PostgreSQL
+- **Sample Users** with username, name, and age
+- **Interactive UI** with loading states and error handling
 
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: `${{ env.REGISTRY }}/`${{ env.IMAGE_NAME }}
-        tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
+## 🏃‍♂️ Quick Start
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: `${{ steps.meta.outputs.tags }}
-        labels: `${{ steps.meta.outputs.labels }}
-"@ | Set-Content ".github/workflows/docker-build.yml"
+### Option 1: Docker (Recommended)
+```bash
+# Start everything (database + app)
+npm run docker:dev
 
-    # Deployment Workflow
-    @"
-name: Deploy to Production
+# If you encounter caching issues, use clean build:
+npm run docker:dev:clean
 
-on:
-  push:
-    tags: [ 'v*' ]
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deployment environment'
-        required: true
-        default: 'production'
-        type: choice
-        options:
-        - production
-        - staging
+# View logs
+npm run docker:logs
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    environment: `${{ github.event.inputs.environment || 'production' }}
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-        cache: 'npm'
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Build application
-      run: npm run build
-    
-    # Example deployment steps - customize for your platform
-    # 
-    # For Vercel:
-    # - name: Deploy to Vercel
-    #   uses: amondnet/vercel-action@v25
-    #   with:
-    #     vercel-token: `${{ secrets.VERCEL_TOKEN }}
-    #     vercel-org-id: `${{ secrets.VERCEL_ORG_ID }}
-    #     vercel-project-id: `${{ secrets.VERCEL_PROJECT_ID }}
-    #     vercel-args: '--prod'
-    #
-    # For AWS:
-    # - name: Configure AWS credentials
-    #   uses: aws-actions/configure-aws-credentials@v4
-    #   with:
-    #     aws-access-key-id: `${{ secrets.AWS_ACCESS_KEY_ID }}
-    #     aws-secret-access-key: `${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    #     aws-region: us-east-1
-    #
-    # For Docker deployment:
-    # - name: Deploy via Docker
-    #   run: |
-    #     docker pull ghcr.io/`${{ github.repository }}:latest
-    #     docker-compose down
-    #     docker-compose up -d
-    
-    - name: Deployment placeholder
-      run: echo "Add your deployment commands here"
-"@ | Set-Content ".github/workflows/deploy.yml"
+# Stop containers
+npm run docker:stop
+```
 
-    Write-Host "✅ CI/CD pipeline created" -ForegroundColor Green
+### Option 2: Local Development
+```bash
+# Copy environment file
+cp .env.example .env.local
 
-    # Step 9: Update package.json with database-specific scripts and dependencies
-    Write-Host ""
-    Write-Host "📦 [7/9] Updating package.json with database-specific scripts..." -ForegroundColor Yellow
+# Setup database
+npm run db:setup:local
 
-    # Read current package.json
-    $packageJson = Get-Content "package.json" | ConvertFrom-Json -AsHashtable
+# Start development server
+npm run dev
+```
 
-    # Add common scripts
-    $packageJson.scripts["type-check"] = "tsc --noEmit"
-    $packageJson.scripts["docker:dev"] = "docker-compose -f docker-compose-dev.yml up --build"
-    $packageJson.scripts["docker:build"] = "docker-compose build"
-    $packageJson.scripts["docker:start"] = "docker-compose up -d"
-    $packageJson.scripts["docker:stop"] = "docker-compose down"
-    $packageJson.scripts["docker:logs"] = "docker-compose logs -f"
+## 🗄️ Database Commands
 
-    # Add database-specific scripts
-    if ($dbType -in @("postgresql", "mysql", "sqlite")) {
-        $packageJson.scripts["prisma:generate"] = "prisma generate"
-        $packageJson.scripts["prisma:push"] = "prisma db push"
-        $packageJson.scripts["prisma:migrate"] = "prisma migrate dev"
-        $packageJson.scripts["prisma:studio"] = "prisma studio"
-        $packageJson.scripts["prisma:reset"] = "prisma migrate reset"
-    } elseif ($dbType -eq "supabase") {
-        $packageJson.scripts["supabase:types"] = "supabase gen types typescript --local > src/types/database/supabase.ts"
-        $packageJson.scripts["supabase:reset"] = "supabase db reset"
+```bash
+# Generate Prisma client
+npm run prisma:generate
+
+# Run migrations
+npm run prisma:migrate
+
+# Seed with sample data
+npm run prisma:seed
+
+# Open Prisma Studio
+npm run prisma:studio
+
+# Complete setup (generate + migrate + seed)
+npm run db:setup:local
+```
+
+## 🔧 Troubleshooting
+
+### If Docker containers are using old/cached files:
+```bash
+# Force clean rebuild (bypasses all Docker caches)
+npm run docker:dev:clean
+```
+
+### Database Connection Issues
+```bash
+# Check if PostgreSQL is running
+docker-compose ps
+
+# View database logs
+docker-compose logs db
+
+# Reset database
+npm run prisma:reset
+```
+
+### Docker Build Issues
+The project uses **Debian-based Docker images** to avoid Alpine Linux compatibility issues with native modules like lightningcss.
+
+### No Users Displayed
+```bash
+# Seed the database
+npm run prisma:seed
+
+# Check API endpoint
+curl http://localhost:3000/api/users
+```
+
+## 📁 Project Structure
+
+```
+${projectName}/
+├── src/
+│   ├── app/
+│   │   ├── api/users/          # User API endpoints
+│   │   ├── users/              # Users page
+│   │   ├── about/              # About page
+│   │   └── page.tsx            # Home page with live data
+│   ├── components/
+│   │   ├── ui/                 # Reusable UI components
+│   │   └── common/             # UserList component
+│   ├── lib/
+│   │   ├── database/           # Prisma client
+│   │   └── utils/              # Utility functions
+│   └── types/
+│       └── database/           # TypeScript types
+├── prisma/
+│   ├── schema.prisma           # Database schema
+│   └── seed.ts                 # Sample data (FIXED)
+├── docker-data/                # Local database files
+├── docker-compose.yml          # Production Docker
+├── docker-compose-dev.yml      # Development Docker
+└── docs/                       # Documentation
+```
+
+## 🌐 Pages
+
+- **/** - Home page with user stats and live data
+- **/users** - Full user management interface
+- **/about** - Technology stack and documentation
+
+## 🔧 API Endpoints
+
+- `GET /api/users` - List all users
+- `POST /api/users` - Create new user
+
+Example response:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "clx1234567890",
+      "username": "johndoe",
+      "name": "John Doe",
+      "age": 28,
+      "email": "john.doe@example.com",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
     }
-    # MongoDB doesn't need specific scripts
-
-    # Save updated package.json
-    $packageJson | ConvertTo-Json -Depth 10 | Set-Content "package.json"
-
-    Write-Host "✅ Package.json updated with database-specific scripts" -ForegroundColor Green
-
-    # Step 10: Install database-specific dependencies
-    Write-Host ""
-    Write-Host "🛠️  [8/9] Installing database-specific dependencies..." -ForegroundColor Yellow
-
-    $baseDependencies = @("@types/node")
-    $dependencies = @()
-    $devDependencies = $baseDependencies
-
-    if ($dbType -in @("postgresql", "mysql", "sqlite")) {
-        $dependencies += @("@prisma/client")
-        $devDependencies += @("prisma")
-    } elseif ($dbType -eq "supabase") {
-        $dependencies += @("@supabase/supabase-js")
-        $devDependencies += @("@supabase/cli")
-    } elseif ($dbType -eq "mongodb") {
-        $dependencies += @("mongoose")
-        $devDependencies += @("@types/mongoose")
-    }
-
-    if ($dependencies.Count -gt 0) {
-        Write-Host "   Installing dependencies: $($dependencies -join ', ')" -ForegroundColor DarkGray
-        $installCommand = "npm install " + ($dependencies -join " ")
-        Invoke-Expression $installCommand
-    }
-
-    if ($devDependencies.Count -gt 0) {
-        Write-Host "   Installing dev dependencies: $($devDependencies -join ', ')" -ForegroundColor DarkGray
-        $installDevCommand = "npm install --save-dev " + ($devDependencies -join " ")
-        Invoke-Expression $installDevCommand
-    }
-
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "✅ Database-specific dependencies installed" -ForegroundColor Green
-    } else {
-        Write-Host "⚠️  Some dependencies may have failed to install" -ForegroundColor Yellow
-    }
-
-    # Step 11: Update globals.css with better defaults
-    Write-Host ""
-    Write-Host "🎨 [9/9] Updating CSS with design system..." -ForegroundColor Yellow
-
-    @"
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --muted: 210 40% 98%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --ring: 212.7 26.8% 83.9%;
-  }
+  ],
+  "count": 1
 }
+```
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-}
-"@ | Set-Content "src/app/globals.css"
+## 🐳 Docker Details
 
-    Write-Host "✅ CSS design system updated" -ForegroundColor Green
+### Enhanced Docker Configuration (v2.2)
+- **PostgreSQL 17.5** (latest stable version)
+- **Shared memory optimization** (128MB for better performance)
+- **Local data volumes** (./docker-data/db for easy management)
+- **Official PostgreSQL best practices** from Docker Hub documentation
+- **Debian-based images** for native module compatibility
+- **Health checks** for reliable startup
 
-    # Final success message with database-specific instructions
-    $dbInstructions = if ($dbType -in @("postgresql", "mysql")) {
-        "npm run prisma:migrate && npm run prisma:generate"
-    } elseif ($dbType -eq "sqlite") {
-        "npm run prisma:push && npm run prisma:generate"
-    } elseif ($dbType -eq "supabase") {
-        "Set up your Supabase project and update .env.local"
-    } elseif ($dbType -eq "mongodb") {
-        "Start MongoDB and update MONGODB_URI in .env.local"
-    } else {
-        "Configure your database and update .env.local"
-    }
+### Environment Variables
+- `DATABASE_URL` - PostgreSQL connection string
+- `NODE_ENV` - Environment (development/production)
+- `NEXT_PUBLIC_APP_URL` - Application URL
 
+## 🧪 Development
+
+```bash
+# Type checking
+npm run type-check
+
+# Code formatting
+npm run lint
+
+# Build for production
+npm run build
+
+# Start production server
+npm start
+```
+
+## 🚀 Deployment
+
+The project includes GitHub Actions workflows for:
+- **Continuous Integration** - Testing and building
+- **Docker Image Building** - Automated container builds
+- **Production Deployment** - Ready for any platform
+
+## 📝 Recent Updates
+
+### v2.2 Enhancements:
+- ✅ **UPGRADED:** PostgreSQL 17.5 (from 15-alpine)
+- ✅ **ADDED:** Shared memory optimization (128MB)
+- ✅ **IMPROVED:** Local data volumes (./docker-data/db)
+- ✅ **FOLLOWING:** Official PostgreSQL Docker best practices
+- ✅ **SIMPLIFIED:** Service names (database → db)
+
+### v2.1 Fixes:
+- ✅ **FIXED:** Prisma disconnect method (`$disconnect()` instead of `disconnect()`)
+- ✅ **ADDED:** Docker clean build command (`npm run docker:dev:clean`)
+- ✅ **IMPROVED:** Troubleshooting documentation
+
+## 🎯 Performance Optimizations
+
+- **PostgreSQL 17.5** with latest performance improvements
+- **Shared Memory** (128MB) for faster query processing
+- **Local volumes** for reduced I/O overhead
+- **Health checks** for reliable container orchestration
+- **Debian-based images** for better native module support
+
+## 📝 License
+
+This project was created with the enhanced `create-n` function and includes real functionality out of the box.
+"@ | Set-Content "README.md"
+
+    # Final success message
     Write-Host ""
-    Write-Host "╭─ ✅ PROJECT CREATED SUCCESSFULLY! ─────────────────────────────────────╮" -ForegroundColor Green
+    Write-Host "╭─ ✅ PROJECT CREATED SUCCESSFULLY! v2.2 ENHANCED ─────────────────────╮" -ForegroundColor Green
     Write-Host "│                                                                        │" -ForegroundColor Green
     Write-Host "│  🚀 Project: $projectName".PadRight(71) + "│" -ForegroundColor Green
-    Write-Host "│  🗄️  Database: $dbType".PadRight(71) + "│" -ForegroundColor Green
+    Write-Host "│  🗄️  Database: PostgreSQL 17.5 + Prisma with sample users".PadRight(71) + "│" -ForegroundColor Green
+    Write-Host "│  🐳 Docker: ENHANCED (Official PostgreSQL best practices)".PadRight(71) + "│" -ForegroundColor Green
+    Write-Host "│  📄 Pages: Home, Users, About with real functionality".PadRight(71) + "│" -ForegroundColor Green
+    Write-Host "│  🔧 FIXED: Prisma `$disconnect()` + PostgreSQL optimization".PadRight(71) + "│" -ForegroundColor Green
     Write-Host "│  📁 Location: $(Get-Location)".PadRight(71) + "│" -ForegroundColor Green
     Write-Host "│                                                                        │" -ForegroundColor Green
     Write-Host "╰────────────────────────────────────────────────────────────────────────╯" -ForegroundColor Green
@@ -7097,55 +6893,56 @@ jobs:
     Write-Host "🎯 Quick Start Commands:" -ForegroundColor Cyan
     Write-Host "═══════════════════════" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "🐳 Start with Docker (Recommended):" -ForegroundColor Yellow
-    Write-Host "   npm run docker:dev" -ForegroundColor White
+    Write-Host "🐳 Start with Docker (Recommended - includes database):" -ForegroundColor Yellow
+    Write-Host "   npm run docker:dev           # Normal build" -ForegroundColor White
+    Write-Host "   npm run docker:dev:clean     # Clean build (bypasses cache)" -ForegroundColor Gray
     Write-Host ""
     Write-Host "💻 Start locally:" -ForegroundColor Yellow
-    Write-Host "   cp .env.example .env.local" -ForegroundColor DarkGray
-    Write-Host "   $dbInstructions" -ForegroundColor DarkGray
-    Write-Host "   npm run dev" -ForegroundColor White
+    Write-Host "   npm run db:setup:local  # Setup database with sample users" -ForegroundColor DarkGray
+    Write-Host "   npm run dev             # Start development server" -ForegroundColor White
     Write-Host ""
-    Write-Host "🗄️  Database-specific commands:" -ForegroundColor Yellow
-
-    if ($dbType -in @("postgresql", "mysql", "sqlite")) {
-        Write-Host "   npm run prisma:generate   # Generate Prisma client" -ForegroundColor DarkGray
-        Write-Host "   npm run prisma:migrate    # Run database migrations" -ForegroundColor DarkGray
-        Write-Host "   npm run prisma:studio     # Open Prisma Studio" -ForegroundColor DarkGray
-    } elseif ($dbType -eq "supabase") {
-        Write-Host "   npm run supabase:types    # Generate TypeScript types" -ForegroundColor DarkGray
-        Write-Host "   # Configure your Supabase project in .env.local" -ForegroundColor DarkGray
-    } elseif ($dbType -eq "mongodb") {
-        Write-Host "   # Update MONGODB_URI in .env.local" -ForegroundColor DarkGray
-        Write-Host "   # Models are in src/models/" -ForegroundColor DarkGray
-    }
-
+    Write-Host "🔧 v2.2 ENHANCEMENTS Applied:" -ForegroundColor Green
+    Write-Host "   ✅ PostgreSQL 17.5           # UPGRADED: from 15-alpine" -ForegroundColor DarkGray
+    Write-Host "   ✅ shm_size: 128mb           # ADDED: Shared memory optimization" -ForegroundColor DarkGray
+    Write-Host "   ✅ Local data volumes        # IMPROVED: ./docker-data/db" -ForegroundColor DarkGray
+    Write-Host "   ✅ Official best practices   # FOLLOWING: PostgreSQL docs" -ForegroundColor DarkGray
+    Write-Host "   ✅ Simplified service names  # RENAMED: database → db" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "🛠️  Other useful commands:" -ForegroundColor Yellow
-    Write-Host "   npm run build          # Build for production" -ForegroundColor DarkGray
-    Write-Host "   npm run lint           # Run ESLint" -ForegroundColor DarkGray
-    Write-Host "   npm run type-check     # TypeScript type checking" -ForegroundColor DarkGray
+    Write-Host "🗄️  Environment-aware database commands:" -ForegroundColor Yellow
+    Write-Host "   npm run db:push:local      # Push schema to localhost DB" -ForegroundColor DarkGray
+    Write-Host "   npm run db:push:docker     # Push schema to Docker DB" -ForegroundColor DarkGray
+    Write-Host "   npm run db:seed:local      # Seed localhost DB" -ForegroundColor DarkGray
+    Write-Host "   npm run db:seed:docker     # Seed Docker DB" -ForegroundColor DarkGray
+    Write-Host "   npm run prisma:studio      # Open database admin panel" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "📚 Next Steps:" -ForegroundColor Cyan
-    Write-Host "  1. Copy .env.example to .env.local and configure your variables" -ForegroundColor DarkGray
-    Write-Host "  2. Set up your database according to docs/deployment.md" -ForegroundColor DarkGray
-    Write-Host "  3. Review and modify database schema/models for your needs" -ForegroundColor DarkGray
-    Write-Host "  4. Update README.md with your project-specific information" -ForegroundColor DarkGray
-    Write-Host "  5. Start building your amazing application! 🚀" -ForegroundColor DarkGray
+    Write-Host "📊 What's included:" -ForegroundColor Cyan
+    Write-Host "   👥 3 sample users (johndoe, janebrown, mikejohnson)" -ForegroundColor DarkGray
+    Write-Host "   🌐 Live API at /api/users" -ForegroundColor DarkGray
+    Write-Host "   📄 Functional pages: /, /users, /about" -ForegroundColor DarkGray
+    Write-Host "   🎨 Beautiful UI with real data display" -ForegroundColor DarkGray
+    Write-Host "   🐳 ENHANCED Docker with PostgreSQL 17.5 optimization" -ForegroundColor DarkGray
+    Write-Host "   ⚙️  Dual .env files for local and Docker development" -ForegroundColor DarkGray
+    Write-Host "   🔧 dotenv-cli for environment variable management" -ForegroundColor DarkGray
+    Write-Host "   📁 Local Docker data in ./docker-data/ directory" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "📖 Documentation created:" -ForegroundColor Cyan
-    Write-Host "   📄 docs/api.md - API documentation and endpoints" -ForegroundColor DarkGray
-    Write-Host "   📄 docs/development.md - Development guide and setup" -ForegroundColor DarkGray
-    Write-Host "   📄 docs/deployment.md - Deployment and DevOps guide" -ForegroundColor DarkGray
-    Write-Host "🔧 CI/CD pipelines configured:" -ForegroundColor Cyan
-    Write-Host "   📄 .github/workflows/ci.yml - Main CI/CD pipeline" -ForegroundColor DarkGray
-    Write-Host "   📄 .github/workflows/docker-build.yml - Docker image building" -ForegroundColor DarkGray
-    Write-Host "   📄 .github/workflows/deploy.yml - Production deployment" -ForegroundColor DarkGray
+    Write-Host "🚀 Next steps:" -ForegroundColor Yellow
+    Write-Host "   1. Run: npm run docker:dev (enhanced PostgreSQL setup)" -ForegroundColor DarkGray
+    Write-Host "   2. Open: http://localhost:3000" -ForegroundColor DarkGray
+    Write-Host "   3. See live user data on the homepage!" -ForegroundColor DarkGray
+    Write-Host "   4. Visit /users for full user management" -ForegroundColor DarkGray
+    Write-Host "   5. Check /about for tech stack details" -ForegroundColor DarkGray
+    Write-Host "   6. Database files: ./docker-data/db/ (easy backup)" -ForegroundColor DarkGray
     Write-Host ""
-
-    # Show current directory contents
-    Write-Host "📁 Project Structure Created:" -ForegroundColor Cyan
-    ls -t -d 2
-}}
+    Write-Host "💡 Database optimizations:" -ForegroundColor Yellow
+    Write-Host "   🚀 PostgreSQL 17.5 (latest stable)" -ForegroundColor DarkGray
+    Write-Host "   🧠 128MB shared memory for better performance" -ForegroundColor DarkGray
+    Write-Host "   📁 Local volumes for easy data management" -ForegroundColor DarkGray
+    Write-Host "   ✅ Health checks for reliable startup" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "💡 If you encounter Docker caching issues:" -ForegroundColor Yellow
+    Write-Host "   npm run docker:dev:clean  # Forces complete rebuild" -ForegroundColor DarkGray
+    Write-Host ""
+}
 
 # Create shorthand alias
 function create-n {
