@@ -20,8 +20,8 @@ $script:CHECK_UPDATES = $true
 
 # Database credentials configuration
 # Update these values according to your database setup
-$script:DB_USERNAME = "Change-username"
-$script:DB_PASSWORD = "Change-password"
+$script:DB_USERNAME = "change"
+$script:DB_PASSWORD = "@change"
 
 # Suppress progress bars for faster installation
 $ProgressPreference = 'SilentlyContinue'

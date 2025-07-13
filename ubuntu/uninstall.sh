@@ -1,7 +1,16 @@
 #!/bin/bash
 
-# PowerFlow Ubuntu Uninstallation Script
-# Removes PowerFlow enhanced bash profile and optionally cleans up dependencies
+# ============================================================================
+# PowerFlow Fish Shell Uninstallation Script
+# ============================================================================
+# Removes PowerFlow enhanced Fish profile and optionally cleans up dependencies.
+# Supports both Fish shell and Bash configurations.
+#
+# Repository: https://github.com/Syntax-Read3r/powerflow
+# Documentation: See README.md for complete feature list and usage examples
+# Version: 1.0.4
+# Release Date: 13-07-2025
+# ============================================================================
 
 set -e
 
@@ -12,67 +21,108 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 BLUE='\033[0;34m'
 GRAY='\033[0;90m'
+BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Script version
 UNINSTALL_VERSION="1.0.4"
 
-echo -e "${CYAN}🗑️  PowerFlow Ubuntu Uninstall${NC}"
-echo -e "${CYAN}====================================${NC}"
+echo -e "${CYAN}🗑️  PowerFlow Uninstallation${NC}"
+echo -e "${CYAN}================================${NC}"
 echo -e "${GRAY}Version: $UNINSTALL_VERSION${NC}"
+echo -e "${GRAY}Target: Fish Shell & Bash profiles${NC}"
 echo ""
 
-# Check if .bashrc exists
-if [ ! -f "$HOME/.bashrc" ]; then
-    echo -e "${YELLOW}ℹ️  No .bashrc file found at: $HOME/.bashrc${NC}"
-    echo -e "${GRAY}Nothing to uninstall.${NC}"
-    exit 0
+# Detect what's installed
+FISH_CONFIG_FILE="$HOME/.config/fish/config.fish"
+BASH_CONFIG_FILE="$HOME/.bashrc"
+HAS_FISH_CONFIG=false
+HAS_BASH_CONFIG=false
+
+# Check for Fish configuration
+if [ -f "$FISH_CONFIG_FILE" ]; then
+    if grep -q "PowerFlow\|Enhanced Fish Profile" "$FISH_CONFIG_FILE" 2>/dev/null; then
+        HAS_FISH_CONFIG=true
+        echo -e "${BLUE}🐠 Found PowerFlow Fish configuration${NC}"
+    fi
 fi
 
-# Check if it's PowerFlow .bashrc
-if ! grep -q "PowerFlow\|WSL.*Profile\|Enhanced.*Profile" "$HOME/.bashrc" 2>/dev/null; then
-    echo -e "${YELLOW}ℹ️  .bashrc doesn't appear to be PowerFlow enhanced${NC}"
-    echo -e "${GRAY}Current .bashrc may be a standard bash profile.${NC}"
+# Check for Bash configuration  
+if [ -f "$BASH_CONFIG_FILE" ]; then
+    if grep -q "PowerFlow\|WSL.*Profile\|Enhanced.*Profile" "$BASH_CONFIG_FILE" 2>/dev/null; then
+        HAS_BASH_CONFIG=true
+        echo -e "${BLUE}🐚 Found PowerFlow Bash configuration${NC}"
+    fi
+fi
+
+# If nothing found
+if [ "$HAS_FISH_CONFIG" = false ] && [ "$HAS_BASH_CONFIG" = false ]; then
+    echo -e "${YELLOW}ℹ️  No PowerFlow configurations found${NC}"
+    echo -e "${GRAY}Checking for any configuration files...${NC}"
+    
+    # Check for any config files
+    if [ ! -f "$FISH_CONFIG_FILE" ] && [ ! -f "$BASH_CONFIG_FILE" ]; then
+        echo -e "${GRAY}No configuration files found.${NC}"
+        exit 0
+    fi
+    
     echo ""
-    read -p "$(echo -e "${YELLOW}Remove anyway? (y/n): ${NC}")" continue_anyway
+    echo -e "${YELLOW}Found non-PowerFlow configuration files:${NC}"
+    [ -f "$FISH_CONFIG_FILE" ] && echo -e "${GRAY}   • Fish: $FISH_CONFIG_FILE${NC}"
+    [ -f "$BASH_CONFIG_FILE" ] && echo -e "${GRAY}   • Bash: $BASH_CONFIG_FILE${NC}"
+    echo ""
+    read -p "$(echo -e "${YELLOW}Remove these configurations anyway? (y/n): ${NC}")" continue_anyway
     if [[ "$continue_anyway" != "y" && "$continue_anyway" != "Y" ]]; then
         echo -e "${RED}❌ Uninstall cancelled${NC}"
         exit 0
     fi
+    # Set flags to proceed with removal
+    [ -f "$FISH_CONFIG_FILE" ] && HAS_FISH_CONFIG=true
+    [ -f "$BASH_CONFIG_FILE" ] && HAS_BASH_CONFIG=true
 fi
 
 echo -e "${BLUE}📋 PowerFlow Uninstall Options:${NC}"
 echo ""
-echo -e "${GRAY}1. Remove PowerFlow .bashrc only (keep dependencies)${NC}"
+echo -e "${GRAY}1. Remove PowerFlow configurations only (keep dependencies)${NC}"
 echo -e "${GRAY}2. Remove PowerFlow + optional dependencies${NC}"
 echo -e "${GRAY}3. Remove PowerFlow + all dependencies (complete cleanup)${NC}"
-echo -e "${GRAY}4. Cancel uninstall${NC}"
+echo -e "${GRAY}4. Remove Fish shell completely${NC}"
+echo -e "${GRAY}5. Cancel uninstall${NC}"
 echo ""
 
 while true; do
-    read -p "$(echo -e "${CYAN}Choose option (1-4): ${NC}")" option
+    read -p "$(echo -e "${CYAN}Choose option (1-5): ${NC}")" option
     case $option in
         1)
             REMOVE_OPTIONAL=false
             REMOVE_ALL=false
+            REMOVE_FISH=false
             break
             ;;
         2)
             REMOVE_OPTIONAL=true
             REMOVE_ALL=false
+            REMOVE_FISH=false
             break
             ;;
         3)
             REMOVE_OPTIONAL=true
             REMOVE_ALL=true
+            REMOVE_FISH=false
             break
             ;;
         4)
+            REMOVE_OPTIONAL=true
+            REMOVE_ALL=true
+            REMOVE_FISH=true
+            break
+            ;;
+        5)
             echo -e "${RED}❌ Uninstall cancelled${NC}"
             exit 0
             ;;
         *)
-            echo -e "${RED}Invalid option. Please choose 1-4.${NC}"
+            echo -e "${RED}Invalid option. Please choose 1-5.${NC}"
             ;;
     esac
 done
@@ -80,39 +130,72 @@ done
 echo ""
 echo -e "${YELLOW}🔄 Starting PowerFlow uninstall...${NC}"
 
-# Create backup before removal
-backup_file="$HOME/.bashrc.backup.$(date +%Y%m%d_%H%M%S)"
-echo -e "${BLUE}💾 Creating backup: $backup_file${NC}"
-cp "$HOME/.bashrc" "$backup_file" 2>/dev/null || {
-    echo -e "${RED}❌ Failed to create backup${NC}"
-    exit 1
+# Function to create backup and remove configuration
+remove_config_with_backup() {
+    local config_file="$1"
+    local config_type="$2"
+    local backup_file="${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
+    
+    if [ -f "$config_file" ]; then
+        echo -e "${BLUE}💾 Creating $config_type backup: $backup_file${NC}"
+        cp "$config_file" "$backup_file" 2>/dev/null || {
+            echo -e "${RED}❌ Failed to create $config_type backup${NC}"
+            return 1
+        }
+        
+        # Check if there's a previous backup to restore
+        local previous_backup=""
+        local backup_base="${config_file}.backup"
+        if [ -f "$backup_base" ]; then
+            previous_backup="$backup_base"
+        elif find "$(dirname "$config_file")" -maxdepth 1 -name "$(basename "$config_file").backup.*" -type f 2>/dev/null | head -1 | read -r backup_found; then
+            previous_backup="$backup_found"
+        fi
+        
+        if [ -n "$previous_backup" ]; then
+            echo ""
+            echo -e "${YELLOW}📦 Found previous $config_type backup: $previous_backup${NC}"
+            read -p "$(echo -e "${CYAN}Restore previous backup instead of removing $config_type? (y/n): ${NC}")" restore_backup
+            
+            if [[ "$restore_backup" == "y" || "$restore_backup" == "Y" ]]; then
+                cp "$previous_backup" "$config_file"
+                echo -e "${GREEN}✅ Restored previous $config_type from backup${NC}"
+            else
+                # Remove config completely
+                rm -f "$config_file"
+                echo -e "${GREEN}✅ PowerFlow $config_type removed${NC}"
+            fi
+        else
+            # Remove config completely
+            rm -f "$config_file"
+            echo -e "${GREEN}✅ PowerFlow $config_type removed${NC}"
+        fi
+    fi
 }
 
-# Check if there's a previous .bashrc backup to restore
-previous_backup=""
-if [ -f "$HOME/.bashrc.backup" ]; then
-    previous_backup="$HOME/.bashrc.backup"
-elif find "$HOME" -maxdepth 1 -name ".bashrc.backup.*" -type f 2>/dev/null | head -1 | read -r backup_found; then
-    previous_backup="$backup_found"
+# Remove Fish configuration if exists
+if [ "$HAS_FISH_CONFIG" = true ]; then
+    echo -e "${BLUE}🐠 Removing Fish configuration...${NC}"
+    remove_config_with_backup "$FISH_CONFIG_FILE" "Fish config"
+    
+    # Remove Fish completions and functions
+    if [ -d "$HOME/.config/fish/completions" ]; then
+        echo -e "${BLUE}🧹 Removing Fish completions...${NC}"
+        rm -f "$HOME/.config/fish/completions/nav.fish"
+        echo -e "${GRAY}   • Removed nav.fish completions${NC}"
+    fi
+    
+    if [ -d "$HOME/.config/fish/functions" ]; then
+        echo -e "${BLUE}🧹 Cleaning Fish functions directory...${NC}"
+        # Remove any PowerFlow-specific functions (if any were created)
+        find "$HOME/.config/fish/functions" -name "*powerflow*" -type f -delete 2>/dev/null
+    fi
 fi
 
-if [ -n "$previous_backup" ]; then
-    echo ""
-    echo -e "${YELLOW}📦 Found previous .bashrc backup: $previous_backup${NC}"
-    read -p "$(echo -e "${CYAN}Restore previous backup instead of removing .bashrc? (y/n): ${NC}")" restore_backup
-    
-    if [[ "$restore_backup" == "y" || "$restore_backup" == "Y" ]]; then
-        cp "$previous_backup" "$HOME/.bashrc"
-        echo -e "${GREEN}✅ Restored previous .bashrc from backup${NC}"
-    else
-        # Remove .bashrc completely
-        rm -f "$HOME/.bashrc"
-        echo -e "${GREEN}✅ PowerFlow .bashrc removed${NC}"
-    fi
-else
-    # Remove .bashrc completely
-    rm -f "$HOME/.bashrc"
-    echo -e "${GREEN}✅ PowerFlow .bashrc removed${NC}"
+# Remove Bash configuration if exists
+if [ "$HAS_BASH_CONFIG" = true ]; then
+    echo -e "${BLUE}🐚 Removing Bash configuration...${NC}"
+    remove_config_with_backup "$BASH_CONFIG_FILE" "Bash config"
 fi
 
 # Clean up PowerFlow-specific files
@@ -141,6 +224,12 @@ if [ "$REMOVE_OPTIONAL" = true ] || [ "$REMOVE_ALL" = true ]; then
         # Only optional/PowerFlow-specific dependencies
         deps_to_remove=("starship" "zoxide" "lsd")
         optional_deps=()
+    fi
+    
+    # Add Fish to removal list if requested
+    if [ "$REMOVE_FISH" = true ]; then
+        deps_to_remove=("fish" "${deps_to_remove[@]}")
+        echo -e "${YELLOW}⚠️  Fish shell will be completely removed${NC}"
     fi
     
     # Remove dependencies
@@ -215,21 +304,49 @@ echo ""
 echo -e "${GREEN}✅ PowerFlow uninstall completed successfully!${NC}"
 echo ""
 echo -e "${BLUE}📋 Summary:${NC}"
-echo -e "${GRAY}   • PowerFlow .bashrc removed${NC}"
-echo -e "${GRAY}   • Backup saved to: $backup_file${NC}"
+
+# Report what was removed
+removed_configs=()
+[ "$HAS_FISH_CONFIG" = true ] && removed_configs+=("Fish")
+[ "$HAS_BASH_CONFIG" = true ] && removed_configs+=("Bash")
+
+if [ ${#removed_configs[@]} -gt 0 ]; then
+    echo -e "${GRAY}   • PowerFlow configurations removed: ${removed_configs[*]}${NC}"
+fi
+
 echo -e "${GRAY}   • PowerFlow configuration files cleaned up${NC}"
 
 if [ "$REMOVE_OPTIONAL" = true ] || [ "$REMOVE_ALL" = true ]; then
     echo -e "${GRAY}   • Dependencies removed based on selection${NC}"
 fi
 
+if [ "$REMOVE_FISH" = true ]; then
+    echo -e "${GRAY}   • Fish shell completely removed${NC}"
+fi
+
 echo ""
 echo -e "${CYAN}🔄 Next steps:${NC}"
-echo -e "${GRAY}   • Restart your terminal or run: source ~/.bashrc${NC}"
-echo -e "${GRAY}   • Your backup is available at: $backup_file${NC}"
 
-if [ -n "$previous_backup" ] && [[ "$restore_backup" == "y" || "$restore_backup" == "Y" ]]; then
-    echo -e "${GRAY}   • Previous .bashrc configuration has been restored${NC}"
+# Provide appropriate next steps based on what was removed
+if [ "$REMOVE_FISH" = true ]; then
+    echo -e "${GRAY}   • Fish shell has been removed${NC}"
+    echo -e "${GRAY}   • Your default shell should revert to bash${NC}"
+    echo -e "${GRAY}   • Restart your terminal or log out/in${NC}"
+elif [ "$HAS_FISH_CONFIG" = true ]; then
+    echo -e "${GRAY}   • Restart Fish shell or run: fish${NC}"
+    echo -e "${GRAY}   • Fish shell is still installed (use 'which fish' to verify)${NC}"
+fi
+
+if [ "$HAS_BASH_CONFIG" = true ]; then
+    echo -e "${GRAY}   • Restart your terminal or run: source ~/.bashrc${NC}"
+fi
+
+# Show backup locations
+if [ "$HAS_FISH_CONFIG" = true ]; then
+    echo -e "${GRAY}   • Fish config backup: ${FISH_CONFIG_FILE}.backup.$(date +%Y%m%d)_*${NC}"
+fi
+if [ "$HAS_BASH_CONFIG" = true ]; then
+    echo -e "${GRAY}   • Bash config backup: ${BASH_CONFIG_FILE}.backup.$(date +%Y%m%d)_*${NC}"
 fi
 
 echo ""
@@ -239,12 +356,23 @@ echo -e "${GRAY}   Repository: https://github.com/Syntax-Read3r/powerflow${NC}"
 # Optional: Show system info after uninstall
 echo ""
 echo -e "${CYAN}📊 System Status After Uninstall:${NC}"
-echo -e "${GRAY}   • Bash version: $(bash --version | head -1 | cut -d' ' -f4)${NC}"
+
+# Show shell information
+if command -v bash >/dev/null 2>&1; then
+    echo -e "${GRAY}   • Bash version: $(bash --version | head -1 | cut -d' ' -f4)${NC}"
+fi
+
+if command -v fish >/dev/null 2>&1; then
+    echo -e "${GRAY}   • Fish version: $(fish --version)${NC}"
+else
+    echo -e "${GRAY}   • Fish: Not installed${NC}"
+fi
+
 echo -e "${GRAY}   • Current shell: $SHELL${NC}"
 
 # Check if any PowerFlow traces remain
 remaining_tools=()
-for tool in starship zoxide lsd fzf jq; do
+for tool in starship zoxide lsd fzf jq fish; do
     if command -v "$tool" >/dev/null 2>&1; then
         remaining_tools+=("$tool")
     fi
@@ -252,7 +380,25 @@ done
 
 if [ ${#remaining_tools[@]} -gt 0 ]; then
     echo -e "${GRAY}   • Remaining tools: ${remaining_tools[*]}${NC}"
+else
+    echo -e "${GRAY}   • All PowerFlow tools removed${NC}"
+fi
+
+# Check for remaining configuration files
+remaining_configs=()
+[ -f "$FISH_CONFIG_FILE" ] && remaining_configs+=("Fish")
+[ -f "$BASH_CONFIG_FILE" ] && remaining_configs+=("Bash")
+
+if [ ${#remaining_configs[@]} -gt 0 ]; then
+    echo -e "${GRAY}   • Remaining configs: ${remaining_configs[*]}${NC}"
+else
+    echo -e "${GRAY}   • All configurations removed${NC}"
 fi
 
 echo ""
-echo -e "${GREEN}🎉 Uninstall process complete!${NC}"
+echo -e "${GREEN}🎉 PowerFlow uninstall process complete!${NC}"
+echo ""
+echo -e "${BLUE}💡 Tips for what's next:${NC}"
+echo -e "${GRAY}   • You can reinstall PowerFlow anytime with: ./install.sh${NC}"
+echo -e "${GRAY}   • Your backups are preserved for easy restoration${NC}"
+echo -e "${GRAY}   • Consider using standard bash if you removed Fish${NC}"
