@@ -7,12 +7,12 @@
 # 
 # Repository: https://github.com/Syntax-Read3r/powerflow
 # Documentation: See README.md for complete feature list and usage examples
-# Version: 1.0.2
-# Release Date: 4-07-2025
+# Version: 1.0.5
+# Release Date: 31-07-2025
 # ============================================================================
 
 # Version management
-$script:POWERFLOW_VERSION = "1.0.4"
+$script:POWERFLOW_VERSION = "1.0.5"
 $script:POWERFLOW_REPO = "Syntax-Read3r/powerflow"
 $script:CHECK_PROFILE_UPDATES = $true
 $script:CHECK_DEPENDENCIES = $true
@@ -20,8 +20,8 @@ $script:CHECK_UPDATES = $true
 
 # Database credentials configuration
 # Update these values according to your database setup
-$script:DB_USERNAME = "change"
-$script:DB_PASSWORD = "@change"
+$script:DB_USERNAME = "postgres"
+$script:DB_PASSWORD = "@Crix13Mix01"
 
 # Suppress progress bars for faster installation
 $ProgressPreference = 'SilentlyContinue'
@@ -632,29 +632,36 @@ function op {
 }
 
 
+
+
 <#
 .SYNOPSIS
-    Beautiful interactive Git add-commit-push workflow
+    Beautiful interactive Git workflow with automatic remote creation
 .DESCRIPTION
-    Performs git add ., git commit -m, and git push with a beautiful interface.
-    Shows current status, previous commits for context, and provides confirmations.
-.EXAMPLE
-    git-a     # Opens beautiful add-commit-push interface
-#>
-<#
-.SYNOPSIS
-    Beautiful interactive Git add-commit-push workflow with optional version release
-.DESCRIPTION
-    Performs git add ., git commit -m, and git push with a beautiful interface.
-    Shows current status, previous commits for context, and provides confirmations.
-    When -VersionRelease is specified, also creates and pushes a version tag.
+    Performs git add then commit then push with a beautiful interface.
+    Shows current status and previous commits for context.
+    Automatically creates GitHub repository if no remote exists.
+    With VersionRelease parameter also creates and pushes a version tag.
+    
+    Key Features:
+    - Proactively checks for remote repository before pushing
+    - Stops early if GitHub CLI is not available when needed
+    - Offers to initialize Git repo if not in one
+    - Automatically creates GitHub repository with interactive prompts
+    - Provides multiple naming style options (kebab-case/snake_case/PascalCase/camelCase)
+    - Interactive name selection with arrow keys or manual typing
+    - Shows remote status in the interface
+    - Handles upstream branch configuration automatically
+    - Clear visibility selection for private/public repos
+    
 .PARAMETER VersionRelease
     Create and push version tag after successful commit (alias: -vr)
 .EXAMPLE
-    git-a                    # Normal workflow: add → commit → push
-    git-a -VersionRelease    # Release workflow: add → commit → push → tag → push tag  
+    git-a                    # Normal workflow (auto-creates remote if needed)
+    git-a -VersionRelease    # Release workflow with version tagging
     git-a -vr               # Same as above (shorthand)
 #>
+
 function git-a {
     param(
         [Alias("vr")]
@@ -664,7 +671,23 @@ function git-a {
     # Check if we're in a git repository
     if (-not (git rev-parse --git-dir 2>$null)) {
         Write-Host "❌ Not in a Git repository" -ForegroundColor Red
-        return
+        Write-Host "📁 Current directory: $(Get-Location)" -ForegroundColor Cyan
+        
+        # Offer to initialize git repository
+        $initChoice = Read-Host "Would you like to initialize a Git repository here? (y/N)"
+        if ($initChoice -eq 'y') {
+            Write-Host "🚀 Initializing Git repository..." -ForegroundColor Yellow
+            git init
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "✅ Git repository initialized successfully" -ForegroundColor Green
+                # Continue with the workflow
+            } else {
+                Write-Host "❌ Failed to initialize Git repository" -ForegroundColor Red
+                return
+            }
+        } else {
+            return
+        }
     }
 
     # Check for changes
@@ -674,8 +697,23 @@ function git-a {
         return
     }
 
-    # Get current branch and commit history
-    $branch = git rev-parse --abbrev-ref HEAD
+    # Get current branch and check remote status
+    $branch = git rev-parse --abbrev-ref HEAD 2>$null
+    if (-not $branch) {
+        # Fresh repo, no commits yet - default to main
+        $branch = "main"
+        git checkout -b main 2>$null
+    }
+    
+    $remoteUrl = git remote get-url origin 2>$null
+    
+    # Display repository status
+    if ($remoteUrl) {
+        Write-Host "📡 Remote: $remoteUrl" -ForegroundColor DarkCyan
+    } else {
+        Write-Host "📁 Local repository (no remote configured)" -ForegroundColor Yellow
+    }
+    
     $commits = git log --oneline --color=always -n 2 2>$null
     
     # Format commits with numbering (latest first)
@@ -749,6 +787,13 @@ function git-a {
         "🌿 Branch: $branch"
     )
     
+    # Add remote status to the display
+    if ($remoteUrl) {
+        $formLines += "📡 Remote: $($remoteUrl -replace 'https://github.com/', '')"
+    } else {
+        $formLines += "📁 Status: Local-only (no remote)"
+    }
+    
     if ($VersionRelease) {
         $formLines += "🏷️ Will create tag: $nextTag"
     }
@@ -780,18 +825,26 @@ function git-a {
         --expect=enter
     
     # Extract the commit message from fzf output
-    $commitMessage = ""
+    $userMessage = ""
     if ($fzfOutput) {
         $lines = @($fzfOutput)
         if ($lines.Count -gt 0) {
-            $commitMessage = $lines[0].Trim()
+            $userMessage = $lines[0].Trim()
         }
     }
 
-    # Validate commit message
-    if ([string]::IsNullOrWhiteSpace($commitMessage) -or $commitMessage.Length -lt 3) {
+    # Validate user message
+    if ([string]::IsNullOrWhiteSpace($userMessage) -or $userMessage.Length -lt 3) {
         Write-Host "❌ Commit message too short or cancelled" -ForegroundColor Yellow
         return
+    }
+
+    # Add immutable prefix based on operation type
+    $commitMessage = ""
+    if ($VersionRelease) {
+        $commitMessage = "vr-commit ($nextTag) - $userMessage"
+    } else {
+        $commitMessage = "commit - $userMessage"
     }
 
     # Execute the workflow with progress indicators
@@ -804,6 +857,7 @@ function git-a {
     Write-Host "✅ Files staged successfully" -ForegroundColor Green
 
     Write-Host "💾 Committing changes..." -ForegroundColor Yellow
+    Write-Host "📝 Full commit message: $commitMessage" -ForegroundColor DarkGray
     git commit -m $commitMessage
     if ($LASTEXITCODE -ne 0) {
         Write-Host "❌ git commit failed" -ForegroundColor Red
@@ -811,14 +865,82 @@ function git-a {
     }
     Write-Host "✅ Commit created successfully" -ForegroundColor Green
 
+    # Check if remote exists BEFORE attempting to push
+    $remoteUrl = git remote get-url origin 2>$null
+    $hasUpstream = git rev-parse --abbrev-ref --symbolic-full-name "@{u}" 2>$null
+    $hadRemoteInitially = [bool]$remoteUrl
+    
+    if (-not $remoteUrl) {
+        Write-Host "⚠️  No remote repository configured" -ForegroundColor Yellow
+        Write-Host "🔍 This appears to be a local-only repository" -ForegroundColor Cyan
+        
+        # Check if GitHub CLI is available BEFORE offering to create remote
+        if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+            Write-Host "❌ GitHub CLI (gh) is not installed - cannot create remote repository" -ForegroundColor Red
+            Write-Host "📦 Install it from: https://cli.github.com" -ForegroundColor Cyan
+            Write-Host "💡 After installing, run: gh auth login" -ForegroundColor DarkGray
+            Write-Host "🔄 Then run git-a again to push your changes" -ForegroundColor Yellow
+            return
+        }
+        
+        # Offer to create remote repository
+        if (Create-RemoteRepository) {
+            # Re-check remote URL after creation
+            $remoteUrl = git remote get-url origin 2>$null
+            $hasUpstream = $null  # Force setting upstream on first push
+        } else {
+            Write-Host "❌ Cannot push without a remote repository" -ForegroundColor Red
+            return
+        }
+    } elseif (-not $hasUpstream) {
+        Write-Host "📡 Remote exists but no upstream branch set" -ForegroundColor Yellow
+    }
+
+    # Now attempt the push
     Write-Host "🚀 Pushing to remote..." -ForegroundColor Yellow
-    git push
+    
+    if ($hasUpstream) {
+        # Normal push if upstream is set
+        git push
+    } else {
+        # Set upstream on first push to this branch
+        Write-Host "🔗 Setting upstream branch..." -ForegroundColor Cyan
+        git push -u origin $branch
+    }
+    
     if ($LASTEXITCODE -ne 0) {
         Write-Host "❌ git push failed" -ForegroundColor Red
-        Write-Host "💡 You may need to set upstream or resolve conflicts" -ForegroundColor DarkGray
+        
+        # If push fails, check if it's because remote doesn't actually exist (e.g., deleted on GitHub)
+        $pushError = git push 2>&1 | Out-String
+        if ($pushError -match "repository not found|remote.*does not exist") {
+            Write-Host "⚠️  Remote repository no longer exists on GitHub" -ForegroundColor Yellow
+            Write-Host "💡 The remote URL is configured but the repository may have been deleted" -ForegroundColor DarkGray
+            
+            $recreate = Read-Host "Would you like to create a new repository? (y/N)"
+            if ($recreate -eq 'y') {
+                git remote remove origin
+                if (Create-RemoteRepository) {
+                    Write-Host "🚀 Retrying push to newly created remote..." -ForegroundColor Yellow
+                    git push -u origin $branch
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "✅ Successfully pushed to '$branch'" -ForegroundColor Green
+                    }
+                }
+            }
+        } else {
+            Write-Host "💡 You may need to resolve conflicts or check your permissions" -ForegroundColor DarkGray
+        }
         return
     }
+    
     Write-Host "✅ Successfully pushed to '$branch'" -ForegroundColor Green
+    
+    # Show summary if this was a new remote creation
+    if ($remoteUrl -and -not $hadRemoteInitially) {
+        Write-Host "`n🎊 Complete! Your project is now live on GitHub!" -ForegroundColor Magenta
+        Write-Host "📍 URL: $remoteUrl" -ForegroundColor Cyan
+    }
 
     # Tag and push tag if -VersionRelease parameter is specified
     if ($VersionRelease) {
@@ -842,6 +964,269 @@ function git-a {
         }
     }
 }
+
+# Helper functions for naming conventions
+function Convert-ToKebabCase {
+    param([string]$text)
+    # First handle camelCase and PascalCase by inserting spaces before capitals
+    $spacedText = $text -creplace '(?<!^)(?=[A-Z][a-z])', ' '
+    # Also handle acronyms like "XMLParser" -> "XML Parser"
+    $spacedText = $spacedText -creplace '(?<=[a-z])(?=[A-Z])', ' '
+    
+    # Now split on any delimiter (spaces, underscores, hyphens)
+    $words = $spacedText -split '[\s_\-]+' | Where-Object { $_ -ne '' }
+    
+    # Join with hyphens and lowercase
+    return ($words | ForEach-Object { $_.ToLower() }) -join '-'
+}
+
+function Convert-ToSnakeCase {
+    param([string]$text)
+    # First handle camelCase and PascalCase by inserting spaces before capitals
+    $spacedText = $text -creplace '(?<!^)(?=[A-Z][a-z])', ' '
+    # Also handle acronyms like "XMLParser" -> "XML Parser"
+    $spacedText = $spacedText -creplace '(?<=[a-z])(?=[A-Z])', ' '
+    
+    # Now split on any delimiter (spaces, underscores, hyphens)
+    $words = $spacedText -split '[\s_\-]+' | Where-Object { $_ -ne '' }
+    
+    # Join with underscores and lowercase
+    return ($words | ForEach-Object { $_.ToLower() }) -join '_'
+}
+
+function Convert-ToPascalCase {
+    param([string]$text)
+    # First handle camelCase and PascalCase by inserting spaces before capitals
+    $spacedText = $text -creplace '(?<!^)(?=[A-Z][a-z])', ' '
+    # Also handle acronyms like "XMLParser" -> "XML Parser"
+    $spacedText = $spacedText -creplace '(?<=[a-z])(?=[A-Z])', ' '
+    
+    # Now split on any delimiter (spaces, underscores, hyphens)
+    $words = $spacedText -split '[\s_\-]+' | Where-Object { $_ -ne '' }
+    
+    # Capitalize first letter of each word
+    return ($words | ForEach-Object { 
+        if ($_.Length -gt 0) {
+            $_.Substring(0,1).ToUpper() + $_.Substring(1).ToLower()
+        } else {
+            $_
+        }
+    }) -join ''
+}
+
+function Convert-ToCamelCase {
+    param([string]$text)
+    $pascal = Convert-ToPascalCase $text
+    if ($pascal.Length -gt 0) {
+        return $pascal.Substring(0,1).ToLower() + $pascal.Substring(1)
+    }
+    return $pascal
+}
+
+function Create-RemoteRepository {
+    # Check if authenticated
+    $authStatus = gh auth status 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ Not authenticated with GitHub" -ForegroundColor Red
+        Write-Host "🔐 Run: gh auth login" -ForegroundColor Cyan
+        return $false
+    }
+    
+    # Get the authenticated user
+    $ghUser = gh api user --jq .login 2>$null
+    if ($ghUser) {
+        Write-Host "🔐 Authenticated as: @$ghUser" -ForegroundColor DarkCyan
+    }
+
+    # Ask if user wants to create a remote repository
+    $createOptions = @(
+        "✅ Yes - Create a GitHub repository and continue pushing",
+        "❌ No - Keep this as a local-only repository"
+    )
+    
+    $createChoice = $createOptions | fzf `
+        --ansi `
+        --reverse `
+        --border=rounded `
+        --height=30% `
+        --prompt="🤔 Create remote repository? " `
+        --header="No GitHub repository found for this project" `
+        --header-first `
+        --color="header:bold:yellow,prompt:bold:green,border:cyan,pointer:green" `
+        --margin=1 `
+        --padding=1
+    
+    if (-not $createChoice -or $createChoice -match "No -") {
+        Write-Host "📁 Keeping as local repository" -ForegroundColor Cyan
+        return $false
+    }
+
+    # Get the current directory name as default repo name
+    $defaultRepoName = (Get-Item .).Name
+    
+    # First, clean the name of any special characters for processing
+    $cleanedName = $defaultRepoName -replace '[^a-zA-Z0-9\s\-_]', ' '
+    $cleanedName = $cleanedName -replace '\s+', ' '
+    $cleanedName = $cleanedName.Trim()
+    
+    # Generate naming convention options
+    $kebabName = Convert-ToKebabCase $cleanedName
+    $snakeName = Convert-ToSnakeCase $cleanedName
+    $pascalName = Convert-ToPascalCase $cleanedName
+    $camelName = Convert-ToCamelCase $cleanedName
+    
+    # Prepare naming options with descriptions
+    $namingOptions = @(
+        "🥙 $kebabName`t(kebab-case)",
+        "🐍 $snakeName`t(snake_case)", 
+        "🐪 $pascalName`t(PascalCase)",
+        "🐫 $camelName`t(camelCase)",
+        "✏️ Type custom name..."
+    )
+    
+    Write-Host "📁 Current directory: '$defaultRepoName'" -ForegroundColor Cyan
+    Write-Host "🎨 Choose a naming convention for your repository:" -ForegroundColor Yellow
+    
+    # Ask for repository name using fzf
+    $nameChoice = $namingOptions | fzf `
+        --ansi `
+        --reverse `
+        --border=rounded `
+        --height=40% `
+        --prompt="📝 Select naming style: " `
+        --header="Repository Naming Convention" `
+        --header-first `
+        --color="header:bold:blue,prompt:bold:green,border:cyan,pointer:green" `
+        --margin=1 `
+        --padding=1
+    
+    if (-not $nameChoice) {
+        Write-Host "❌ Repository creation cancelled" -ForegroundColor Yellow
+        return $false
+    }
+    
+    # Extract the repository name from the choice
+    $repoName = ""
+    if ($nameChoice -match "Type custom name") {
+        # If custom name was selected, prompt for input
+        $customPrompt = @(
+            "",
+            "📁 Current directory: $defaultRepoName",
+            "",
+            "Type your custom repository name below:"
+        )
+        
+        $customNameOutput = $customPrompt | fzf `
+            --ansi `
+            --reverse `
+            --border=rounded `
+            --height=30% `
+            --prompt="📝 Custom name: " `
+            --header="Enter Custom Repository Name" `
+            --header-first `
+            --color="header:bold:blue,prompt:bold:green,border:cyan" `
+            --margin=1 `
+            --padding=1 `
+            --print-query `
+            --expect=enter
+        
+        if ($customNameOutput) {
+            $lines = @($customNameOutput)
+            if ($lines.Count -gt 0 -and $lines[0].Trim()) {
+                $repoName = $lines[0].Trim()
+            } else {
+                Write-Host "❌ No custom name provided" -ForegroundColor Yellow
+                return $false
+            }
+        } else {
+            Write-Host "❌ Repository creation cancelled" -ForegroundColor Yellow
+            return $false
+        }
+    } else {
+        # Extract the name from the selected option (before the tab character)
+        $repoName = ($nameChoice -split "`t")[0] -replace '^[🥙🐍🐪🐫]\s*', ''
+    }
+
+    # Final sanitization for GitHub compatibility
+    $repoName = $repoName -replace '[^a-zA-Z0-9._\-]', '-'
+    $repoName = $repoName -replace '^[\-._]+|[\-._]+$', ''
+    $repoName = $repoName -replace '[\-._]{2,}', '-'
+    
+    Write-Host "📌 Final repository name: $repoName" -ForegroundColor Cyan
+
+    # Ask for visibility using fzf
+    Write-Host "`n🔐 Choose repository visibility:" -ForegroundColor Cyan
+    
+    $visibilityOptions = @(
+        "🔒 Private - Only you and collaborators can see this repository",
+        "🌍 Public - Anyone can see this repository"
+    )
+    
+    $visibilityChoice = $visibilityOptions | fzf `
+        --ansi `
+        --reverse `
+        --border=rounded `
+        --height=30% `
+        --prompt="👁️ Visibility: " `
+        --header="Repository Visibility" `
+        --header-first `
+        --color="header:bold:blue,prompt:bold:green,border:cyan,pointer:green" `
+        --margin=1 `
+        --padding=1 `
+        --bind="enter:accept"
+    
+    if (-not $visibilityChoice) {
+        Write-Host "❌ Repository creation cancelled" -ForegroundColor Yellow
+        return $false
+    }
+
+    $visibility = if ($visibilityChoice -match "Private") { "--private" } else { "--public" }
+    $visibilityText = if ($visibilityChoice -match "Private") { "Private 🔒" } else { "Public 🌍" }
+    Write-Host "✅ Selected: $visibilityText repository" -ForegroundColor Green
+
+    # Create the repository
+    Write-Host "🌐 Creating GitHub repository '$repoName'..." -ForegroundColor Cyan
+    
+    # First check if we already have a remote (shouldn't happen here, but just in case)
+    $existingRemote = git remote get-url origin 2>$null
+    
+    if ($existingRemote) {
+        Write-Host "⚠️  Remote 'origin' already exists: $existingRemote" -ForegroundColor Yellow
+        $overwrite = Read-Host "Do you want to replace it? (y/N)"
+        if ($overwrite -ne 'y') {
+            return $false
+        }
+        git remote remove origin
+    }
+
+    # Create repo and add remote
+    Write-Host "`n🚧 Creating repository..." -ForegroundColor Yellow
+    $ghOutput = gh repo create $repoName $visibility --source=. --remote=origin 2>&1
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "✅ Repository '$repoName' created successfully!" -ForegroundColor Green
+        
+        # Extract the repository URL from output
+        $repoUrl = $ghOutput | Where-Object { $_ -match "https://github.com" } | Select-Object -First 1
+        if ($repoUrl) {
+            Write-Host "🔗 Repository URL: $repoUrl" -ForegroundColor Cyan
+            Write-Host "`n🎉 Your local project is now connected to GitHub!" -ForegroundColor Magenta
+        }
+        
+        return $true
+    } else {
+        Write-Host "❌ Failed to create repository" -ForegroundColor Red
+        Write-Host "💡 Error: $ghOutput" -ForegroundColor DarkGray
+        
+        # Check if repo already exists
+        if ($ghOutput -match "already exists") {
+            Write-Host "💡 You might want to use a different name or delete the existing repository first" -ForegroundColor Yellow
+        }
+        
+        return $false
+    }
+}
+
 
 
 

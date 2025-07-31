@@ -2,7 +2,7 @@
 
 ## Overview
 
-PowerFlow Ubuntu integration provides a comprehensive enhanced bash profile that mirrors the functionality of the PowerShell profile for Ubuntu/WSL environments. This profile includes smart navigation, bookmark management, dependency auto-installation, and enhanced file operations.
+PowerFlow Ubuntu integration provides a comprehensive enhanced zsh profile that mirrors the functionality of the PowerShell profile for Ubuntu/WSL environments. This profile includes smart navigation, bookmark management, dependency auto-installation, and enhanced file operations with modern shell features.
 
 ## Features
 
@@ -54,26 +54,39 @@ PowerFlow Ubuntu integration provides a comprehensive enhanced bash profile that
 ### Quick Install
 
 ```bash
-# Download and install the enhanced .bashrc
-curl -o ~/.bashrc https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/ubuntu/.bashrc
-source ~/.bashrc
+# Download and install the enhanced .zshrc
+curl -o ~/.zshrc https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/ubuntu/.zshrc
+source ~/.zshrc
 ```
 
 ### Manual Install
 
-1. Backup your existing .bashrc:
+1. Install zsh and Oh My Zsh:
 ```bash
-cp ~/.bashrc ~/.bashrc.backup
+sudo apt update
+sudo apt install zsh
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 ```
 
-2. Copy the PowerFlow .bashrc:
+2. Backup your existing .zshrc:
 ```bash
-cp /path/to/powerflow/ubuntu/.bashrc ~/.bashrc
+cp ~/.zshrc ~/.zshrc.backup
 ```
 
-3. Source the new profile:
+3. Copy the PowerFlow .zshrc:
 ```bash
-source ~/.bashrc
+cp /path/to/powerflow/ubuntu/.zshrc ~/.zshrc
+```
+
+4. Install required plugins:
+```bash
+git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+```
+
+5. Source the new profile:
+```bash
+source ~/.zshrc
 ```
 
 ## Uninstallation
@@ -93,15 +106,19 @@ chmod +x uninstall.sh
 ### Manual Uninstall
 
 ```bash
-# Restore previous .bashrc backup
-cp ~/.bashrc.backup ~/.bashrc
+# Restore previous .zshrc backup
+cp ~/.zshrc.backup ~/.zshrc
 
-# Or remove PowerFlow .bashrc completely
-rm ~/.bashrc
+# Or remove PowerFlow .zshrc completely
+rm ~/.zshrc
 
 # Clean up PowerFlow files
 rm -f ~/.wsl_bookmarks.json ~/.wsl_init_check ~/.wsl_profile_update_check ~/.nav_history
 rm -f /tmp/.powerflow_*
+
+# Remove zsh plugins if no longer needed
+rm -rf ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+rm -rf ~/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
 ```
 
 ### Uninstall Options
@@ -121,6 +138,8 @@ On first run, the profile will:
 - Install required tools automatically
 - Initialize default bookmarks
 - Set up the navigation system
+- Configure zsh with Oh My Zsh and plugins
+- Install Starship prompt for enhanced experience
 
 ## Usage
 
@@ -155,7 +174,7 @@ On first run, the profile will:
 | `here` | Detailed info about current directory |
 | `copy-pwd` | Copy current path to clipboard |
 | `open-pwd` | Open current directory in Windows Explorer |
-| `open-nt` | Open new Windows Terminal tab (default: bash) |
+| `open-nt` | Open new Windows Terminal tab (default: zsh) |
 | `open-nt pwsh` | Open new PowerShell tab |
 | `open-nt p` | Open new PowerShell tab (short form) |
 | `open-nt ubuntu` | Open new Ubuntu tab |
@@ -200,6 +219,7 @@ You can customize the profile by:
 ## Dependencies
 
 ### Required Tools
+- **zsh** - Modern shell with advanced features
 - **curl** - For downloading files and updates
 - **wget** - Alternative download tool
 - **git** - Version control integration
@@ -208,9 +228,12 @@ You can customize the profile by:
 - **xclip** - Clipboard integration
 
 ### Optional Tools
-- **starship** - Modern prompt with Git integration
+- **starship** - Modern prompt with Git integration (recommended)
 - **zoxide** - Smart directory jumping
 - **lsd** - Modern ls replacement with icons and colors
+- **Oh My Zsh** - Framework for managing zsh configuration
+- **zsh-autosuggestions** - Auto-suggestions based on history
+- **zsh-syntax-highlighting** - Syntax highlighting for commands
 
 ## Troubleshooting
 
@@ -231,6 +254,12 @@ You can customize the profile by:
 4. **Slow startup**
    - Dependencies are only checked once per day
    - Delete `~/.wsl_init_check` to force recheck
+   - Disable heavy plugins if startup is too slow
+
+5. **zsh plugins not working**
+   - Ensure plugins are properly installed in Oh My Zsh custom directory
+   - Check if plugins are enabled in ~/.zshrc
+   - Reload shell with `source ~/.zshrc`
 
 ### Recovery
 
@@ -253,8 +282,8 @@ Run `wsl_recovery` for interactive recovery options:
 
 To contribute to the Ubuntu integration:
 1. Fork the repository
-2. Make changes to `ubuntu/.bashrc`
-3. Test thoroughly in WSL environment
+2. Make changes to `ubuntu/.zshrc` and related files
+3. Test thoroughly in WSL environment with zsh
 4. Submit pull request with detailed description
 
 ## License

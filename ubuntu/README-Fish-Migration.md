@@ -1,18 +1,28 @@
-# PowerFlow Fish Shell Migration Guide
+# PowerFlow Fish to zsh Migration Guide
 
 ## Overview
 
-This guide documents the migration from Bash to Fish shell for PowerFlow, providing equivalent functionality with Fish's superior auto-completion and user experience that closely resembles PowerShell.
+This guide documents the migration from Fish shell to zsh for PowerFlow. The migration was necessary due to compatibility issues with Fish shell, particularly with npm commands and password-protected operations.
 
-## Why Fish Shell?
+## Why We Moved Away from Fish Shell
 
-Fish shell was chosen for the following reasons:
+Fish shell encountered several critical issues:
 
-1. **Intelligent Auto-completion** - Similar to PowerShell's IntelliSense
-2. **Syntax Highlighting** - Commands are colored as you type
-3. **Auto-suggestions** - Based on command history and completions
-4. **Better Error Messages** - More user-friendly than Bash
-5. **Modern Shell Features** - Web-based configuration, better scripting syntax
+1. **npm Compatibility Issues** - `npm run dev` and other npm commands failed to execute properly
+2. **Password Mode Problems** - Commands were running in password mode, causing authentication issues
+3. **POSIX Non-compliance** - Fish's unique syntax caused compatibility problems with many tools
+4. **Development Tool Issues** - Various development tools had problems with Fish's syntax
+
+## Why zsh is Better
+
+zsh was chosen as the replacement for the following reasons:
+
+1. **POSIX Compliance** - Full compatibility with bash and development tools
+2. **Better Performance** - Faster startup and execution times
+3. **Rich Plugin Ecosystem** - Oh My Zsh provides extensive plugin support
+4. **Auto-suggestions** - Intelligent command completion based on history
+5. **Syntax Highlighting** - Real-time command validation and coloring
+6. **npm Compatibility** - Perfect compatibility with Node.js and npm commands
 
 ## Migration Summary
 
@@ -20,24 +30,24 @@ Fish shell was chosen for the following reasons:
 
 | File | Purpose | Status |
 |------|---------|---------|
-| `config.fish` | Main Fish configuration with all PowerFlow functions | ✅ Complete |
-| `nav.fish` | Enhanced navigation completions for Fish | ✅ Complete |
-| `install.sh` | Updated installation script for Fish setup | ✅ Complete |
-| `uninstall.sh` | Enhanced uninstaller supporting both Bash and Fish | ✅ Complete |
+| `.zshrc` | Main zsh configuration with all PowerFlow functions | ✅ Complete |
+| `README.md` | Updated documentation for zsh setup | ✅ Complete |
+| `install.sh` | Updated installation script for zsh and Oh My Zsh setup | ✅ Complete |
+| `uninstall.sh` | Enhanced uninstaller supporting zsh, Oh My Zsh, and bash | ✅ Complete |
 
 ### Function Equivalency
 
-All PowerShell profile functions have been ported to Fish with equivalent or enhanced functionality:
+All PowerShell profile functions have been ported to zsh with equivalent or enhanced functionality:
 
 #### Core Functions Ported
 
-| PowerShell Function | Fish Equivalent | Status | Notes |
+| PowerShell Function | zsh Equivalent | Status | Notes |
 |-------------------|-----------------|---------|--------|
-| `claude`, `cc` | `claude`, `cc` | ✅ | Direct port |
-| `explain` | `explain` | ✅ | Enhanced with file validation |
-| `fix` | `fix` | ✅ | Direct port |
-| `build` | `build` | ✅ | Direct port |
-| `review` | `review` | ✅ | Direct port |
+| `claude`, `cc` | `cc` | ✅ | Consolidated with flags |
+| `explain` | `cc -e` | ✅ | Now part of main cc function |
+| `fix` | `cc -f` | ✅ | Now part of main cc function |
+| `build` | `cc -b` | ✅ | Now part of main cc function |
+| `review` | `cc -r` | ✅ | Now part of main cc function |
 | `git-a` | `git-a` | ✅ | Enhanced with preview |
 | `git-aa` | `git-aa` | ✅ | Interactive confirmation |
 | `git-cm` | `git-cm` | ✅ | Direct port |
@@ -77,7 +87,7 @@ All PowerShell profile functions have been ported to Fish with equivalent or enh
 | `create-bookmark`/`cb` | Create navigation bookmarks | `cb myproject` |
 | `delete-bookmark`/`db` | Delete bookmarks | `db myproject` |
 | `list-bookmarks`/`lb` | List all bookmarks | `lb` |
-| `fish-help`/`help` | Comprehensive help system | `help` |
+| `zsh-help`/`help` | Comprehensive help system | `help` |
 
 ## Installation
 
@@ -91,29 +101,33 @@ chmod +x install.sh
 
 ### Manual Setup
 
-1. **Install Fish Shell**
+1. **Install zsh and Oh My Zsh**
    ```bash
-   sudo apt update && sudo apt install -y fish
-   echo /usr/bin/fish | sudo tee -a /etc/shells
+   sudo apt update && sudo apt install -y zsh
+   sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
    ```
 
-2. **Copy Configuration Files**
+2. **Install zsh Plugins**
    ```bash
-   mkdir -p ~/.config/fish/completions
-   cp config.fish ~/.config/fish/
-   cp nav.fish ~/.config/fish/completions/
+   git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+   git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
    ```
 
-3. **Set Fish as Default Shell** (Optional)
+3. **Copy Configuration Files**
    ```bash
-   chsh -s /usr/bin/fish
+   cp .zshrc ~/.zshrc
+   ```
+
+4. **Set zsh as Default Shell** (Optional)
+   ```bash
+   chsh -s /usr/bin/zsh
    ```
 
 ## Key Features
 
 ### 1. Intelligent Auto-completion
 
-Fish provides context-aware completions for:
+zsh with Oh My Zsh provides context-aware completions for:
 - File and directory names
 - Command options and flags
 - Git branches and remotes
@@ -138,7 +152,7 @@ The navigation system includes:
 
 ### 4. Bookmark System
 
-```fish
+```bash
 # Create bookmarks
 cb myproject          # Bookmark current directory
 cb myproject /path    # Bookmark specific path
@@ -162,20 +176,20 @@ db myproject          # Delete bookmark
 
 ### Environment Variables
 
-```fish
-set -g POWERFLOW_VERSION "1.0.4"
-set -g WSL_START_DIRECTORY "/mnt/c/Users/_munya/Code"
-set -g BOOKMARKS_FILE "$HOME/.wsl_bookmarks.json"
+```bash
+export POWERFLOW_VERSION="1.0.5"
+export WSL_START_DIRECTORY="/mnt/c/Users/_munya/Code"
+export BOOKMARKS_FILE="$HOME/.wsl_bookmarks.json"
 ```
 
-### Fish Colors
+### zsh Configuration
 
-The configuration includes custom colors for:
-- Command highlighting (blue)
-- Error messages (red)
-- Parameters (cyan)
-- Quotes (yellow)
-- Redirections (magenta)
+The configuration includes:
+- Oh My Zsh framework
+- Auto-suggestions plugin (gray text suggestions)
+- Syntax highlighting plugin (green for valid, red for invalid)
+- Starship prompt integration
+- Custom aliases and functions
 
 ### Dependencies
 
@@ -186,34 +200,34 @@ Optional but recommended tools:
 - **fzf** - Fuzzy file finder
 - **jq** - JSON processing for bookmarks
 
-## Comparison: PowerShell vs Fish
+## Comparison: PowerShell vs zsh
 
 ### Similarities
 
-| Feature | PowerShell | Fish |
-|---------|------------|------|
+| Feature | PowerShell | zsh |
+|---------|------------|-----|
 | Auto-completion | IntelliSense | Tab completion |
-| Syntax highlighting | ✅ | ✅ |
+| Syntax highlighting | ✅ | ✅ (via plugins) |
 | Command history | ✅ | ✅ |
 | Aliases | ✅ | ✅ |
 | Functions | ✅ | ✅ |
 | Error handling | ✅ | ✅ |
 
-### Fish Advantages
+### zsh Advantages
 
-- **No learning curve** - Familiar shell syntax
-- **Better performance** - Faster startup and execution
+- **POSIX compliance** - Compatible with bash and most tools
+- **Better performance** - Faster startup and execution than Fish
 - **Cross-platform** - Works on all Unix-like systems
-- **Better scripting** - More intuitive syntax than Bash
-- **Built-in features** - No need for external modules
+- **Rich ecosystem** - Oh My Zsh provides hundreds of plugins
+- **npm compatibility** - Perfect for Node.js development
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Fish not found after installation**
+1. **zsh not found after installation**
    ```bash
-   which fish
+   which zsh
    echo $SHELL
    # Re-login or restart terminal
    ```
@@ -225,54 +239,66 @@ Optional but recommended tools:
    sudo apt install -y jq
    ```
 
-3. **Completions not working**
+3. **Plugins not working**
    ```bash
-   # Check completions directory
-   ls ~/.config/fish/completions/
-   # Restart Fish
-   exec fish
+   # Check plugins directory
+   ls ~/.oh-my-zsh/custom/plugins/
+   # Reload zsh
+   exec zsh
    ```
 
 4. **Functions not loading**
    ```bash
    # Check config file
-   cat ~/.config/fish/config.fish
+   cat ~/.zshrc
    # Source config manually
-   source ~/.config/fish/config.fish
+   source ~/.zshrc
+   ```
+
+5. **npm commands still failing**
+   ```bash
+   # Verify Node.js and npm
+   node --version
+   npm --version
+   # Check PATH
+   echo $PATH
    ```
 
 ### Getting Help
 
-```fish
+```bash
 # PowerFlow help
 help
-fish-help
+zsh-help
 
-# Fish built-in help
-help
+# zsh built-in help
+man zsh
 help <command>
 
 # Function definitions
-functions nav
+which nav
 type git-a
 ```
 
 ## Migration Checklist
 
-- [ ] Install Fish shell
+- [ ] Install zsh shell
+- [ ] Install Oh My Zsh
+- [ ] Install zsh plugins
 - [ ] Copy configuration files
 - [ ] Test basic commands
 - [ ] Verify Git functions
 - [ ] Set up bookmarks
 - [ ] Test navigation
 - [ ] Configure optional dependencies
-- [ ] Set Fish as default shell (optional)
+- [ ] Set zsh as default shell (optional)
 - [ ] Test Claude Code integration
 - [ ] Verify Windows Terminal integration
+- [ ] Test npm commands
 
 ## Uninstallation
 
-To remove PowerFlow Fish configuration:
+To remove PowerFlow zsh configuration:
 
 ```bash
 cd ubuntu/
@@ -283,15 +309,16 @@ chmod +x uninstall.sh
 The uninstaller provides options to:
 1. Remove configurations only
 2. Remove configurations + optional dependencies
-3. Remove everything including Fish shell
-4. Restore previous configurations from backups
+3. Remove everything including zsh shell
+4. Remove Oh My Zsh
+5. Restore previous configurations from backups
 
-## Tips for Fish Users
+## Tips for zsh Users
 
 ### 1. Command History
 - Use `↑` and `↓` arrows for history
 - Use `Ctrl+R` for reverse search
-- Fish remembers working directories
+- zsh remembers working directories
 
 ### 2. Auto-suggestions
 - Gray text shows suggestions from history
@@ -304,44 +331,45 @@ The uninstaller provides options to:
 - Works with files, commands, and custom completions
 
 ### 4. Command Substitution
-```fish
-echo (date)           # Command substitution
-set var (pwd)         # Capture command output
+```bash
+echo $(date)          # Command substitution
+var=$(pwd)            # Capture command output
 ```
 
 ### 5. Variables
-```fish
-set -g var value      # Global variable
-set -l var value      # Local variable
-set -e var            # Erase variable
+```bash
+export var=value      # Global variable
+local var=value       # Local variable
+unset var             # Remove variable
 ```
 
 ## Future Enhancements
 
 Planned improvements:
-- [ ] Fish-specific themes integration
+- [ ] Additional Oh My Zsh themes integration
 - [ ] Enhanced fuzzy finding with fzf
 - [ ] Custom completions for Claude Code
-- [ ] Web-based configuration interface
-- [ ] Plugin system for extensions
+- [ ] More zsh plugins integration
+- [ ] Enhanced Starship prompt customization
 
 ## Contributing
 
-To contribute to the Fish shell integration:
+To contribute to the zsh shell integration:
 
 1. Fork the repository
 2. Create a feature branch
-3. Test changes thoroughly
+3. Test changes thoroughly in zsh
 4. Update documentation
 5. Submit a pull request
 
 ## Resources
 
-- [Fish Shell Documentation](https://fishshell.com/docs/current/)
+- [zsh Documentation](https://zsh.sourceforge.io/Doc/)
+- [Oh My Zsh Documentation](https://ohmyz.sh/)
 - [PowerFlow Repository](https://github.com/Syntax-Read3r/powerflow)
-- [Fish Tutorial](https://fishshell.com/docs/current/tutorial.html)
-- [Fish FAQ](https://fishshell.com/docs/current/faq.html)
+- [zsh Users Guide](https://zsh.sourceforge.io/Guide/)
+- [Starship Documentation](https://starship.rs/)
 
 ---
 
-**PowerFlow Fish Shell Migration - Complete** 🐠✨
+**PowerFlow Fish to zsh Migration - Complete** ⚡✨

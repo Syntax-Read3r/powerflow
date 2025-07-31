@@ -1,15 +1,15 @@
 #!/bin/bash
 
 # ============================================================================
-# PowerFlow Fish Shell Uninstallation Script
+# PowerFlow zsh Shell Uninstallation Script
 # ============================================================================
-# Removes PowerFlow enhanced Fish profile and optionally cleans up dependencies.
-# Supports both Fish shell and Bash configurations.
+# Removes PowerFlow enhanced zsh profile and optionally cleans up dependencies.
+# Supports both zsh shell and Bash configurations.
 #
 # Repository: https://github.com/Syntax-Read3r/powerflow
 # Documentation: See README.md for complete feature list and usage examples
-# Version: 1.0.4
-# Release Date: 13-07-2025
+# Version: 1.0.5
+# Release Date: 15-07-2025
 # ============================================================================
 
 set -e
@@ -25,26 +25,34 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Script version
-UNINSTALL_VERSION="1.0.4"
+UNINSTALL_VERSION="1.0.5"
 
 echo -e "${CYAN}🗑️  PowerFlow Uninstallation${NC}"
 echo -e "${CYAN}================================${NC}"
 echo -e "${GRAY}Version: $UNINSTALL_VERSION${NC}"
-echo -e "${GRAY}Target: Fish Shell & Bash profiles${NC}"
+echo -e "${GRAY}Target: zsh Shell & Bash profiles${NC}"
 echo ""
 
 # Detect what's installed
-FISH_CONFIG_FILE="$HOME/.config/fish/config.fish"
+ZSH_CONFIG_FILE="$HOME/.zshrc"
 BASH_CONFIG_FILE="$HOME/.bashrc"
-HAS_FISH_CONFIG=false
+OH_MY_ZSH_DIR="$HOME/.oh-my-zsh"
+HAS_ZSH_CONFIG=false
 HAS_BASH_CONFIG=false
+HAS_OH_MY_ZSH=false
 
-# Check for Fish configuration
-if [ -f "$FISH_CONFIG_FILE" ]; then
-    if grep -q "PowerFlow\|Enhanced Fish Profile" "$FISH_CONFIG_FILE" 2>/dev/null; then
-        HAS_FISH_CONFIG=true
-        echo -e "${BLUE}🐠 Found PowerFlow Fish configuration${NC}"
+# Check for zsh configuration
+if [ -f "$ZSH_CONFIG_FILE" ]; then
+    if grep -q "PowerFlow\|Enhanced zsh Profile" "$ZSH_CONFIG_FILE" 2>/dev/null; then
+        HAS_ZSH_CONFIG=true
+        echo -e "${BLUE}⚡ Found PowerFlow zsh configuration${NC}"
     fi
+fi
+
+# Check for Oh My Zsh
+if [ -d "$OH_MY_ZSH_DIR" ]; then
+    HAS_OH_MY_ZSH=true
+    echo -e "${BLUE}🛠️  Found Oh My Zsh installation${NC}"
 fi
 
 # Check for Bash configuration  
@@ -56,19 +64,19 @@ if [ -f "$BASH_CONFIG_FILE" ]; then
 fi
 
 # If nothing found
-if [ "$HAS_FISH_CONFIG" = false ] && [ "$HAS_BASH_CONFIG" = false ]; then
+if [ "$HAS_ZSH_CONFIG" = false ] && [ "$HAS_BASH_CONFIG" = false ] && [ "$HAS_OH_MY_ZSH" = false ]; then
     echo -e "${YELLOW}ℹ️  No PowerFlow configurations found${NC}"
     echo -e "${GRAY}Checking for any configuration files...${NC}"
     
     # Check for any config files
-    if [ ! -f "$FISH_CONFIG_FILE" ] && [ ! -f "$BASH_CONFIG_FILE" ]; then
+    if [ ! -f "$ZSH_CONFIG_FILE" ] && [ ! -f "$BASH_CONFIG_FILE" ]; then
         echo -e "${GRAY}No configuration files found.${NC}"
         exit 0
     fi
     
     echo ""
     echo -e "${YELLOW}Found non-PowerFlow configuration files:${NC}"
-    [ -f "$FISH_CONFIG_FILE" ] && echo -e "${GRAY}   • Fish: $FISH_CONFIG_FILE${NC}"
+    [ -f "$ZSH_CONFIG_FILE" ] && echo -e "${GRAY}   • zsh: $ZSH_CONFIG_FILE${NC}"
     [ -f "$BASH_CONFIG_FILE" ] && echo -e "${GRAY}   • Bash: $BASH_CONFIG_FILE${NC}"
     echo ""
     read -p "$(echo -e "${YELLOW}Remove these configurations anyway? (y/n): ${NC}")" continue_anyway
@@ -77,7 +85,7 @@ if [ "$HAS_FISH_CONFIG" = false ] && [ "$HAS_BASH_CONFIG" = false ]; then
         exit 0
     fi
     # Set flags to proceed with removal
-    [ -f "$FISH_CONFIG_FILE" ] && HAS_FISH_CONFIG=true
+    [ -f "$ZSH_CONFIG_FILE" ] && HAS_ZSH_CONFIG=true
     [ -f "$BASH_CONFIG_FILE" ] && HAS_BASH_CONFIG=true
 fi
 
@@ -86,7 +94,7 @@ echo ""
 echo -e "${GRAY}1. Remove PowerFlow configurations only (keep dependencies)${NC}"
 echo -e "${GRAY}2. Remove PowerFlow + optional dependencies${NC}"
 echo -e "${GRAY}3. Remove PowerFlow + all dependencies (complete cleanup)${NC}"
-echo -e "${GRAY}4. Remove Fish shell completely${NC}"
+echo -e "${GRAY}4. Remove zsh shell completely${NC}"
 echo -e "${GRAY}5. Cancel uninstall${NC}"
 echo ""
 
@@ -96,25 +104,25 @@ while true; do
         1)
             REMOVE_OPTIONAL=false
             REMOVE_ALL=false
-            REMOVE_FISH=false
+            REMOVE_ZSH=false
             break
             ;;
         2)
             REMOVE_OPTIONAL=true
             REMOVE_ALL=false
-            REMOVE_FISH=false
+            REMOVE_ZSH=false
             break
             ;;
         3)
             REMOVE_OPTIONAL=true
             REMOVE_ALL=true
-            REMOVE_FISH=false
+            REMOVE_ZSH=false
             break
             ;;
         4)
             REMOVE_OPTIONAL=true
             REMOVE_ALL=true
-            REMOVE_FISH=true
+            REMOVE_ZSH=true
             break
             ;;
         5)
@@ -173,22 +181,29 @@ remove_config_with_backup() {
     fi
 }
 
-# Remove Fish configuration if exists
-if [ "$HAS_FISH_CONFIG" = true ]; then
-    echo -e "${BLUE}🐠 Removing Fish configuration...${NC}"
-    remove_config_with_backup "$FISH_CONFIG_FILE" "Fish config"
+# Remove zsh configuration if exists
+if [ "$HAS_ZSH_CONFIG" = true ]; then
+    echo -e "${BLUE}⚡ Removing zsh configuration...${NC}"
+    remove_config_with_backup "$ZSH_CONFIG_FILE" "zsh config"
+fi
+
+# Remove Oh My Zsh if exists (optional)
+if [ "$HAS_OH_MY_ZSH" = true ]; then
+    echo ""
+    echo -e "${YELLOW}📦 Oh My Zsh detected${NC}"
+    read -p "$(echo -e "${CYAN}Remove Oh My Zsh as well? (y/n): ${NC}")" remove_oh_my_zsh
     
-    # Remove Fish completions and functions
-    if [ -d "$HOME/.config/fish/completions" ]; then
-        echo -e "${BLUE}🧹 Removing Fish completions...${NC}"
-        rm -f "$HOME/.config/fish/completions/nav.fish"
-        echo -e "${GRAY}   • Removed nav.fish completions${NC}"
-    fi
-    
-    if [ -d "$HOME/.config/fish/functions" ]; then
-        echo -e "${BLUE}🧹 Cleaning Fish functions directory...${NC}"
-        # Remove any PowerFlow-specific functions (if any were created)
-        find "$HOME/.config/fish/functions" -name "*powerflow*" -type f -delete 2>/dev/null
+    if [[ "$remove_oh_my_zsh" == "y" || "$remove_oh_my_zsh" == "Y" ]]; then
+        echo -e "${BLUE}🗑️  Removing Oh My Zsh...${NC}"
+        
+        # Remove Oh My Zsh directory
+        rm -rf "$OH_MY_ZSH_DIR"
+        echo -e "${GREEN}✅ Oh My Zsh removed${NC}"
+        
+        # Remove zsh plugins installed for PowerFlow
+        echo -e "${BLUE}🧹 Removing zsh plugins...${NC}"
+        rm -rf "$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions" 2>/dev/null && echo -e "${GRAY}   • Removed zsh-autosuggestions${NC}"
+        rm -rf "$HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting" 2>/dev/null && echo -e "${GRAY}   • Removed zsh-syntax-highlighting${NC}"
     fi
 fi
 
@@ -226,10 +241,10 @@ if [ "$REMOVE_OPTIONAL" = true ] || [ "$REMOVE_ALL" = true ]; then
         optional_deps=()
     fi
     
-    # Add Fish to removal list if requested
-    if [ "$REMOVE_FISH" = true ]; then
-        deps_to_remove=("fish" "${deps_to_remove[@]}")
-        echo -e "${YELLOW}⚠️  Fish shell will be completely removed${NC}"
+    # Add zsh to removal list if requested
+    if [ "$REMOVE_ZSH" = true ]; then
+        deps_to_remove=("zsh" "${deps_to_remove[@]}")
+        echo -e "${YELLOW}⚠️  zsh shell will be completely removed${NC}"
     fi
     
     # Remove dependencies
@@ -307,7 +322,7 @@ echo -e "${BLUE}📋 Summary:${NC}"
 
 # Report what was removed
 removed_configs=()
-[ "$HAS_FISH_CONFIG" = true ] && removed_configs+=("Fish")
+[ "$HAS_ZSH_CONFIG" = true ] && removed_configs+=("zsh")
 [ "$HAS_BASH_CONFIG" = true ] && removed_configs+=("Bash")
 
 if [ ${#removed_configs[@]} -gt 0 ]; then
@@ -316,25 +331,29 @@ fi
 
 echo -e "${GRAY}   • PowerFlow configuration files cleaned up${NC}"
 
+if [ "$HAS_OH_MY_ZSH" = true ] && [[ "$remove_oh_my_zsh" == "y" || "$remove_oh_my_zsh" == "Y" ]]; then
+    echo -e "${GRAY}   • Oh My Zsh removed${NC}"
+fi
+
 if [ "$REMOVE_OPTIONAL" = true ] || [ "$REMOVE_ALL" = true ]; then
     echo -e "${GRAY}   • Dependencies removed based on selection${NC}"
 fi
 
-if [ "$REMOVE_FISH" = true ]; then
-    echo -e "${GRAY}   • Fish shell completely removed${NC}"
+if [ "$REMOVE_ZSH" = true ]; then
+    echo -e "${GRAY}   • zsh shell completely removed${NC}"
 fi
 
 echo ""
 echo -e "${CYAN}🔄 Next steps:${NC}"
 
 # Provide appropriate next steps based on what was removed
-if [ "$REMOVE_FISH" = true ]; then
-    echo -e "${GRAY}   • Fish shell has been removed${NC}"
+if [ "$REMOVE_ZSH" = true ]; then
+    echo -e "${GRAY}   • zsh shell has been removed${NC}"
     echo -e "${GRAY}   • Your default shell should revert to bash${NC}"
     echo -e "${GRAY}   • Restart your terminal or log out/in${NC}"
-elif [ "$HAS_FISH_CONFIG" = true ]; then
-    echo -e "${GRAY}   • Restart Fish shell or run: fish${NC}"
-    echo -e "${GRAY}   • Fish shell is still installed (use 'which fish' to verify)${NC}"
+elif [ "$HAS_ZSH_CONFIG" = true ]; then
+    echo -e "${GRAY}   • Restart zsh shell or run: zsh${NC}"
+    echo -e "${GRAY}   • zsh shell is still installed (use 'which zsh' to verify)${NC}"
 fi
 
 if [ "$HAS_BASH_CONFIG" = true ]; then
@@ -342,8 +361,8 @@ if [ "$HAS_BASH_CONFIG" = true ]; then
 fi
 
 # Show backup locations
-if [ "$HAS_FISH_CONFIG" = true ]; then
-    echo -e "${GRAY}   • Fish config backup: ${FISH_CONFIG_FILE}.backup.$(date +%Y%m%d)_*${NC}"
+if [ "$HAS_ZSH_CONFIG" = true ]; then
+    echo -e "${GRAY}   • zsh config backup: ${ZSH_CONFIG_FILE}.backup.$(date +%Y%m%d)_*${NC}"
 fi
 if [ "$HAS_BASH_CONFIG" = true ]; then
     echo -e "${GRAY}   • Bash config backup: ${BASH_CONFIG_FILE}.backup.$(date +%Y%m%d)_*${NC}"
@@ -362,17 +381,17 @@ if command -v bash >/dev/null 2>&1; then
     echo -e "${GRAY}   • Bash version: $(bash --version | head -1 | cut -d' ' -f4)${NC}"
 fi
 
-if command -v fish >/dev/null 2>&1; then
-    echo -e "${GRAY}   • Fish version: $(fish --version)${NC}"
+if command -v zsh >/dev/null 2>&1; then
+    echo -e "${GRAY}   • zsh version: $(zsh --version)${NC}"
 else
-    echo -e "${GRAY}   • Fish: Not installed${NC}"
+    echo -e "${GRAY}   • zsh: Not installed${NC}"
 fi
 
 echo -e "${GRAY}   • Current shell: $SHELL${NC}"
 
 # Check if any PowerFlow traces remain
 remaining_tools=()
-for tool in starship zoxide lsd fzf jq fish; do
+for tool in starship zoxide lsd fzf jq zsh; do
     if command -v "$tool" >/dev/null 2>&1; then
         remaining_tools+=("$tool")
     fi
@@ -386,7 +405,7 @@ fi
 
 # Check for remaining configuration files
 remaining_configs=()
-[ -f "$FISH_CONFIG_FILE" ] && remaining_configs+=("Fish")
+[ -f "$ZSH_CONFIG_FILE" ] && remaining_configs+=("zsh")
 [ -f "$BASH_CONFIG_FILE" ] && remaining_configs+=("Bash")
 
 if [ ${#remaining_configs[@]} -gt 0 ]; then
@@ -401,4 +420,4 @@ echo ""
 echo -e "${BLUE}💡 Tips for what's next:${NC}"
 echo -e "${GRAY}   • You can reinstall PowerFlow anytime with: ./install.sh${NC}"
 echo -e "${GRAY}   • Your backups are preserved for easy restoration${NC}"
-echo -e "${GRAY}   • Consider using standard bash if you removed Fish${NC}"
+echo -e "${GRAY}   • Consider using standard bash if you removed zsh${NC}"
