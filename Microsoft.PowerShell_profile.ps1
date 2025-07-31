@@ -21,7 +21,7 @@ $script:CHECK_UPDATES = $true
 # Database credentials configuration
 # Update these values according to your database setup
 $script:DB_USERNAME = "postgres"
-$script:DB_PASSWORD = "@Crix13Mix01"
+$script:DB_PASSWORD = "password"
 
 # Suppress progress bars for faster installation
 $ProgressPreference = 'SilentlyContinue'
