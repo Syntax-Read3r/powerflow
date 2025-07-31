@@ -4,7 +4,23 @@ All notable changes to PowerFlow will be documented in this file.
 
 ## [Unreleased]
 
+### Planning
+- Additional database providers
+- Testing framework integration
+- Enhanced Docker optimizations
+
+## [1.0.5] - 2025-01-23
+
 ### Added
+- 🚀 **Automatic GitHub Repository Creation**: `git-a` now creates remote repositories on-the-fly
+  - **Smart Remote Detection**: Automatically detects when no remote repository exists
+  - **GitHub CLI Integration**: Checks for `gh` installation and authentication before offering to create
+  - **Interactive Repository Setup**: Beautiful fzf interface for repository configuration
+  - **Naming Convention Options**: Choose from kebab-case, snake_case, PascalCase, camelCase, or custom
+  - **Visibility Selection**: Interactive private/public repository selection with clear descriptions
+  - **Seamless Workflow**: Creates remote, sets origin, and pushes in one smooth operation
+  - **Error Recovery**: Handles deleted remotes and offers to recreate them
+  - **Authentication Status**: Shows current GitHub user during repository creation
 - 🖥️ **Cross-Platform Terminal Integration**: Enhanced `open-nt` function with shell switching
   - **PowerShell from Ubuntu**: `open-nt pwsh` or `open-nt p` to launch PowerShell tabs from Ubuntu
   - **Ubuntu from PowerShell**: `open-nt ubuntu` or `open-nt u` to launch Ubuntu tabs from PowerShell
@@ -17,14 +33,24 @@ All notable changes to PowerFlow will be documented in this file.
   - **Path translation**: Intelligent handling of /mnt/ paths to Windows drive letters
 
 ### Enhanced
+- **`git-a` Workflow**: Now handles the complete git lifecycle from init to push
+  - **Repository initialization**: Offers to init git if not in a repository
+  - **Remote status display**: Shows if repository is local-only or has remote
+  - **Upstream handling**: Automatically sets upstream on first push to new branches
+  - **Complete automation**: From local changes to live GitHub repository in one command
 - **PowerShell `open-nt`**: Extended existing function with cross-platform shell selection
 - **Ubuntu Help System**: Updated `wsl_help` to include `open-nt` cross-platform usage
 - **Documentation**: Comprehensive coverage of cross-platform terminal features
 
-### Planning
-- Additional database providers
-- Testing framework integration
-- Enhanced Docker optimizations
+### Fixed
+- 🐛 **`git-a` Syntax Errors**: Resolved critical issues in the git-a function
+  - **Incomplete regex pattern**: Fixed unclosed regex replacement for repository name sanitization
+  - **Duplicate code removal**: Eliminated ~140 lines of duplicated code in `Create-RemoteRepository` function
+- 🔤 **Naming Convention Functions**: Improved word boundary detection in case conversion
+  - **Smart word detection**: Now properly handles camelCase, PascalCase, snake_case, and kebab-case
+  - **Single word preservation**: Fixed issue where single words like "back" were split into "b-a-c-k"
+  - **Enhanced patterns**: Better regex patterns for detecting transitions between words and acronyms
+  - **Examples**: "MyProject" → "my-project", "XMLParser" → "xml-parser", "back" → "back" (not "b-a-c-k")
 
 ## [1.0.4] - 10-07-2025
 
