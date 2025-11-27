@@ -1,18 +1,6 @@
-# ============================================================================
-# PowerFlow - Enhanced PowerShell Profile
-# ============================================================================
-# A beautiful, intelligent PowerShell profile that supercharges your terminal 
-# experience with smart navigation, enhanced Git workflows, and productivity-
-# focused tools.
-# 
-# Repository: https://github.com/Syntax-Read3r/powerflow
-# Documentation: See README.md for complete feature list and usage examples
-# Version: 1.0.5
-# Release Date: 31-07-2025
-# ============================================================================
 
 # Version management
-$script:POWERFLOW_VERSION = "1.0.5"
+$script:POWERFLOW_VERSION = "1.0.6"
 $script:POWERFLOW_REPO = "Syntax-Read3r/powerflow"
 $script:CHECK_PROFILE_UPDATES = $true
 $script:CHECK_DEPENDENCIES = $true
@@ -3072,6 +3060,70 @@ Set-Alias cp Copy-Item                              # Copy files/directories
 Remove-Item Alias:rm -Force
 Remove-Item Alias:rmdir -Force
 Remove-Item Alias:mv -Force
+
+function rm {
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromRemainingArguments)]
+        [string[]]$Name,
+        [switch]$f
+    )
+
+    # If you gave an explicit path, behave like Remove-Item with safety
+    if ($Name -and $Name.Count -gt 0) {
+        $target = $Name -join ' '
+        $resolved = Get-Item -LiteralPath $target -ErrorAction SilentlyContinue
+
+        if (-not $resolved) {
+            Write-Warning "⚠️ File or directory not found: $target"
+            return
+        }
+
+        if (-not $f) {
+            $confirm = Read-Host "⚠️ Delete '$($resolved.FullName)'? [y/N]"
+            if ($confirm -notin @('y','Y')) {
+                Write-Host "❌ Deletion cancelled." -ForegroundColor Yellow
+                return
+            }
+        }
+
+        Remove-Item -LiteralPath $resolved.FullName -Recurse -Force
+        Write-Host "✅ Deleted: $($resolved.FullName)" -ForegroundColor Green
+        return
+    }
+
+    # No name given → use fzf to pick a file (if available)
+    if (Get-Command fzf -ErrorAction SilentlyContinue) {
+        $selection = Get-ChildItem -Force | fzf --ansi --prompt "Select file/dir to delete: " | ForEach-Object {
+            ($_ -split '\s+', 2)[-1]
+        }
+
+        if (-not $selection) {
+            Write-Host "ℹ️ No selection made. Nothing deleted." -ForegroundColor DarkGray
+            return
+        }
+
+        $resolved = Get-Item -LiteralPath $selection -ErrorAction SilentlyContinue
+        if (-not $resolved) {
+            Write-Warning "⚠️ File or directory not found: $selection"
+            return
+        }
+
+        if (-not $f) {
+            $confirm = Read-Host "⚠️ Delete '$($resolved.FullName)'? [y/N]"
+            if ($confirm -notin @('y','Y')) {
+                Write-Host "❌ Deletion cancelled." -ForegroundColor Yellow
+                return
+            }
+        }
+
+        Remove-Item -LiteralPath $resolved.FullName -Recurse -Force
+        Write-Host "✅ Deleted: $($resolved.FullName)" -ForegroundColor Green
+    }
+    else {
+        Write-Warning "fzf is not installed or not in PATH. Install it or call 'Remove-Item' directly."
+    }
+}
 
 
 
