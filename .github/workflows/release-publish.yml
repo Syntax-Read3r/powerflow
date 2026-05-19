@@ -44,13 +44,15 @@ jobs:
           path: ./release-files
 
       - name: 🚀 Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           tag_name:  ${{ inputs.tag_name }}
           name:      "PowerFlow ${{ inputs.tag_name }}"
           body_path: ./release-files/RELEASE_NOTES.md
           draft:      false
           prerelease: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
           files: |
             ./release-files/install.ps1
             ./release-files/uninstall.ps1

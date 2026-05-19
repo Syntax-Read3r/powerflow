@@ -35,7 +35,7 @@ jobs:
           $version = "${{ inputs.version }}"
           $zipName = "powerflow-v$version.zip"
 
-          Compress-Archive -Path @(
+          $paths = @(
             "Microsoft.PowerShell_profile.ps1",
             "config",
             "components",
@@ -43,7 +43,10 @@ jobs:
             "IMPORT_ORDER.md",
             "CHANGELOG.md",
             "README.md"
-          ) -DestinationPath $zipName -Force
+          )
+          if (Test-Path "docs") { $paths += "docs" }
+
+          Compress-Archive -Path $paths -DestinationPath $zipName -Force
 
           $size = (Get-Item $zipName).Length / 1KB
           Write-Host "✅ Created $zipName ($([math]::Round($size, 1)) KB)"
@@ -52,6 +55,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: component-archive
+          include-hidden-files: true
           path: |
             powerflow-v${{ inputs.version }}.zip
             ubuntu/.bashrc
