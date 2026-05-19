@@ -83,10 +83,15 @@ jobs:
             exit 1
           }
           $found = $matches[1]
-          Write-Host "📦 Settings: $found  |  🏷️ Tag: $expected"
+          $isPreRelease = $expected -match '-'
+          Write-Host "📦 Settings: $found  |  🏷️ Tag: $expected  |  Pre-release: $isPreRelease"
           if ($found -ne $expected) {
-            Write-Error "❌ Version mismatch — update POWERFLOW_VERSION in ${{ env.SETTINGS_FILE }} to $expected"
-            exit 1
+            if ($isPreRelease) {
+              Write-Warning "⚠️  Version mismatch (pre-release tag — skipping hard fail): settings=$found tag=$expected"
+            } else {
+              Write-Error "❌ Version mismatch — update POWERFLOW_VERSION in ${{ env.SETTINGS_FILE }} to $expected"
+              exit 1
+            }
           }
 
           # Advisory check: ubuntu/.bashrc version (warn only, not a blocker)
