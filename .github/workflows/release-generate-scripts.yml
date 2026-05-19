@@ -291,30 +291,30 @@ jobs:
           }
 
           if (-not $notes) {
-            $notes = @"
-## PowerFlow $version
-
-🚀 Enhanced terminal profile — smart navigation, Git workflows, and productivity tools.
-
-### 📦 Installation
-
-**Windows (PowerShell):**
-``````powershell
-irm https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/install.ps1 | iex
-``````
-
-**Ubuntu/WSL:**
-``````bash
-curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/ubuntu-install.sh | bash
-``````
-
-### 📚 Documentation
-- [Installation Guide](https://github.com/Syntax-Read3r/powerflow/blob/main/docs/installation.md)
-- [Features](https://github.com/Syntax-Read3r/powerflow/blob/main/docs/features.md)
-- [Troubleshooting](https://github.com/Syntax-Read3r/powerflow/blob/main/docs/troubleshooting.md)
-
-> Windows: type ``pwsh-h`` after install for help. Ubuntu: type ``wsl_help``.
-"@
+            $notes = @(
+              "## PowerFlow $version",
+              "",
+              "🚀 Enhanced terminal profile — smart navigation, Git workflows, and productivity tools.",
+              "",
+              "### 📦 Installation",
+              "",
+              "**Windows (PowerShell):**",
+              '```powershell',
+              "irm https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/install.ps1 | iex",
+              '```',
+              "",
+              "**Ubuntu/WSL:**",
+              '```bash',
+              "curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/ubuntu-install.sh | bash",
+              '```',
+              "",
+              "### 📚 Documentation",
+              "- [Installation Guide](https://github.com/Syntax-Read3r/powerflow/blob/main/docs/installation.md)",
+              "- [Features](https://github.com/Syntax-Read3r/powerflow/blob/main/docs/features.md)",
+              "- [Troubleshooting](https://github.com/Syntax-Read3r/powerflow/blob/main/docs/troubleshooting.md)",
+              "",
+              "> Windows: type ``pwsh-h`` after install for help. Ubuntu: type ``wsl_help``."
+            ) -join "`n"
           }
 
           Set-Content "RELEASE_NOTES.md" $notes -Encoding UTF8
