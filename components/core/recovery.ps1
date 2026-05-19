@@ -4,7 +4,7 @@
 # Domain   : Core
 # File     : components/core/recovery.ps1
 # Purpose  : Provides an interactive recovery and diagnostics menu for fixing PowerFlow issues
-# Functions: pwsh-recovery
+# Functions: pwsh-recovery, powerflow-uninstall
 # Depends  : components/core/version.ps1, components/help/menu.ps1
 # ==============================================================================
 
@@ -86,4 +86,68 @@ function pwsh-recovery {
             Write-Host "❌ Invalid option" -ForegroundColor Red
         }
     }
+}
+
+function powerflow-uninstall {
+    $profilePath = $PROFILE
+    $profileDir  = Split-Path $profilePath -Parent
+
+    Write-Host ""
+    Write-Host "🗑️  PowerFlow Uninstall" -ForegroundColor Yellow
+    Write-Host "═══════════════════════" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Profile   : $profilePath" -ForegroundColor DarkGray
+    Write-Host "  Directory : $profileDir" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  This will remove:" -ForegroundColor White
+    Write-Host "    • Microsoft.PowerShell_profile.ps1 (bootloader)" -ForegroundColor DarkGray
+    Write-Host "    • config\  (settings)" -ForegroundColor DarkGray
+    Write-Host "    • components\  (all functions)" -ForegroundColor DarkGray
+    Write-Host ""
+
+    $confirm = Read-Host "  Are you sure you want to uninstall PowerFlow? (yes/n)"
+    if ($confirm -ne 'yes') {
+        Write-Host "❌ Uninstall cancelled" -ForegroundColor Yellow
+        return
+    }
+
+    # ── Backup ────────────────────────────────────────────────────────────────
+    if (Test-Path $profilePath) {
+        $backup = "$profilePath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        Copy-Item $profilePath $backup -ErrorAction SilentlyContinue
+        Write-Host "💾 Backup saved: $backup" -ForegroundColor Cyan
+    }
+
+    # ── Remove bootloader ─────────────────────────────────────────────────────
+    if (Test-Path $profilePath) {
+        Remove-Item $profilePath -Force
+        Write-Host "✅ Removed bootloader" -ForegroundColor Green
+    }
+
+    # ── Remove component directories ──────────────────────────────────────────
+    foreach ($folder in @("config", "components")) {
+        $path = Join-Path $profileDir $folder
+        if (Test-Path $path) {
+            Remove-Item $path -Recurse -Force
+            Write-Host "✅ Removed $folder\" -ForegroundColor Green
+        }
+    }
+
+    # ── Optional: remove Scoop dependencies ───────────────────────────────────
+    Write-Host ""
+    $removeDeps = Read-Host "  Remove Scoop dependencies (starship, fzf, zoxide, lsd)? (y/n)"
+    if ($removeDeps -eq 'y') {
+        if (Get-Command scoop -ErrorAction SilentlyContinue) {
+            scoop uninstall starship fzf zoxide lsd 2>$null
+            Write-Host "✅ Scoop dependencies removed" -ForegroundColor Green
+        } else {
+            Write-Host "⚠️  Scoop not found — remove dependencies manually" -ForegroundColor Yellow
+        }
+    }
+
+    Write-Host ""
+    Write-Host "✅ PowerFlow uninstalled" -ForegroundColor Green
+    Write-Host "🔄 Restart PowerShell to apply changes" -ForegroundColor Cyan
+    Write-Host "🙏 Thanks for using PowerFlow!" -ForegroundColor DarkGray
+    Write-Host ""
 }

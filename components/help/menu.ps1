@@ -190,9 +190,10 @@ $verLine
 │  pwsh-recovery       → PowerFlow recovery and diagnostics menu               │
 │                                                                              │
 │  🔄 VERSION MANAGEMENT:                                                      │
-│  Get-PowerFlowVersion → detailed PowerFlow version and status info           │
-│  powerflow-version   → quick version display                                 │
-│  powerflow-update    → check for and install PowerFlow updates               │
+│  Get-PowerFlowVersion    → detailed PowerFlow version and status info        │
+│  powerflow-version       → quick version display                             │
+│  powerflow-update        → check for and install PowerFlow updates           │
+│  powerflow-uninstall     → remove PowerFlow and optionally its dependencies  │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌─ 🔧 DEBUGGING & TESTING ─────────────────────────────────────────────────────┐

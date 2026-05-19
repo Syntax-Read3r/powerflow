@@ -8,7 +8,7 @@ This table lists every component file in the modular architecture, its domain, a
 | `config/PowerFlow.paths.ps1` | Config | Scoop PATH setup, Starship init, Zoxide init, alias removal, auto-navigate |
 | `components/core/version.ps1` | Core | `Check-PowerFlowUpdates`, `powerflow-update`, `Get-PowerFlowVersion`, `powerflow-version` |
 | `components/core/dependencies.ps1` | Core | `Initialize-Dependencies`, `Check-PowerShellUpdates` |
-| `components/core/recovery.ps1` | Core | `pwsh-recovery` |
+| `components/core/recovery.ps1` | Core | `pwsh-recovery`, `powerflow-uninstall` |
 | `components/shared/strings.ps1` | Shared | `Convert-ToKebabCase`, `Convert-ToSnakeCase`, `Convert-ToPascalCase`, `Convert-ToCamelCase` |
 | `components/shared/aliases.ps1` | Shared | `grep` (alias), `less` (alias), `which`, `pwd` (alias) |
 | `components/navigation/bookmarks.ps1` | Navigation | `Initialize-DefaultBookmarks`, `Get-Bookmarks`, `Save-Bookmarks`, `Add-Bookmark`, `Remove-Bookmark`, `Rename-Bookmark`, `Show-BookmarkList` |
