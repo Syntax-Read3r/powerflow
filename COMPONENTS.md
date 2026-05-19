@@ -12,7 +12,7 @@ This table lists every component file in the modular architecture, its domain, a
 | `components/shared/strings.ps1` | Shared | `Convert-ToKebabCase`, `Convert-ToSnakeCase`, `Convert-ToPascalCase`, `Convert-ToCamelCase` |
 | `components/shared/aliases.ps1` | Shared | `grep` (alias), `less` (alias), `which`, `pwd` (alias) |
 | `components/navigation/bookmarks.ps1` | Navigation | `Initialize-DefaultBookmarks`, `Get-Bookmarks`, `Save-Bookmarks`, `Add-Bookmark`, `Remove-Bookmark`, `Rename-Bookmark`, `Show-BookmarkList` |
-| `components/navigation/projects.ps1` | Navigation | `Search-NestedProjects` |
+| `components/navigation/projects.ps1` | Navigation | `Search-Projects` |
 | `components/navigation/nav.ps1` | Navigation | `nav`, `Test-NavFunction`, `z` (alias) |
 | `components/navigation/directory.ps1` | Navigation | `here`, `..`, `...`, `....`, `.....`, `~`, `back`, `cd-` (alias), `copy-pwd` |
 | `components/files/listing.ps1` | Files | `ls`, `la`, `ll`, `clr` (alias), `cat` (alias), `cp` (alias) |

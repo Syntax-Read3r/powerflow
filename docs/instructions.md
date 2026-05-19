@@ -219,10 +219,33 @@ in this document. Always read `CLAUDE.md` first. Key standing rules:
 - Adding any function to `components/` → update `components/help/menu.ps1` **in the same response**.
 - Also update `COMPONENTS.md` in the same response.
 
+### 5b. Check `dependencies.ps1` Before Proposing Tools
+
+**Before recommending or adding any new CLI tool, PowerShell module, or external
+dependency, read `components/core/dependencies.ps1` first.**
+
+- The `$requiredTools` array lists every tool PowerFlow already installs (Starship,
+  fzf, zoxide, lsd, git). Do not suggest re-implementing functionality these tools
+  already provide.
+- If a new tool is genuinely needed, add it to `$requiredTools` in `dependencies.ps1`
+  AND to `install.ps1` so it is installed immediately on fresh install — not deferred
+  to the first profile load.
+- Update `docs/installed-packages.md` in the same response whenever a tool is added
+  or removed.
+
 ### 5a. Automatic Planning for Comprehensive Tasks
 
-**When asked to perform a comprehensive task, create a plan document FIRST and
-await explicit human approval before writing any code or making file changes.**
+**When asked to perform a comprehensive task:**
+
+1. **Create the plan document** in `docs/plan/<area>/<descriptive-name>.md`.
+2. **Output the plan to the user** so they can read it.
+3. **State clearly:** *"Plan is ready — awaiting your approval to proceed."*
+4. **Stop.** Do not write any implementation code, create component files, or make
+   any functional change until the human replies with explicit approval
+   (e.g. "looks good", "proceed", "approved").
+
+This is a hard stop — not a suggestion. Skipping it and implementing immediately
+is a violation of this rule, even if the implementation looks correct.
 
 A task is **comprehensive** if it meets any of the following criteria:
 - Involves **3 or more files** being created or materially changed
@@ -242,7 +265,7 @@ A task is **simple** (no plan needed) if it is:
 docs/plan/<area>/<descriptive-name>.md
 ```
 
-Examples: `docs/plan/git/rollback-ux-rework.md`, `docs/plan/nav/fuzzy-bookmark-search.md`
+Examples: `docs/plan/git/rollback-ux-rework.md`, `docs/plan/navigation/fuzzy-search.md`
 
 The plan must contain:
 1. **Goal** — one-sentence description of the end state
@@ -250,9 +273,6 @@ The plan must contain:
 3. **Chunks** — numbered, ordered phases of work, each listing exact files and changes
 4. **Rollback** — how to undo the change if something goes wrong
 5. **Testing** — how to verify the change worked
-
-After creating the plan, state clearly: **"Plan is ready — awaiting your approval to proceed."**
-Do not write any implementation code until the human explicitly approves.
 
 ---
 

@@ -58,6 +58,52 @@ try {
     exit 1
 }
 
+# Install Scoop if missing
+if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
+    Write-Host "`n📦 Installing Scoop package manager..." -ForegroundColor Yellow
+    try {
+        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+        Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+        Write-Host "✅ Scoop installed" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Failed to install Scoop: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "💡 Install Scoop manually then re-run this script" -ForegroundColor DarkGray
+        exit 1
+    }
+} else {
+    Write-Host "`n✅ Scoop already installed" -ForegroundColor Green
+}
+
+# Install required tools
+Write-Host "`n📦 Installing required tools..." -ForegroundColor Yellow
+$tools = @(
+    @{ Name = "starship"; Description = "Cross-shell prompt" },
+    @{ Name = "fzf";      Description = "Fuzzy finder (used by nav)" },
+    @{ Name = "zoxide";   Description = "Smart directory navigation" },
+    @{ Name = "lsd";      Description = "Modern ls replacement" },
+    @{ Name = "git";      Description = "Version control" }
+)
+
+foreach ($tool in $tools) {
+    if (Get-Command $tool.Name -ErrorAction SilentlyContinue) {
+        Write-Host "   ✅ $($tool.Name) already installed" -ForegroundColor DarkGray
+    } else {
+        try {
+            Write-Host "   Installing $($tool.Name) ($($tool.Description))..." -ForegroundColor DarkGray
+            scoop install $tool.Name *>$null
+            Write-Host "   ✅ $($tool.Name) installed" -ForegroundColor Green
+        } catch {
+            Write-Host "   ❌ Failed to install $($tool.Name): $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+}
+
+# Refresh PATH so newly installed tools are immediately available in this session
+$env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
+            [System.Environment]::GetEnvironmentVariable("PATH", "User")
+
 Write-Host "`n🎉 PowerFlow installed successfully!" -ForegroundColor Green
-Write-Host "🔄 Restart PowerShell or run: . `$PROFILE" -ForegroundColor Cyan
-Write-Host "💡 Type 'pwsh-h' for help after restart" -ForegroundColor Yellow
+Write-Host "   Profile : $profilePath" -ForegroundColor DarkGray
+Write-Host "   Tools   : starship, fzf, zoxide, lsd, git" -ForegroundColor DarkGray
+Write-Host "`n🔄 Restart PowerShell to activate your profile" -ForegroundColor Cyan
+Write-Host "💡 Type 'pwsh-h' for the full command reference" -ForegroundColor Yellow

@@ -3,105 +3,124 @@
 # ==============================================================================
 # Domain   : Navigation
 # File     : components/navigation/projects.ps1
-# Purpose  : Recursively searches nested project directories within a base path
-# Functions: Search-NestedProjects
+# Purpose  : BFS project search up to a configurable depth within a base dir
+# Functions: Search-Projects
 # Depends  : none
 # ==============================================================================
 
-function Search-NestedProjects {
+function Search-Projects {
+    <#
+    .SYNOPSIS
+        Search for project directories using BFS up to MaxDepth levels.
+    .DESCRIPTION
+        Two modes:
+          -All    Collect every directory as a relative path string (for fzf).
+                  No name filtering — fzf handles matching.
+          default Return the single best-matching full path using:
+                  1=exact  2=prefix(starts-with)  3=contains
+                  Shallowest wins among equal-quality matches.
+    .EXAMPLE
+        Search-Projects -Name "power" -BaseDir "$HOME\Code" -MaxDepth 4
+        Search-Projects -BaseDir "$HOME\Code" -MaxDepth 4 -All
+    #>
     param(
-        [string]$projectName,
-        [string]$baseDir,
-        [switch]$verbose
+        [string]$Name    = "",
+        [string]$BaseDir,
+        [int]$MaxDepth   = 4,
+        [switch]$All,
+        [switch]$Verbose
     )
 
-    if ($verbose) { Write-Host "🔍 Starting nested search for '$projectName' in: $baseDir" -ForegroundColor Magenta }
-
-    if (-not (Test-Path $baseDir)) {
-        if ($verbose) { Write-Host "❌ Base directory not found: $baseDir" -ForegroundColor Red }
+    if (-not (Test-Path $BaseDir)) {
+        if ($Verbose) { Write-Host "❌ Search root not found: $BaseDir" -ForegroundColor Red }
         return $null
     }
 
-    # Convert search term for parent folder matching (chess-guru -> chess guru)
-    $parentSearchTerm = $projectName -replace '-', ' '
-    if ($verbose) { Write-Host "🔄 Parent search term: '$parentSearchTerm'" -ForegroundColor Yellow }
+    # Directories that are never worth traversing for project navigation
+    $skipDirs = [System.Collections.Generic.HashSet[string]]::new(
+        [string[]]@(
+            'node_modules', '.git', 'dist', 'build', 'target',
+            'bin', 'obj', '.next', '.nuxt', '__pycache__', '.venv', 'venv',
+            '.cache', 'coverage', '.turbo', 'out'
+        ),
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
 
-    try {
-        $subDirs = Get-ChildItem -LiteralPath $baseDir -Directory -Force
+    $baseNorm = $BaseDir.TrimEnd('\')
+    $queue    = [System.Collections.Generic.Queue[object]]::new()
+    $queue.Enqueue([PSCustomObject]@{ Path = $baseNorm; Depth = 0 })
 
-        foreach ($subDir in $subDirs) {
-            if ($verbose) { Write-Host "  📂 Checking: $($subDir.Name)" -ForegroundColor Gray }
+    # ------------------------------------------------------------------
+    # -All mode: collect every traversable dir as a relative path string
+    # ------------------------------------------------------------------
+    if ($All) {
+        $results = [System.Collections.Generic.List[string]]::new()
 
-            # Check if this subdirectory name matches our parent search term
-            $isParentMatch = ($subDir.Name -like "*$parentSearchTerm*") -or ($subDir.Name -eq $parentSearchTerm)
+        while ($queue.Count -gt 0) {
+            $node = $queue.Dequeue()
+            if ($node.Depth -ge $MaxDepth) { continue }
 
-            if ($isParentMatch) {
-                if ($verbose) { Write-Host "  ⚡ Found potential parent: $($subDir.Name)" -ForegroundColor Green }
-
-                # Look inside this subdirectory for the actual project
-                try {
-                    $innerDirs = Get-ChildItem -LiteralPath $subDir.FullName -Directory -Force
-
-                    foreach ($innerDir in $innerDirs) {
-                        if ($verbose) { Write-Host "    🔍 Inner dir: $($innerDir.Name)" -ForegroundColor Cyan }
-
-                        # Check for exact match first
-                        if ($innerDir.Name -eq $projectName) {
-                            if ($verbose) { Write-Host "    ⭐ EXACT MATCH FOUND!" -ForegroundColor Green }
-                            return $innerDir.FullName
-                        }
-
-                        # Check for fuzzy match
-                        if ($innerDir.Name -like "*$projectName*") {
-                            if ($verbose) { Write-Host "    ⚡ FUZZY MATCH FOUND!" -ForegroundColor Green }
-                            return $innerDir.FullName
-                        }
-                    }
-                } catch {
-                    if ($verbose) { Write-Host "    ❌ Could not access inner directories: $($_.Exception.Message)" -ForegroundColor Red }
-                }
-            }
-
-            # Also check if we should recursively search this directory (for deeper nesting)
             try {
-                $deeperDirs = Get-ChildItem -LiteralPath $subDir.FullName -Directory -Force
+                $children = Get-ChildItem -LiteralPath $node.Path -Directory -Force -ErrorAction SilentlyContinue
+            } catch { continue }
 
-                foreach ($deeperDir in $deeperDirs) {
-                    # Check if this deeper directory matches our parent search term
-                    if ($deeperDir.Name -like "*$parentSearchTerm*" -or $deeperDir.Name -eq $parentSearchTerm) {
-                        if ($verbose) { Write-Host "  🔎 Found deeper parent: $($subDir.Name)\$($deeperDir.Name)" -ForegroundColor Blue }
+            foreach ($child in $children) {
+                # Skip build artifacts and hidden dirs
+                if ($skipDirs.Contains($child.Name))    { continue }
+                if ($child.Name.StartsWith('.'))         { continue }
 
-                        # Look inside this deeper directory
-                        try {
-                            $deepestDirs = Get-ChildItem -LiteralPath $deeperDir.FullName -Directory -Force
+                $rel = $child.FullName.Substring($baseNorm.Length + 1)
+                $results.Add($rel)
 
-                            foreach ($deepestDir in $deepestDirs) {
-                                if ($verbose) { Write-Host "    🔍 Deepest dir: $($deepestDir.Name)" -ForegroundColor Cyan }
-
-                                # Check for exact match
-                                if ($deepestDir.Name -eq $projectName) {
-                                    if ($verbose) { Write-Host "    ⭐ DEEP EXACT MATCH FOUND!" -ForegroundColor Green }
-                                    return $deepestDir.FullName
-                                }
-
-                                # Check for fuzzy match
-                                if ($deepestDir.Name -like "*$projectName*") {
-                                    if ($verbose) { Write-Host "    ⚡ DEEP FUZZY MATCH FOUND!" -ForegroundColor Green }
-                                    return $deepestDir.FullName
-                                }
-                            }
-                        } catch {
-                            if ($verbose) { Write-Host "    ❌ Could not access deepest directories: $($_.Exception.Message)" -ForegroundColor Red }
-                        }
-                    }
-                }
-            } catch {
-                # Silent fail for deeper search - this is optional
+                $queue.Enqueue([PSCustomObject]@{ Path = $child.FullName; Depth = $node.Depth + 1 })
             }
         }
-    } catch {
-        if ($verbose) { Write-Host "❌ Error searching nested projects: $($_.Exception.Message)" -ForegroundColor Red }
+
+        return $results
     }
 
-    return $null
+    # ------------------------------------------------------------------
+    # Best-match mode (fallback when fzf is unavailable)
+    # ------------------------------------------------------------------
+    if ($Verbose) {
+        Write-Host "🔍 Searching '$Name' in: $BaseDir (depth limit: $MaxDepth)" -ForegroundColor Cyan
+    }
+
+    $bestMatch = $null
+    $bestScore = 99
+
+    while ($queue.Count -gt 0) {
+        $node = $queue.Dequeue()
+        if ($node.Depth -ge $MaxDepth) { continue }
+
+        try {
+            $children = Get-ChildItem -LiteralPath $node.Path -Directory -Force -ErrorAction SilentlyContinue
+        } catch { continue }
+
+        foreach ($child in $children) {
+            if ($skipDirs.Contains($child.Name)) { continue }
+            if ($child.Name.StartsWith('.'))      { continue }
+
+            $score = if     ($child.Name -eq $Name)         { 1 }
+                     elseif ($child.Name -like "$Name*")    { 2 }
+                     elseif ($child.Name -like "*$Name*")   { 3 }
+                     else                                   { 99 }
+
+            if ($Verbose -and $score -lt 99) {
+                $indent = '  ' * ($node.Depth + 1)
+                $tag    = switch ($score) { 1 { 'exact' } 2 { 'prefix' } default { 'contains' } }
+                Write-Host "$indent📁 $($child.Name)  [$tag]" -ForegroundColor Green
+            }
+
+            if ($score -lt $bestScore) {
+                $bestScore = $score
+                $bestMatch = $child.FullName
+                if ($score -eq 1) { return $child.FullName }
+            }
+
+            $queue.Enqueue([PSCustomObject]@{ Path = $child.FullName; Depth = $node.Depth + 1 })
+        }
+    }
+
+    return $bestMatch
 }

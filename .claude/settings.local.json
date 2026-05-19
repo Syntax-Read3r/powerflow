@@ -5,7 +5,11 @@
       "Bash(rm:*)",
       "Bash(chmod:*)",
       "Bash(git -C \"C:\\\\Users\\\\munya\\\\Code\\\\Projects\\\\Application\\\\Windows Application\\\\powerflow\" show HEAD:Microsoft.PowerShell_profile.ps1)",
-      "PowerShell(New-Item *)"
+      "PowerShell(New-Item *)",
+      "Bash(New-Item -ItemType Directory -Force -Path \"C:\\\\Users\\\\munya\\\\Code\\\\Projects\\\\Application\\\\Windows Application\\\\powerflow\\\\docs\\\\plan\\\\navigation\")",
+      "Bash(Out-Null)",
+      "Bash(New-Item -ItemType Directory -Force -Path \"C:\\\\Users\\\\munya\\\\Code\\\\Projects\\\\Application\\\\Windows Application\\\\powerflow\\\\docs\\\\plan\\\\core\")",
+      "Bash(Write-Host \"dirs created\")"
     ],
     "deny": []
   }
