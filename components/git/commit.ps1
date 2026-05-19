@@ -3,16 +3,12 @@
 # ==============================================================================
 # Domain   : Git
 # File     : components/git/commit.ps1
-# Purpose  : Interactive add→commit→push workflow with fzf interface and version tagging
+# Purpose  : Interactive add→commit→push workflow with fzf interface
 # Functions: git-a, git-a-plus, git-aa, git-aq, git-ad, git-am
 # Depends  : components/git/remote.ps1
 # ==============================================================================
 
 function git-a {
-    param(
-        [Alias("vr")]
-        [switch]$VersionRelease  # -VersionRelease or -vr to trigger version tagging
-    )
 
     # Check if we're in a git repository
     if (-not (git rev-parse --git-dir 2>$null)) {
@@ -90,42 +86,7 @@ function git-a {
         }
     }
 
-    # Determine next version if -VersionRelease is specified
-    $nextTag = ""
-    if ($VersionRelease) {
-        Write-Host "🔍 Determining next version from repository..." -ForegroundColor Cyan
-
-        # Get the latest version tag from git
-        $latestTag = git describe --tags --abbrev=0 2>$null
-
-        if ($latestTag -and $latestTag -match '^v?(\d+)\.(\d+)\.(\d+)$') {
-            # Parse current version
-            $major = [int]$matches[1]
-            $minor = [int]$matches[2]
-            $patch = [int]$matches[3]
-
-            # Auto-increment patch version
-            $newPatch = $patch + 1
-            $newVersion = "$major.$minor.$newPatch"
-            $nextTag = "v$newVersion"
-
-            Write-Host "📈 Latest tag: $latestTag → Next tag: $nextTag" -ForegroundColor Green
-        } else {
-            # No existing tags or invalid format, start with v1.0.0
-            $nextTag = "v1.0.0"
-            if ($latestTag) {
-                Write-Host "⚠️  Found tag '$latestTag' but it doesn't match semantic versioning" -ForegroundColor Yellow
-            }
-            Write-Host "🆕 Will create initial tag: $nextTag" -ForegroundColor Green
-        }
-    }
-
-    # Show tagging info if -VersionRelease is specified
-    $workflowHeader = if ($VersionRelease) {
-        "🚀 Git Add → Commit → Push → Tag $nextTag Workflow"
-    } else {
-        "🚀 Git Add → Commit → Push Workflow"
-    }
+    $workflowHeader = "🚀 Git Add → Commit → Push Workflow"
 
     # Minimalistic formatted display for fzf
     $formLines = @(
@@ -138,10 +99,6 @@ function git-a {
         $formLines += "📡 Remote: $($remoteUrl -replace 'https://github.com/', '')"
     } else {
         $formLines += "📁 Status: Local-only (no remote)"
-    }
-
-    if ($VersionRelease) {
-        $formLines += "🏷️ Will create tag: $nextTag"
     }
 
     $formLines += @(
@@ -185,13 +142,7 @@ function git-a {
         return
     }
 
-    # Add immutable prefix based on operation type
-    $commitMessage = ""
-    if ($VersionRelease) {
-        $commitMessage = "vr-commit ($nextTag) - $userMessage"
-    } else {
-        $commitMessage = "commit - $userMessage"
-    }
+    $commitMessage = "commit - $userMessage"
 
     # Execute the workflow with progress indicators
     Write-Host "📂 Adding all changes..." -ForegroundColor Yellow
@@ -288,27 +239,6 @@ function git-a {
         Write-Host "📍 URL: $remoteUrl" -ForegroundColor Cyan
     }
 
-    # Tag and push tag if -VersionRelease parameter is specified
-    if ($VersionRelease) {
-        Write-Host "🏷️ Creating tag $nextTag..." -ForegroundColor Cyan
-        git tag $nextTag
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ git tag failed" -ForegroundColor Red
-            Write-Host "💡 Tag may already exist. Use 'git tag -d $nextTag' to delete it first" -ForegroundColor DarkGray
-            return
-        }
-        Write-Host "✅ Tag $nextTag created successfully" -ForegroundColor Green
-
-        Write-Host "🚀 Pushing tag to remote..." -ForegroundColor Cyan
-        git push origin $nextTag
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "✅ Successfully pushed tag $nextTag" -ForegroundColor Green
-            Write-Host "🎉 This will trigger the GitHub Actions release workflow!" -ForegroundColor Magenta
-        } else {
-            Write-Host "❌ git push tag failed" -ForegroundColor Red
-            Write-Host "💡 You may need to delete the local tag and try again" -ForegroundColor DarkGray
-        }
-    }
 }
 
 function git-a-plus {
@@ -519,11 +449,7 @@ function git-a-plus {
     git-a
 }
 
-# Add shorthand aliases with consistent naming
-function git-aa { git-a-plus -Quick }      # Quick version
-function git-ad { git-a-plus -DryRun }     # Dry run version
-function git-am { git-a-plus -AmendLast }  # Amend last commit
-# Add shorthand aliases
-function git-aq { git-a-plus -Quick }      # Quick version
-function git-ad { git-a-plus -DryRun }     # Dry run version
-function git-am { git-a-plus -AmendLast }  # Amend last commit
+function git-aa { git-a-plus -Quick }
+function git-aq { git-a-plus -Quick }
+function git-ad { git-a-plus -DryRun }
+function git-am { git-a-plus -AmendLast }

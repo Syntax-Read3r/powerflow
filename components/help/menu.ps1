@@ -120,6 +120,15 @@ function pwsh-h {
 │    git-ad            → 🔍 dry run mode (preview changes)                     │
 │    git-am            → 🔄 amend last commit with new message                 │
 │                                                                              │
+│  🏷️  RELEASE WORKFLOW:                                                       │
+│  git-release         → 🚀 bump version → update settings → commit → tag     │
+│  git-rl              → alias for git-release                                 │
+│    patch             → v2.0.0 → v2.0.1  (bug fixes)                         │
+│    minor             → v2.0.0 → v2.1.0  (new features)                      │
+│    major             → v2.0.0 → v3.0.0  (breaking changes)                  │
+│    custom            → enter a specific version number                       │
+│  (automatically updates config/PowerFlow.settings.ps1 and triggers CI)      │
+│                                                                              │
 │  🔄 ROLLBACK WORKFLOW:                                                       │
 │  git-rb <commit>     → 🔄 create rollback branch from specific commit        │
 │  git-rba             → 🚀 rollback branch add-commit-push (rollback-* only)  │

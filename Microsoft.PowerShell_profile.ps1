@@ -64,6 +64,7 @@ _pf_source "components\git\commit.ps1"
 _pf_source "components\git\branches.ps1"
 _pf_source "components\git\rollback.ps1"
 _pf_source "components\git\interactive.ps1"
+_pf_source "components\git\release.ps1"
 _pf_source "components\git\reset.ps1"
 
 # ------------------------------------------------------------------------------
