@@ -9,11 +9,19 @@
 # ==============================================================================
 
 function pwsh-h {
+    # Build the version banner line with centred padding so the box stays aligned
+    $verText   = "Enhanced Profile v$($script:POWERFLOW_VERSION)"
+    $innerWidth = 78
+    $totalPad  = $innerWidth - $verText.Length
+    $leftPad   = ' ' * [math]::Floor($totalPad / 2)
+    $rightPad  = ' ' * [math]::Ceiling($totalPad / 2)
+    $verLine   = "║$leftPad$verText$rightPad║"
+
     $helpText = @"
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                    🐚 POWERSHELL COMMAND REFERENCE                           ║
-║                         Enhanced Profile v6.0                                ║
+$verLine
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 ┌─ 🧭 SMART NAVIGATION & BOOKMARKS ────────────────────────────────────────────┐
