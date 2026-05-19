@@ -51,6 +51,10 @@ jobs:
           $size = (Get-Item $zipName).Length / 1KB
           Write-Host "✅ Created $zipName ($([math]::Round($size, 1)) KB)"
 
+      - name: 📋 Stage .bashrc for upload
+        shell: pwsh
+        run: Copy-Item "ubuntu/.bashrc" ".bashrc"
+
       - name: 📤 Upload component-archive Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -58,4 +62,4 @@ jobs:
           include-hidden-files: true
           path: |
             powerflow-v${{ inputs.version }}.zip
-            ubuntu/.bashrc
+            .bashrc
