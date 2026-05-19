@@ -6,11 +6,11 @@
 # This file is the entry point. It calls component workflows in declared order.
 # To modify release behaviour, edit the relevant component file:
 #
-#   validate-release.yml   — version check, file existence, syntax test
-#   generate-scripts.yml   — install/uninstall scripts + release notes
-#   bundle-archive.yml     — component zip archive + ubuntu/.bashrc
-#   publish-release.yml    — create GitHub release with all assets
-#   notify-release.yml     — post-release log / notifications
+#   release-validate.yml          — version check, file existence, syntax test
+#   release-generate-scripts.yml  — install/uninstall scripts + release notes
+#   release-bundle-archive.yml    — component zip archive + ubuntu/.bashrc
+#   release-publish.yml           — create GitHub release with all assets
+#   release-notify.yml            — post-release log / notifications
 #
 # generate-scripts and bundle-archive run in parallel (no dependency on each other).
 # ==============================================================================
@@ -26,26 +26,26 @@ jobs:
 
   # ── Stage 1: Validate ───────────────────────────────────────────────────────
   validate:
-    uses: ./.github/workflows/components/validate-release.yml
+    uses: ./.github/workflows/release-validate.yml
 
   # ── Stage 2: Build (parallel) ───────────────────────────────────────────────
   generate-scripts:
     needs: validate
-    uses: ./.github/workflows/components/generate-scripts.yml
+    uses: ./.github/workflows/release-generate-scripts.yml
     with:
       version:  ${{ needs.validate.outputs.version }}
       tag_name: ${{ needs.validate.outputs.tag_name }}
 
   bundle-archive:
     needs: validate
-    uses: ./.github/workflows/components/bundle-archive.yml
+    uses: ./.github/workflows/release-bundle-archive.yml
     with:
       version: ${{ needs.validate.outputs.version }}
 
   # ── Stage 3: Publish ────────────────────────────────────────────────────────
   publish:
     needs: [validate, generate-scripts, bundle-archive]
-    uses: ./.github/workflows/components/publish-release.yml
+    uses: ./.github/workflows/release-publish.yml
     with:
       version:  ${{ needs.validate.outputs.version }}
       tag_name: ${{ needs.validate.outputs.tag_name }}
@@ -55,7 +55,7 @@ jobs:
   notify:
     needs: [validate, publish]
     if: success()
-    uses: ./.github/workflows/components/notify-release.yml
+    uses: ./.github/workflows/release-notify.yml
     with:
       version:  ${{ needs.validate.outputs.version }}
       tag_name: ${{ needs.validate.outputs.tag_name }}

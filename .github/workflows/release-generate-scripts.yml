@@ -4,7 +4,7 @@
 # Called by  : .github/workflows/release.yml
 # Responsibility: Generate install.ps1, uninstall.ps1, ubuntu-install.sh,
 #                 ubuntu-uninstall.sh, and RELEASE_NOTES.md. Uploads them as
-#                 the 'release-scripts' artifact for publish-release.yml to use.
+#                 the 'release-scripts' artifact for release-publish.yml to use.
 # Inputs     : version, tag_name
 # Artifact   : release-scripts
 # ==============================================================================
