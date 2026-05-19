@@ -58,7 +58,7 @@ function pwsh-recovery {
         }
         "4" {
             Write-Host "🔄 Reinstalling PowerFlow..." -ForegroundColor Yellow
-            irm "https://raw.githubusercontent.com/$script:POWERFLOW_REPO/main/install.ps1" | iex
+            irm "https://github.com/$script:POWERFLOW_REPO/releases/latest/download/install.ps1" | iex
         }
         "5" {
             $confirm = Read-Host "⚠️  Remove current profile? This will reset PowerFlow. (y/n)"

@@ -8,9 +8,9 @@
 # Depends  : none
 # ==============================================================================
 
-Remove-Item Alias:rm -Force
-Remove-Item Alias:rmdir -Force
-Remove-Item Alias:mv -Force
+Remove-Item Alias:rm    -Force -ErrorAction SilentlyContinue
+Remove-Item Alias:rmdir -Force -ErrorAction SilentlyContinue
+Remove-Item Alias:mv    -Force -ErrorAction SilentlyContinue
 
 function rm {
     [CmdletBinding()]

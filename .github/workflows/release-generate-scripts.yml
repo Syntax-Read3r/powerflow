@@ -100,6 +100,7 @@ jobs:
                       Copy-Item `$src (Join-Path `$profileDir `$folder) -Recurse -Force
                   }
               }
+
               foreach (`$doc in @("COMPONENTS.md", "IMPORT_ORDER.md", "CHANGELOG.md", "README.md")) {
                   `$src = Join-Path `$extractDir `$doc
                   if (Test-Path `$src) { Copy-Item `$src (Join-Path `$profileDir `$doc) -Force }

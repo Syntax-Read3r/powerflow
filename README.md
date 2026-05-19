@@ -94,7 +94,7 @@ powerflow-update   # Built-in update system
 ### One-Line Install (Recommended)
 
 ```powershell
-irm https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/install.ps1 | iex
+irm https://github.com/Syntax-Read3r/powerflow/releases/latest/download/install.ps1 | iex
 ```
 
 That's it! PowerFlow will:
@@ -108,22 +108,15 @@ That's it! PowerFlow will:
 
 ```powershell
 # Download and run install script
-Invoke-RestMethod -Uri "https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/install.ps1" -OutFile "install.ps1"
+Invoke-RestMethod -Uri "https://github.com/Syntax-Read3r/powerflow/releases/latest/download/install.ps1" -OutFile "install.ps1"
 .\install.ps1
 ```
 
-### Manual Installation
+### Specific Version
 
 ```powershell
-# 1. Create profile directory if needed
-$profileDir = Split-Path $PROFILE -Parent
-if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force }
-
-# 2. Download PowerFlow profile
-Invoke-RestMethod -Uri "https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/Microsoft.PowerShell_profile.ps1" -OutFile $PROFILE
-
-# 3. Reload profile
-. $PROFILE
+# Replace v2.0.0 with the version you want
+irm https://github.com/Syntax-Read3r/powerflow/releases/download/v2.0.0/install.ps1 | iex
 ```
 
 ### Prerequisites
