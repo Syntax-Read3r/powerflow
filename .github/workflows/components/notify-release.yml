@@ -1,0 +1,35 @@
+# ==============================================================================
+# PowerFlow — Notify Release (reusable workflow)
+# ==============================================================================
+# Called by  : .github/workflows/release.yml
+# Responsibility: Log the release outcome and print the install command.
+#                 Extend this file to add Slack/Discord/email notifications.
+# Inputs     : version, tag_name
+# ==============================================================================
+
+name: Notify Release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+        description: Version string (e.g. 2.0.0)
+      tag_name:
+        required: true
+        type: string
+        description: Full tag name (e.g. v2.0.0)
+
+jobs:
+  notify:
+    name: 📢 Post-Release Notification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🎉 Log Release Success
+        run: |
+          echo "🎉 PowerFlow ${{ inputs.tag_name }} released successfully!"
+          echo "📦 Release URL : https://github.com/Syntax-Read3r/powerflow/releases/tag/${{ inputs.tag_name }}"
+          echo "📥 Windows     : irm https://github.com/Syntax-Read3r/powerflow/releases/download/${{ inputs.tag_name }}/install.ps1 | iex"
+          echo "📥 Ubuntu      : curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/download/${{ inputs.tag_name }}/ubuntu-install.sh | bash"

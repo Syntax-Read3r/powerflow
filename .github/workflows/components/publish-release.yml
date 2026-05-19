@@ -1,0 +1,62 @@
+# ==============================================================================
+# PowerFlow — Publish GitHub Release (reusable workflow)
+# ==============================================================================
+# Called by  : .github/workflows/release.yml
+# Responsibility: Download the 'release-scripts' and 'component-archive'
+#                 artifacts produced by the generate and bundle jobs, then
+#                 create the GitHub release with all assets attached.
+# Inputs     : version, tag_name
+# Permissions: contents: write (passed through from caller via secrets: inherit)
+# ==============================================================================
+
+name: Publish GitHub Release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+        description: Version string (e.g. 2.0.0)
+      tag_name:
+        required: true
+        type: string
+        description: Full tag name (e.g. v2.0.0)
+
+jobs:
+  publish:
+    name: 🚀 Publish GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 📥 Download release-scripts Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-scripts
+          path: ./release-files
+
+      - name: 📥 Download component-archive Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: component-archive
+          path: ./release-files
+
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name:  ${{ inputs.tag_name }}
+          name:      "PowerFlow ${{ inputs.tag_name }}"
+          body_path: ./release-files/RELEASE_NOTES.md
+          draft:      false
+          prerelease: false
+          files: |
+            ./release-files/install.ps1
+            ./release-files/uninstall.ps1
+            ./release-files/ubuntu-install.sh
+            ./release-files/ubuntu-uninstall.sh
+            ./release-files/powerflow-v${{ inputs.version }}.zip
+            ./release-files/.bashrc
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

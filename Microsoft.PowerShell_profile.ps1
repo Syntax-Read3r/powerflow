@@ -1,7 +1,7 @@
 # ==============================================================================
 # PowerFlow — Bootloader
 # ==============================================================================
-# Version  : 1.0.5
+# Version  : 2.0.0
 # Repo     : https://github.com/Syntax-Read3r/powerflow
 # Purpose  : Thin bootloader that dot-sources all component files in order
 # ==============================================================================

@@ -4,7 +4,8 @@
       "Bash(npm install:*)",
       "Bash(rm:*)",
       "Bash(chmod:*)",
-      "Bash(git -C \"C:\\\\Users\\\\munya\\\\Code\\\\Projects\\\\Application\\\\Windows Application\\\\powerflow\" show HEAD:Microsoft.PowerShell_profile.ps1)"
+      "Bash(git -C \"C:\\\\Users\\\\munya\\\\Code\\\\Projects\\\\Application\\\\Windows Application\\\\powerflow\" show HEAD:Microsoft.PowerShell_profile.ps1)",
+      "PowerShell(New-Item *)"
     ],
     "deny": []
   }

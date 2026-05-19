@@ -1,0 +1,111 @@
+# ==============================================================================
+# PowerFlow — Validate Release (reusable workflow)
+# ==============================================================================
+# Called by  : .github/workflows/release.yml
+# Responsibility: Verify the tag version matches the settings file, all required
+#                 files exist, and the bootloader parses without syntax errors.
+# Outputs    : version (e.g. 2.0.0), tag_name (e.g. v2.0.0)
+# ==============================================================================
+
+name: Validate Release
+
+on:
+  workflow_call:
+    outputs:
+      version:
+        description: Parsed version string (e.g. 2.0.0)
+        value: ${{ jobs.validate.outputs.version }}
+      tag_name:
+        description: Full tag name (e.g. v2.0.0)
+        value: ${{ jobs.validate.outputs.tag_name }}
+
+env:
+  PROFILE_FILE:    Microsoft.PowerShell_profile.ps1
+  SETTINGS_FILE:   config/PowerFlow.settings.ps1
+  UBUNTU_BASHRC:   ubuntu/.bashrc
+  UBUNTU_INSTALL:  ubuntu/install.sh
+  UBUNTU_UNINSTALL: ubuntu/uninstall.sh
+
+jobs:
+  validate:
+    name: 🔍 Validate Release
+    runs-on: windows-latest
+    outputs:
+      version:  ${{ steps.parse_tag.outputs.version }}
+      tag_name: ${{ steps.parse_tag.outputs.tag_name }}
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Parse Version from Tag
+        id: parse_tag
+        shell: pwsh
+        run: |
+          $tagName = "${{ github.ref_name }}"
+          $version  = $tagName -replace '^v', ''
+          "version=$version"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "tag_name=$tagName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "🏷️  Tag: $tagName  |  📦 Version: $version"
+
+      - name: ✅ Validate Required Files Exist
+        shell: pwsh
+        run: |
+          $required = @(
+            "${{ env.PROFILE_FILE }}",
+            "${{ env.SETTINGS_FILE }}",
+            "${{ env.UBUNTU_BASHRC }}"
+          )
+          $optional = @(
+            "${{ env.UBUNTU_INSTALL }}",
+            "${{ env.UBUNTU_UNINSTALL }}"
+          )
+          $failed = $false
+          foreach ($f in $required) {
+            if (Test-Path $f) { Write-Host "✅ $f" }
+            else { Write-Error "❌ Required file missing: $f"; $failed = $true }
+          }
+          foreach ($f in $optional) {
+            if (Test-Path $f) { Write-Host "✅ $f" }
+            else { Write-Warning "⚠️  Optional file not found: $f" }
+          }
+          if ($failed) { exit 1 }
+
+      - name: 🔍 Validate Version in Settings File
+        shell: pwsh
+        run: |
+          $expected = "${{ steps.parse_tag.outputs.version }}"
+
+          # Primary check: config/PowerFlow.settings.ps1 (v2.0.0+ modular layout)
+          $content = Get-Content "${{ env.SETTINGS_FILE }}" -Raw
+          if ($content -notmatch '\$script:POWERFLOW_VERSION = "([^"]+)"') {
+            Write-Error "❌ POWERFLOW_VERSION not found in ${{ env.SETTINGS_FILE }}"
+            exit 1
+          }
+          $found = $matches[1]
+          Write-Host "📦 Settings: $found  |  🏷️ Tag: $expected"
+          if ($found -ne $expected) {
+            Write-Error "❌ Version mismatch — update POWERFLOW_VERSION in ${{ env.SETTINGS_FILE }} to $expected"
+            exit 1
+          }
+
+          # Advisory check: ubuntu/.bashrc version (warn only, not a blocker)
+          $bashrc = Get-Content "${{ env.UBUNTU_BASHRC }}" -Raw
+          if ($bashrc -match 'WSL_PROFILE_VERSION="([^"]+)"') {
+            if ($matches[1] -ne $expected) {
+              Write-Warning "⚠️  Ubuntu .bashrc WSL_PROFILE_VERSION ($($matches[1])) does not match tag ($expected)"
+            }
+          }
+          Write-Host "✅ Version validated"
+
+      - name: 🧪 Test Bootloader Syntax
+        shell: pwsh
+        run: |
+          try {
+            $null = [System.Management.Automation.PSParser]::Tokenize(
+              (Get-Content "${{ env.PROFILE_FILE }}" -Raw), [ref]$null)
+            Write-Host "✅ Bootloader syntax valid"
+          } catch {
+            Write-Error "❌ Syntax error in ${{ env.PROFILE_FILE }}: $($_.Exception.Message)"
+            exit 1
+          }

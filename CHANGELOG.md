@@ -9,6 +9,25 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [2.0.0] - 2026-05-19
+
+### Breaking Change — Modular Architecture
+The profile is no longer a single monolithic file. `Microsoft.PowerShell_profile.ps1` is now a thin bootloader (~109 lines) that dot-sources 28 component files organized by domain. **Installation must use the `powerflow-v2.0.0.zip` archive** — downloading only the profile file will produce a broken install.
+
+### Architecture
+- **Component-based layout** inspired by React feature-folder conventions
+- **28 component files** split across 10 domain folders under `components/`
+- **`config/`** folder for settings (`PowerFlow.settings.ps1`) and environment init (`PowerFlow.paths.ps1`)
+- **`_pf_source` bootloader helper** — warns on missing components instead of hard-failing, portable via `$script:PowerFlowRoot`
+- **`COMPONENTS.md`** — registry table of every file, domain, and exported function
+- **`IMPORT_ORDER.md`** — documented rationale for load order at each stage
+- **`docs/`** and **`tests/`** scaffold directories for future growth
+
+### Changed
+- `$script:POWERFLOW_VERSION` moved from main profile to `config/PowerFlow.settings.ps1`
+- Release workflow updated: version validation now checks `config/PowerFlow.settings.ps1`; releases now ship a `powerflow-v2.0.0.zip` archive containing the full component tree
+- Install script updated to download and extract the zip archive into the profile directory
+
 ## [1.0.5] - 2025-01-23
 
 ### Added

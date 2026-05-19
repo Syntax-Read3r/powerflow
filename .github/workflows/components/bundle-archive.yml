@@ -1,0 +1,57 @@
+# ==============================================================================
+# PowerFlow — Bundle Component Archive (reusable workflow)
+# ==============================================================================
+# Called by  : .github/workflows/release.yml
+# Responsibility: Package the full modular layout (bootloader + config/ +
+#                 components/ + docs) into powerflow-v{version}.zip, plus
+#                 include ubuntu/.bashrc as a standalone release asset.
+#                 Uploads both as the 'component-archive' artifact.
+# Inputs     : version
+# Artifact   : component-archive
+# ==============================================================================
+
+name: Bundle Component Archive
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+        description: Version string (e.g. 2.0.0)
+
+jobs:
+  bundle:
+    name: 📦 Bundle Component Archive
+    runs-on: windows-latest
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 📦 Create Component Zip
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          $zipName = "powerflow-v$version.zip"
+
+          Compress-Archive -Path @(
+            "Microsoft.PowerShell_profile.ps1",
+            "config",
+            "components",
+            "COMPONENTS.md",
+            "IMPORT_ORDER.md",
+            "CHANGELOG.md",
+            "README.md"
+          ) -DestinationPath $zipName -Force
+
+          $size = (Get-Item $zipName).Length / 1KB
+          Write-Host "✅ Created $zipName ($([math]::Round($size, 1)) KB)"
+
+      - name: 📤 Upload component-archive Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: component-archive
+          path: |
+            powerflow-v${{ inputs.version }}.zip
+            ubuntu/.bashrc
