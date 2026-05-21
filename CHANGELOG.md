@@ -9,6 +9,11 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [2.0.1] - 2026-05-21
+
+### Fixed
+- 🐛 **`nav` multi-word query truncation**: `nav source code` previously only searched for `"source"` — every word after the first was silently dropped. Extra positional arguments are now joined into a single query string before being passed to fzf (or the BFS fallback), so `nav source code` correctly searches for `"source code"`.
+
 ## [2.0.0] - 2026-05-19
 
 ### Breaking Change — Modular Architecture

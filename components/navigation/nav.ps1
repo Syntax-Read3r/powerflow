@@ -109,6 +109,10 @@ function nav {
 
     if ($verbose) { Write-Host "📂 Search root: $searchRoot" -ForegroundColor Cyan }
 
+    # Join all supplied positional words into one query string so that
+    # "nav source code" passes "source code" to fzf rather than just "source".
+    $query = (@($command, $param1, $param2) | Where-Object { $_ }) -join ' '
+
     # ---- Fuzzy search via fzf (primary path) ----------------------------------
     if (Get-Command fzf -ErrorAction SilentlyContinue) {
 
@@ -121,7 +125,7 @@ function nav {
         }
 
         $selected = $candidates | fzf `
-            --query         $command `
+            --query         $query `
             --select-1 `
             --exit-0 `
             --reverse `
@@ -146,14 +150,14 @@ function nav {
     }
 
     # ---- Fallback: BFS best-match (when fzf is not available) ----------------
-    $result = Search-Projects -Name $command -BaseDir $searchRoot -MaxDepth 4 -Verbose:$verbose
+    $result = Search-Projects -Name $query -BaseDir $searchRoot -MaxDepth 4 -Verbose:$verbose
 
     if ($result) {
         Set-Location $result
         Write-Host "🎯 $([System.IO.Path]::GetFileName($result))" -ForegroundColor Green
         Write-Host "📍 $result" -ForegroundColor DarkGray
     } else {
-        Write-Host "❌ No project matching '$command' found" -ForegroundColor Red
+        Write-Host "❌ No project matching '$query' found" -ForegroundColor Red
         Write-Host "   Searched 4 levels deep in: $searchRoot" -ForegroundColor DarkGray
         Write-Host "💡 Install fzf for fuzzy search: scoop install fzf" -ForegroundColor DarkGray
     }
