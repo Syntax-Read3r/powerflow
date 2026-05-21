@@ -9,7 +9,7 @@
 # ==============================================================================
 
 # Version management
-$script:POWERFLOW_VERSION = "2.0.1"
+$script:POWERFLOW_VERSION = "2.0.0"
 $script:POWERFLOW_REPO = "Syntax-Read3r/powerflow"
 $script:CHECK_PROFILE_UPDATES = $true
 $script:CHECK_DEPENDENCIES = $true
