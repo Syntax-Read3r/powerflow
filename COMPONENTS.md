@@ -32,4 +32,5 @@ This table lists every component file in the modular architecture, its domain, a
 | `components/projects/create-next.ps1` | Projects | `create-next`, `create-n` |
 | `components/system/config-files.ps1` | System | `pwsh-profile`, `pwsh-starship`, `pwsh-settings` |
 | `components/system/shutdown.ps1` | System | `shutdown`, `s` |
+| `components/system/path.ps1` | System | `set-path` |
 | `components/help/menu.ps1` | Help | `pwsh-h` |

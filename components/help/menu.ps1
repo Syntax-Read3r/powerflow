@@ -194,6 +194,10 @@ $verLine
 │  powerflow-version       → quick version display                             │
 │  powerflow-update        → check for and install PowerFlow updates           │
 │  powerflow-uninstall     → remove PowerFlow and optionally its dependencies  │
+│                                                                              │
+│  📍 PATH MANAGEMENT:                                                         │
+│  set-path <path>            → add directory to User PATH (no quotes needed)  │
+│  set-path -system <path>    → add directory to System PATH (admin required)  │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌─ 🔧 DEBUGGING & TESTING ─────────────────────────────────────────────────────┐

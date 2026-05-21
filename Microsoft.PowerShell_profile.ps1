@@ -92,6 +92,7 @@ $_p = _pf_path "components\projects\create-next.ps1"; if ($_p) { . $_p }
 # ------------------------------------------------------------------------------
 $_p = _pf_path "components\system\config-files.ps1"; if ($_p) { . $_p }
 $_p = _pf_path "components\system\shutdown.ps1";     if ($_p) { . $_p }
+$_p = _pf_path "components\system\path.ps1";         if ($_p) { . $_p }
 
 # ------------------------------------------------------------------------------
 # 11. Help system
