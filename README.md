@@ -70,9 +70,9 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 # Smart navigation - finds projects intelligently
 nav my-react-app
 
-# Enhanced Git workflow with auto-versioning
+# Enhanced Git workflow
 git-a               # Beautiful add → commit → push interface
-git-a -vr           # Same workflow + auto-increment version tag
+git-rl              # Interactive release: pick patch/minor/major, commit, tag, push
 
 # Cut and paste files
 mv important-file   # Cuts file
@@ -165,7 +165,7 @@ nav .. src           # Go up one level, then into 'src' directory
 ```powershell
 # Enhanced add-commit-push
 git-a                # Interactive workflow with file preview
-git-a -vr            # Same workflow + auto-version tagging
+git-rl               # Interactive release: bump version, commit, tag, push
 
 # Rollback system
 git-rb abc123        # Create rollback branch from commit
@@ -208,24 +208,27 @@ gh-l-reset           # Remove saved token
 
 ## 🔧 Version Control Setup
 
-### Repository-Based Versioning
+### Release Workflow
 
-PowerFlow uses **smart repository-based versioning** for releases. Instead of hardcoded version numbers, it automatically determines the next version from your Git tags.
+PowerFlow releases are managed through `git-rl` (`git-release`), an interactive fzf workflow that handles the full release pipeline in one command.
 
 #### How It Works
 
 ```powershell
-# Check your current tags
-git tag --list --sort=-version:refname
-
-# Use git-a -vr for version releases
-git-a -vr   # Automatically increments from latest tag
+git-rl   # or: git-release
 ```
 
+The workflow:
+1. Reads the current version from `config/PowerFlow.settings.ps1`
+2. Presents a bump-type selector (patch / minor / major / custom)
+3. Prompts for a release description
+4. Updates `config/PowerFlow.settings.ps1` to the new version
+5. Commits all staged changes, pushes, creates the tag, and pushes the tag
+
 **Example Flow:**
-- **Latest tag**: `v1.0.3` → **Next tag**: `v1.0.4`
-- **Latest tag**: `v2.1.5` → **Next tag**: `v2.1.6`
-- **No tags**: Creates `v1.0.0`
+- **Current**: `v2.0.1` + pick **patch** → **Next**: `v2.0.2`
+- **Current**: `v2.0.1` + pick **minor** → **Next**: `v2.1.0`
+- **Current**: `v2.0.1` + pick **major** → **Next**: `v3.0.0`
 
 #### Setting Up Development Environment
 
@@ -243,7 +246,8 @@ git remote add upstream https://github.com/Syntax-Read3r/powerflow.git
 git checkout -b feature/your-feature-name
 
 # 4. Make your changes and test
-# Edit Microsoft.PowerShell_profile.ps1
+# Edit files in components/ — the profile is now a bootloader
+# that dot-sources 28 component files under components/ and config/
 # Test your changes thoroughly
 
 # 5. Commit and push your changes
@@ -261,32 +265,29 @@ For maintainers creating releases:
 git checkout main
 git pull upstream main
 
-# 2. Use PowerFlow's version release workflow
-git-a -vr           # Auto-increments version and creates tag
+# 2. Run the release workflow
+git-rl              # fzf picker: choose patch/minor/major/custom
 
 # This will:
-# - Create a commit with your changes
-# - Auto-increment version from latest git tag  
-# - Create new version tag (e.g., v1.0.4)
-# - Push commit and tag to remote
-# - Trigger GitHub Actions release workflow
+# - Present a version bump selector
+# - Update config/PowerFlow.settings.ps1 to the new version
+# - Commit all changes with a versioned commit message
+# - Push the commit to remote
+# - Create and push the version tag (e.g., v2.0.2)
+# - Trigger the GitHub Actions release pipeline
 ```
 
 #### Manual Version Control
 
-If you need to create specific versions:
+If you need to manage tags directly:
 
 ```powershell
-# Create specific version tag
-git tag v2.0.0
-git push origin v2.0.0
-
-# Delete incorrect tags
-git tag -d v1.0.4           # Delete locally
-git push origin :v1.0.4     # Delete remotely
-
 # View tag history
 git tag --list --sort=-version:refname
+
+# Delete incorrect tags
+git tag -d v2.0.0           # Delete locally
+git push origin :v2.0.0     # Delete remotely
 ```
 
 #### GitHub Actions Integration
@@ -313,9 +314,9 @@ PowerFlow includes automated release workflows:
 - Don't create version tags (maintainers only)
 
 **For Maintainers:**
-- Use `git-a -vr` for version releases
-- Ensure CHANGELOG.md is updated
-- Test release workflow in development
+- Use `git-rl` for all version releases
+- Update `CHANGELOG.md` before running `git-rl`
+- Test the release workflow in development
 - Monitor GitHub Actions for build status
 
 **Version Tag Format:**
@@ -339,16 +340,16 @@ PowerFlow includes automated release workflows:
 
 ### Enhanced Git Workflow
 
-| Command           | Description                            |
-| ----------------- | -------------------------------------- |
-| `git-a`           | Beautiful add → commit → push workflow |
-| `git-a -vr`       | Add → commit → push → auto-version tag |
-| `git-rb <commit>` | Create rollback branch from commit     |
-| `git-rba`         | Rollback branch add-commit-push        |
-| `git-mrb`         | Merge rollback branch to main          |
-| `git-l`           | Interactive log viewer with actions    |
-| `git-b`           | Branch picker and manager              |
-| `git-s`           | Interactive status viewer              |
+| Command           | Description                                          |
+| ----------------- | ---------------------------------------------------- |
+| `git-a`           | Beautiful add → commit → push workflow               |
+| `git-rl`          | Interactive release: bump version, commit, tag, push |
+| `git-rb <commit>` | Create rollback branch from commit                   |
+| `git-rba`         | Rollback branch add-commit-push                      |
+| `git-mrb`         | Merge rollback branch to main                        |
+| `git-l`           | Interactive log viewer with actions                  |
+| `git-b`           | Branch picker and manager                            |
+| `git-s`           | Interactive status viewer                            |
 
 ### File Operations
 
@@ -406,7 +407,7 @@ pwsh-profile  # Opens profile in VS Code for editing
 
 ### Disable Features
 
-Edit these variables at the top of the profile:
+Edit `config/PowerFlow.settings.ps1` and set any of these flags to `$false`:
 
 ```powershell
 $script:CHECK_DEPENDENCIES = $false    # Skip dependency checks
