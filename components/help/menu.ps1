@@ -168,6 +168,7 @@ $verLine
 │  gh-l [count]        → 🚀 list your GitHub repos with activity stats         │
 │  gh-l-reset          → remove saved GitHub token                             │
 │  gh-l-status         → check if GitHub token is saved                        │
+│  gh-l-org [org]      → 🏢 browse org repos; clone one or all                 │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌─ 🪟 TERMINAL TAB MANAGEMENT ─────────────────────────────────────────────────┐

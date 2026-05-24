@@ -9,6 +9,24 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [2.1.0] - Unreleased
+
+### Added
+- 🏢 **GitHub Organisation Browser** (`gh-l-org`): Browse and bulk-clone GitHub
+  organisation repositories from the terminal.
+  - **Org picker**: fzf list of all organisations the authenticated user belongs to
+  - **Repo picker**: identical column layout to `gh-l` — privacy, name, last push date,
+    24h commits, 1w commits, language
+  - **Action menu**: clone selected repo, clone ALL repos into `.\<orgName>\` folder,
+    open in browser, copy HTTPS or SSH URL
+  - **Bulk clone**: uses `Push-Location`/`Pop-Location` to restore CWD; reports per-repo
+    success/failure counts on completion
+  - **Token scope fallback**: automatically retries with `type=public` and warns user if
+    token lacks `read:org` scope
+  - **Direct org argument**: `gh-l-org mycompany` skips the org picker
+  - **Shared token helpers**: `_GhL-SetToken`, `_GhL-GetToken`, `_GhL-CommitCount`
+    extracted to module level — shared by `gh-l` and `gh-l-org`, compiled once per session
+
 ## [2.0.1] - 2026-05-21
 
 ### Fixed

@@ -26,7 +26,7 @@ This table lists every component file in the modular architecture, its domain, a
 | `components/git/interactive.ps1` | Git | `git-l`, `git-log`, `git-s`, `git-st`, `git-pick`, `git-p`, `git-stash`, `git-remote`, `git-sh`, `git-r` |
 | `components/git/release.ps1` | Git | `git-release`, `git-rl` |
 | `components/git/reset.ps1` | Git | `git-f`, `git-next` |
-| `components/github/browser.ps1` | GitHub | `gh-l`, `gh-l-reset`, `gh-l-status` |
+| `components/github/browser.ps1` | GitHub | `gh-l`, `gh-l-reset`, `gh-l-status`, `gh-l-org` |
 | `components/terminal/tabs.ps1` | Terminal | `send-keys`, `open-nt`, `close-ct`, `next-t`, `prev-t`, `open-t`, `close-t` |
 | `components/terminal/wsl.ps1` | Terminal | `open-ubuntu`, `Get-WindowsTerminalProfiles`, `open-wsl-simple` |
 | `components/projects/create-next.ps1` | Projects | `create-next`, `create-n` |

@@ -406,3 +406,46 @@ components/
 - Functions use kebab-case: `git-release`, `nav`, `copy-pwd`.
 - All cross-component variables use `$script:` scope prefix.
 - Do not add a new top-level component folder without updating the bootloader load order.
+
+---
+
+## 9. Release Prompt After New Features
+
+### Rule
+
+**Whenever a new user-facing feature is fully implemented** (new function, new command,
+new integration), the agent must, at the end of that response:
+
+1. **State whether the change warrants a release** — new features always do.
+2. **Read `config/PowerFlow.settings.ps1`** to get the current `$script:POWERFLOW_VERSION`.
+3. **Calculate the correct next version** using semver:
+   - Bug fix only → **patch** bump (X.Y.Z → X.Y.Z+1)
+   - New backward-compatible feature → **minor** bump (X.Y.Z → X.Y+1.0)
+   - Breaking change → **major** bump (X.Y.Z → X+1.0.0)
+4. **Update `CHANGELOG.md`** — add a new `## [X.Y.Z] - Unreleased` section above the
+   previous latest release with bullet points describing the feature. Do this in the
+   same response as the feature implementation.
+5. **Prompt the user** with this exact block:
+
+```
+---
+📦 Release ready — this is a <patch|minor|major> change.
+
+Current version : vX.Y.Z
+Next version    : vA.B.C
+
+Before releasing:
+  1. Review the [A.B.C] entry in CHANGELOG.md and adjust wording if needed.
+  2. Run: git-rl
+  3. In the fzf picker, select: <patch|minor|major>
+     → git-rl will update config/PowerFlow.settings.ps1, commit, tag vA.B.C, push, and trigger CI.
+---
+```
+
+### Notes
+
+- `git-rl` is **fully interactive** — there is no CLI flag for bump type. The agent
+  cannot pre-select the option. Always tell the user which option to pick.
+- The agent must NOT run `git-rl` itself. Release commits must be initiated by the human.
+- If a session contains both a bug fix and a new feature, use the higher bump (minor).
+- The release prompt is **in addition to** the normal session log — do not skip the log.
