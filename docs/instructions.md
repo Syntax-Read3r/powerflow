@@ -475,3 +475,8 @@ advance and users will continue installing the previous version.
 - The generic `## [Unreleased]` section at the top is only for changes not yet
   assigned to a version number. Move its contents into the versioned section
   before running `git-rl`.
+- **Do NOT add installation commands to CHANGELOG entries.** The CI workflow
+  (`release-generate-scripts.yml`) automatically appends a `## 📦 Installation`
+  section with the versioned `irm` and `curl` one-liners to every `RELEASE_NOTES.md`
+  it generates. Duplicating them in CHANGELOG would cause them to appear twice
+  on the GitHub release page.

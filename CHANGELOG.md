@@ -9,7 +9,7 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [2.2.0] - Unreleased
+## [2.2.0] - 2026-05-24
 
 ### Added
 - 🔔 **Version display on startup**: profile load line now shows the running version

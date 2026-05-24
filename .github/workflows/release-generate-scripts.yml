@@ -318,6 +318,26 @@ jobs:
             ) -join "`n"
           }
 
+          # Always append install commands so the GitHub release page always has a
+          # copy-pasteable one-liner regardless of what CHANGELOG contains.
+          $installBlock = @(
+            "",
+            "---",
+            "",
+            "## 📦 Installation",
+            "",
+            "**Windows (PowerShell):**",
+            '```powershell',
+            "irm https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/install.ps1 | iex",
+            '```',
+            "",
+            "**Ubuntu/WSL:**",
+            '```bash',
+            "curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/ubuntu-install.sh | bash",
+            '```'
+          ) -join "`n"
+          $notes = $notes.TrimEnd() + $installBlock
+
           Set-Content "RELEASE_NOTES.md" $notes -Encoding UTF8
           Write-Host "✅ Generated RELEASE_NOTES.md"
 
