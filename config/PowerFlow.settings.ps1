@@ -9,7 +9,7 @@
 # ==============================================================================
 
 # Version management
-$script:POWERFLOW_VERSION = "2.1.0"
+$script:POWERFLOW_VERSION = "2.2.0"
 $script:POWERFLOW_REPO = "Syntax-Read3r/powerflow"
 $script:CHECK_PROFILE_UPDATES = $true
 $script:CHECK_DEPENDENCIES = $true
@@ -22,5 +22,6 @@ $script:DB_PASSWORD = "password"
 
 # Suppress progress bars for faster installation
 $ProgressPreference = 'SilentlyContinue'
+
 
 
