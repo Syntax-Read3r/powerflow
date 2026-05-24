@@ -94,7 +94,7 @@ powerflow-update   # Built-in update system
 ### One-Line Install (Recommended)
 
 ```powershell
-irm https://github.com/Syntax-Read3r/powerflow/releases/latest/download/install.ps1 | iex
+irm https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/install.ps1 | iex
 ```
 
 That's it! PowerFlow will:

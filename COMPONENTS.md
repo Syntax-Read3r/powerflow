@@ -6,7 +6,7 @@ This table lists every component file in the modular architecture, its domain, a
 |------|--------|-----------|
 | `config/PowerFlow.settings.ps1` | Config | `$script:POWERFLOW_VERSION`, `$script:POWERFLOW_REPO`, `$script:CHECK_PROFILE_UPDATES`, `$script:CHECK_DEPENDENCIES`, `$script:CHECK_UPDATES`, `$script:DB_USERNAME`, `$script:DB_PASSWORD` |
 | `config/PowerFlow.paths.ps1` | Config | Scoop PATH setup, Starship init, Zoxide init, alias removal, auto-navigate |
-| `components/core/version.ps1` | Core | `Check-PowerFlowUpdates`, `powerflow-update`, `Get-PowerFlowVersion`, `powerflow-version` |
+| `components/core/version.ps1` | Core | `Check-PowerFlowUpdates`, `powerflow-update`, `Get-PowerFlowVersion`, `powerflow-version`, `pwsh-reminders` |
 | `components/core/dependencies.ps1` | Core | `Initialize-Dependencies`, `Check-PowerShellUpdates` |
 | `components/core/recovery.ps1` | Core | `pwsh-recovery`, `powerflow-uninstall` |
 | `components/shared/strings.ps1` | Shared | `Convert-ToKebabCase`, `Convert-ToSnakeCase`, `Convert-ToPascalCase`, `Convert-ToCamelCase` |

@@ -112,6 +112,6 @@ if ($script:CHECK_UPDATES)         { Check-PowerShellUpdates }
 # ------------------------------------------------------------------------------
 # Done
 # ------------------------------------------------------------------------------
-Write-Host "✅ PowerFlow profile loaded! Type " -NoNewline -ForegroundColor Green
+Write-Host "✅ PowerFlow v${script:POWERFLOW_VERSION} loaded. Type " -NoNewline -ForegroundColor Green
 Write-Host "pwsh-h" -NoNewline -ForegroundColor Yellow
 Write-Host " for help" -ForegroundColor Green

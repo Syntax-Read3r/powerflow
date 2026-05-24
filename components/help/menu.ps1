@@ -194,6 +194,7 @@ $verLine
 │  Get-PowerFlowVersion    → detailed PowerFlow version and status info        │
 │  powerflow-version       → quick version display                             │
 │  powerflow-update        → check for and install PowerFlow updates           │
+│  pwsh-reminders          → toggle update reminder notifications on/off       │
 │  powerflow-uninstall     → remove PowerFlow and optionally its dependencies  │
 │                                                                              │
 │  📍 PATH MANAGEMENT:                                                         │

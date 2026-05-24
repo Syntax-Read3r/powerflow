@@ -51,21 +51,38 @@ function Check-PowerFlowUpdates {
         $currentVersion = [Version]$script:POWERFLOW_VERSION
 
         if ($latestVersion -gt $currentVersion) {
+            Write-Host ""
             Write-Host "🚀 PowerFlow update available: v$currentVersion → v$latestVersion" -ForegroundColor Cyan
-            Write-Host "📍 Release: $($latestRelease.html_url)" -ForegroundColor DarkGray
+            Write-Host "   Notes: $($latestRelease.html_url)" -ForegroundColor DarkGray
+            Write-Host ""
+            Write-Host "   1) Install now" -ForegroundColor White
+            Write-Host "   2) Skip today" -ForegroundColor White
+            Write-Host "   3) Turn off update reminders" -ForegroundColor White
+            Write-Host ""
 
-            $choice = Read-Host "🔄 Update now? (y/n/s=skip today)"
+            $choice = Read-Host "   Choice [1/2/3]"
 
             switch ($choice) {
-                "y" {
+                "1" {
                     powerflow-update
                 }
-                "s" {
-                    Write-Host "⏭️  Skipping PowerFlow update check for today" -ForegroundColor Yellow
+                "2" {
+                    Write-Host "⏭️  Skipping update check for today." -ForegroundColor Yellow
                     $today | Set-Content $updateCheckFile
                 }
+                "3" {
+                    $settingsPath = Join-Path $script:PowerFlowRoot "config\PowerFlow.settings.ps1"
+                    if (Test-Path $settingsPath) {
+                        $raw = Get-Content $settingsPath -Raw
+                        $raw = $raw -replace '\$script:CHECK_PROFILE_UPDATES\s*=\s*\$true', '$script:CHECK_PROFILE_UPDATES = $false'
+                        Set-Content $settingsPath $raw -Encoding UTF8
+                    }
+                    $script:CHECK_PROFILE_UPDATES = $false
+                    $today | Set-Content $updateCheckFile
+                    Write-Host "🔕 Update reminders disabled. Run 'pwsh-reminders' to re-enable." -ForegroundColor Yellow
+                }
                 default {
-                    Write-Host "⏭️  PowerFlow update skipped" -ForegroundColor DarkGray
+                    Write-Host "⏭️  Update skipped." -ForegroundColor DarkGray
                 }
             }
         } else {
@@ -235,4 +252,45 @@ function powerflow-version {
     Write-Host "🚀 PowerFlow v${script:POWERFLOW_VERSION}" -ForegroundColor Cyan
     Write-Host "📍 Repository: ${script:POWERFLOW_REPO}" -ForegroundColor DarkGray
     Write-Host "📄 Profile: $PROFILE" -ForegroundColor DarkGray
+}
+
+function pwsh-reminders {
+    $settingsPath = Join-Path $script:PowerFlowRoot "config\PowerFlow.settings.ps1"
+    $current = $script:CHECK_PROFILE_UPDATES
+    $statusText = if ($current) { "✅ ON" } else { "🔕 OFF" }
+
+    Write-Host ""
+    Write-Host "🔔 Update reminders: $statusText" -ForegroundColor Cyan
+    Write-Host ""
+
+    if ($current) {
+        $choice = Read-Host "Turn off update reminders? (y/n)"
+        if ($choice -eq 'y') {
+            if (Test-Path $settingsPath) {
+                $raw = Get-Content $settingsPath -Raw
+                $raw = $raw -replace '\$script:CHECK_PROFILE_UPDATES\s*=\s*\$true', '$script:CHECK_PROFILE_UPDATES = $false'
+                Set-Content $settingsPath $raw -Encoding UTF8
+            }
+            $script:CHECK_PROFILE_UPDATES = $false
+            Write-Host "🔕 Update reminders disabled. Run 'pwsh-reminders' to re-enable." -ForegroundColor Yellow
+        } else {
+            Write-Host "No change." -ForegroundColor DarkGray
+        }
+    } else {
+        $choice = Read-Host "Turn on update reminders? (y/n)"
+        if ($choice -eq 'y') {
+            if (Test-Path $settingsPath) {
+                $raw = Get-Content $settingsPath -Raw
+                $raw = $raw -replace '\$script:CHECK_PROFILE_UPDATES\s*=\s*\$false', '$script:CHECK_PROFILE_UPDATES = $true'
+                Set-Content $settingsPath $raw -Encoding UTF8
+            }
+            $script:CHECK_PROFILE_UPDATES = $true
+            # Delete daily-check marker so the update check fires on next profile load
+            Remove-Item "$env:TEMP\.powerflow_update_check" -ErrorAction SilentlyContinue
+            Write-Host "🔔 Update reminders enabled. You'll be notified on the next profile load." -ForegroundColor Green
+        } else {
+            Write-Host "No change." -ForegroundColor DarkGray
+        }
+    }
+    Write-Host ""
 }

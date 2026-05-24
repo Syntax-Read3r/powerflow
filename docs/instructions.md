@@ -449,3 +449,29 @@ Before releasing:
 - The agent must NOT run `git-rl` itself. Release commits must be initiated by the human.
 - If a session contains both a bug fix and a new feature, use the higher bump (minor).
 - The release prompt is **in addition to** the normal session log — do not skip the log.
+
+### Post-release verification (mandatory)
+
+After the human runs `git-rl`, the release is NOT complete until the following
+is confirmed — do not close the session without verifying:
+
+1. Open `https://github.com/Syntax-Read3r/powerflow/releases` — the new version
+   must appear as a **Release** (not just a tag) within ~3 minutes.
+2. Confirm the release has the expected assets attached: `install.ps1`,
+   `powerflow-vX.Y.Z.zip`, `RELEASE_NOTES.md`.
+3. If the CI pipeline did not run or failed, investigate the Actions tab and
+   re-trigger if needed. Do NOT mark the release complete until assets exist.
+
+**Never assume the tag push alone is sufficient.** A git tag triggers CI; CI
+creates the GitHub Release object. If CI fails, `releases/latest` does not
+advance and users will continue installing the previous version.
+
+### CHANGELOG ordering rule
+
+- Entries are **newest-first** — the in-progress version is always at the top.
+- Use `## [X.Y.Z] - Unreleased` while the feature is being built.
+- After post-release verification confirms the GitHub release exists, update
+  the header to `## [X.Y.Z] - YYYY-MM-DD` (actual release date).
+- The generic `## [Unreleased]` section at the top is only for changes not yet
+  assigned to a version number. Move its contents into the versioned section
+  before running `git-rl`.

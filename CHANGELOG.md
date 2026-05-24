@@ -9,6 +9,31 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [2.2.0] - Unreleased
+
+### Added
+- 🔔 **Version display on startup**: profile load line now shows the running version
+  (`✅ PowerFlow v2.2.0 loaded`) so the current version is always visible without
+  running a command.
+- 📋 **3-option update prompt**: when a new version is available the bare `y/n/s` prompt
+  is replaced with a numbered menu — `1) Install now`, `2) Skip today`,
+  `3) Turn off update reminders`.
+- 🔕 **Persistent reminder toggle (option 3)**: choosing option 3 permanently writes
+  `$script:CHECK_PROFILE_UPDATES = $false` to `config/PowerFlow.settings.ps1` so
+  the setting survives profile reloads without manual editing.
+- 🔔 **`pwsh-reminders` command**: interactive toggle for update reminder notifications.
+  Shows current ON/OFF status and flips it by rewriting the settings file. Re-enabling
+  clears the daily check marker so the update check fires on the very next load.
+
+### Fixed
+- 📦 **README install URL**: changed from `releases/latest/download/install.ps1` to
+  `raw.githubusercontent.com/main/install.ps1` — the old URL resolved to v1.0.5 because
+  newer releases were never confirmed to have created GitHub Release objects.
+
+### Documentation
+- 📋 **`docs/instructions.md`**: added mandatory post-release verification rule to §9
+  and a CHANGELOG ordering convention so release drift cannot recur silently.
+
 ## [2.1.0] - Unreleased
 
 ### Added

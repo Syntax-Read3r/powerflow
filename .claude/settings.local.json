@@ -9,7 +9,8 @@
       "Bash(New-Item -ItemType Directory -Force -Path \"C:\\\\Users\\\\munya\\\\Code\\\\Projects\\\\Application\\\\Windows Application\\\\powerflow\\\\docs\\\\plan\\\\navigation\")",
       "Bash(Out-Null)",
       "Bash(New-Item -ItemType Directory -Force -Path \"C:\\\\Users\\\\munya\\\\Code\\\\Projects\\\\Application\\\\Windows Application\\\\powerflow\\\\docs\\\\plan\\\\core\")",
-      "Bash(Write-Host \"dirs created\")"
+      "Bash(Write-Host \"dirs created\")",
+      "Bash(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\munya\\\\Code\\\\Projects\\\\Application\\\\Windows Application\\\\powerflow\\\\docs\\\\plan\\\\core\")"
     ],
     "deny": []
   }
