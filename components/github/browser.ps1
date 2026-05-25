@@ -449,10 +449,12 @@ function gh-l-org {
 
         $orgChoices = $orgs | ForEach-Object {
             $desc = if ($_.description) { $_.description } else { "no description" }
-            "🏢 {0,-30}  {1}" -f $_.login, $desc
+            "$($_.login)`t$("🏢 {0,-30}  {1}" -f $_.login, $desc)"
         }
 
         $orgSelection = $orgChoices | fzf --ansi --reverse --height=20 --border `
+            --with-nth=2.. `
+            --delimiter="`t" `
             --prompt="🏢 Select organisation: " --header="Enter to select · Esc to cancel"
 
         if (-not $orgSelection) {
@@ -460,10 +462,12 @@ function gh-l-org {
             return
         }
 
-        if ($orgSelection -match '🏢\s+(\S+)') {
-            $selectedOrg = $Matches[1].Trim()
+        $parsedOrg = ($orgSelection -split "`t", 2)[0].Trim()
+        if ($parsedOrg -and ($orgs.login -contains $parsedOrg)) {
+            $selectedOrg = $parsedOrg
         } else {
             Write-Host "❌ Could not parse organisation name from selection." -ForegroundColor Red
+            Write-Host "   Raw selection: $orgSelection" -ForegroundColor DarkGray
             return
         }
     }

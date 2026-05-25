@@ -9,6 +9,15 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [2.2.1] - Unreleased
+
+### Fixed
+- 🏢 **`gh-l-org` organisation selection parsing**: fixed a bug where selecting
+  an organisation from the fzf picker could fail with
+  `Could not parse organisation name from selection.` The picker now stores the
+  organisation login in a stable hidden field instead of parsing it from the
+  emoji-decorated display text.
+
 ## [2.2.0] - 2026-05-24
 
 ### Added
