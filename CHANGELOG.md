@@ -139,6 +139,17 @@ All notable changes to PowerFlow will be documented in this file.
   previous value — so reading it means setting `0` and restoring immediately. Skip the
   restore and every file the shell creates from then on is world-writable.)
 
+- 💥 **Re-running the installer permanently disabled its own cleanup.** The manifest
+  recorded `installedByPowerFlow = (-not $preExisting)` — but on a *second* install every
+  tool is present **precisely because the first install put it there**. So each re-install
+  quietly flipped `starship`, `fzf`, `zoxide` and `lsd` to "the user already had this", and
+  `uninstall` then correctly honoured a manifest that had become a lie, leaving all of them
+  behind forever.
+
+  Ownership is now carried forward from the previous manifest. The safety guarantee is
+  unchanged and still verified in CI in **both** directions: a tool PowerFlow installed is
+  removed; a tool that was already on the machine (`git`, on the runner) is never touched.
+
 - 💥 **Re-installing then uninstalling left a dead profile behind.** `install.ps1` backed
   up *any* existing profile — including PowerFlow's own. So on a second install the
   "backup" was a copy of PowerFlow, and `uninstall.ps1`, which restores the backup,

@@ -191,6 +191,30 @@ if (Test-Path $uninstallSrc) {
 # here — this is why the adapter layer exists.
 $dependencies = @()
 
+# WHO OWNS EACH TOOL, ACROSS RE-INSTALLS.
+#
+# "Did PowerFlow install this?" cannot be answered by looking at the system, because on a
+# SECOND install the tool is present — precisely because the FIRST install put it there.
+# Recording `installedByPowerFlow = (-not $preExisting)` therefore flipped every tool to
+# `false` on any re-install, and uninstall then dutifully left all of them behind. Running
+# the installer twice permanently disabled its own cleanup.
+#
+# The previous manifest is the only record of who put a tool there, so carry it forward.
+# (Same reasoning as the profile backup above: on a re-install, trust what we wrote last
+# time over what the system looks like now.)
+$priorlyOwned = @{}
+if ($alreadyInstalled) {
+    try {
+        $prior = (Get-Content $manifestPath -Raw | ConvertFrom-Json).dependencies
+        foreach ($d in @($prior)) {
+            if ($d.installedByPowerFlow) { $priorlyOwned[$d.name] = $true }
+        }
+    }
+    catch {
+        Write-Host "⚠️  Could not read the previous manifest — dependency ownership may be lost." -ForegroundColor Yellow
+    }
+}
+
 if (-not $NoDeps) {
     Write-Host ""
     Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
@@ -209,23 +233,32 @@ if (-not $NoDeps) {
         # Record whether PowerFlow installed it — uninstall must NEVER remove a
         # tool the user already had.
         $preExisting = Test-Dependency $tool
+        $weOwnIt     = $priorlyOwned.ContainsKey($tool)   # we installed it on an earlier run
 
         if ($preExisting) {
-            Write-Host "   ✅ $tool (already present)" -ForegroundColor DarkGray
+            if ($weOwnIt) {
+                Write-Host "   ✅ $tool (installed by PowerFlow earlier)" -ForegroundColor DarkGray
+            } else {
+                Write-Host "   ✅ $tool (already present)" -ForegroundColor DarkGray
+            }
         }
         else {
             Write-Host "   Installing $tool..." -ForegroundColor DarkGray
             if (Install-Dependency $tool) {
                 Write-Host "   ✅ $tool installed" -ForegroundColor Green
+                $weOwnIt = $true
             } else {
                 Write-Host "   ⚠️  $tool failed — try: $(Get-DependencyInstallHint $tool)" -ForegroundColor Yellow
             }
         }
 
         $dependencies += @{
-            name                 = $tool
-            manager              = (Get-PackageManagerName)
-            installedByPowerFlow = (-not $preExisting)
+            name    = $tool
+            manager = (Get-PackageManagerName)
+            # Ours if we JUST installed it, or if a previous install recorded it as ours.
+            # Never `-not $preExisting` on its own: on a re-install the tool is present
+            # BECAUSE we installed it, and that would silently disown it.
+            installedByPowerFlow = ((-not $preExisting) -or $weOwnIt)
         }
     }
 }
