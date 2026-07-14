@@ -123,6 +123,17 @@ All notable changes to PowerFlow will be documented in this file.
 - 🧪 **`install.sh` ignored a local checkout and always downloaded `main`** — which meant
   the Linux CI job checked out the tag being released and then validated *different* code.
   It now installs from the checkout when run inside one.
+- 🐧 **PowerShell could not install on Debian** — `install.sh` always built an *Ubuntu*
+  repo URL from the distro's `VERSION_ID` (it never read `ID`), so on Debian it 404'd and
+  fell back to a **hardcoded `debian/12`** repo. That put a *bookworm* source on a
+  *trixie* box, and the bookworm signing key carries a **SHA1** binding signature that
+  Debian 13's apt rejects outright:
+  `"OpenPGP signature verification failed … SHA1 is not considered secure"` →
+  `"The repository … is not signed."` The installer now reads the real `ID`/`VERSION_ID`
+  and requests the correct repo (`config/debian/13/…`, which exists and works). Added a
+  universal fallback that installs PowerShell from Microsoft's official release archive —
+  no repo, no GPG key, so repo-signing problems cannot block installation on any distro.
+  Verified end-to-end on Debian 13 (trixie).
 - 💥 **Dependency install crashed for every non-root user** — `"The term 's' is not
   recognized"`. PowerShell **unrolls a single-element array into a scalar**, so
   `$sudo = if (root) { @() } else { @('sudo') }` produced the *string* `'sudo'`, making
