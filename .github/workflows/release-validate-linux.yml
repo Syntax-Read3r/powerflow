@@ -259,11 +259,41 @@ jobs:
             || { echo "::error::non-interactive bash exec'd pwsh — this breaks scp/cron"; exit 1; }
 
           # THE LOCKOUT GUARD: if pwsh vanishes, the user must still get a shell.
-          sudo mv "$(command -v pwsh)" /tmp/pwsh.bak
-          out=$(bash -ic 'echo SURVIVED' 2>/dev/null | tail -1)
-          sudo mv /tmp/pwsh.bak "$(dirname "$(command -v bash)")/pwsh" 2>/dev/null || sudo mv /tmp/pwsh.bak /usr/bin/pwsh
+          #
+          # The hook's third guard is `command -v pwsh`, so the honest way to test it is to
+          # run an interactive bash in which pwsh is NOT FINDABLE.
+          #
+          # Do NOT do that by moving the binary. This step used to run
+          #     sudo mv "$(command -v pwsh)" /tmp/pwsh.bak
+          # which moves only the FIRST pwsh on PATH. The runner has pwsh preinstalled at
+          # /usr/bin/pwsh *and* a snap at /snap/bin/pwsh, so the other one stayed
+          # resolvable, the hook fired, and `exec pwsh` replaced bash before `echo
+          # SURVIVED` could run. The test then reported a lockout that did not exist —
+          # and its restore line would have dropped the snap symlink on top of the
+          # preinstalled /usr/bin/pwsh.
+          #
+          # Instead: build a sandbox PATH holding only the tools ~/.bashrc needs, and no
+          # pwsh at all. Nothing is moved, so nothing has to be put back.
+          SANDBOX="$(mktemp -d)"
+          for t in bash cat grep sed ls env dirname tput uname id; do
+            src="$(command -v "$t" 2>/dev/null)" && ln -s "$src" "$SANDBOX/$t"
+          done
+          command -v pwsh >/dev/null || { echo "::error::pwsh missing before the test even ran"; exit 1; }
+          env PATH="$SANDBOX" bash -ic 'command -v pwsh' >/dev/null 2>&1 \
+            && { echo "::error::sandbox still resolves pwsh — the test would prove nothing"; exit 1; }
+
+          # `|| true` matters. If the hook IS broken, exec'ing a missing pwsh kills that
+          # bash with 127 — and under `set -e -o pipefail` the step would then abort right
+          # here, before the ::error:: below ever prints. CI would show a bare red X with
+          # no explanation. Swallow the status, then assert, so the failure explains itself.
+          out=$(env PATH="$SANDBOX" bash -ic 'echo SURVIVED' 2>/dev/null | tail -1) || true
+          rm -rf "$SANDBOX"
+
           [ "$out" = "SURVIVED" ] \
-            || { echo "::error::pwsh removed and the user was LOCKED OUT of their shell"; exit 1; }
+            || { echo "::error::pwsh unreachable and the user was LOCKED OUT of their shell (got: '$out')"; exit 1; }
+
+          # And pwsh is of course still installed — we never touched it.
+          command -v pwsh >/dev/null || { echo "::error::the lockout test damaged the pwsh install"; exit 1; }
 
           echo "✅ login hook: installed, idempotent, non-interactive-safe, no lockout"
 

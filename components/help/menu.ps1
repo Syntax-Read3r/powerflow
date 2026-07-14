@@ -301,15 +301,19 @@ $verLine
 │  lesson              → the full index, grouped by topic                      │
 │  lesson <topic>      → every lesson in a topic (e.g. lesson permissions)     │
 │  perms <path>        → permissions, with every column explained              │
-│  pwsh-h permissions  → chmod · chown · chgrp · id · groups · getent          │
-│  pwsh-h files        → ls · rm · find    ·  pwsh-h linux → everything        │
+│  defaultmode [022]   → the umask: what new files DON'T get                   │
+│  24 lessons · 7 topics: permissions files text disk network processes …      │
 │  linux-lessons off   → hide the teaching (full · hint · off)                 │
 │                                                                              │
 │  👬 BROTHER COMMANDS — full words, same flags, teaches the real one:         │
 │  changemode → chmod     changeowner → chown     changegroup → chgrp          │
-│  findtext   → grep      findfile    → find      listprocs   → ps             │
-│  whoamifull → id        mygroups    → groups    lookupentry → getent         │
-│  service    → systemctl archive     → tar       stopproc    → kill           │
+│  defaultmode→ umask     whoamifull  → id        mygroups    → groups         │
+│  lookupentry→ getent    findtext    → grep      findfile    → find           │
+│  fileinfo   → stat      makelink    → ln        listfiles   → ls             │
+│  firstlines → head      lastlines   → tail      archive     → tar            │
+│  dirsize    → du        diskfree    → df        listdisks   → lsblk          │
+│  listports  → ss        listprocs   → ps        stopproc    → kill           │
+│  service    → systemctl systemlogs  → journalctl                             │
 │                                                                              │
 │  🐚 BASH BUILTINS POWERSHELL LACKS:                                          │
 │  export VAR=value    → set an env var, bash-style                            │

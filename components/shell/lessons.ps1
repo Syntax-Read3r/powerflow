@@ -355,6 +355,240 @@ $script:PF_Lessons = @{
      You almost always want BOTH:  systemctl enable --now jellyfin
 '@
   }
+
+  # ── Disk ────────────────────────────────────────────────────────────────────
+  'du' = @{
+    Brother = 'dirsize'
+    Topic   = 'disk'
+    Short   = 'how big is this FOLDER?'
+    Body    = @'
+  dirsize  →  du   "disk usage"
+
+  du -sh  .              size of THIS folder, human-readable
+  du -sh  *              size of each thing in here — the one you want most
+  du -sh  * | sort -h    ...biggest last
+  du -h --max-depth=1 /var    one level down, no deeper
+
+  -s   summarise: ONE total per argument, not every file inside
+  -h   human: 4.0K / 261M / 12G instead of raw blocks
+  -a   include files, not just directories
+
+  💡 du measures what files ACTUALLY OCCUPY (allocated blocks). df measures what the
+     FILESYSTEM reports free. They disagree, and both are right — see `lesson df`.
+  ⚠️  Without -s, `du /` prints a line for every directory on the disk. Use -sh.
+
+  see also:  df (free space) · lsblk (the disks themselves) · disk-big (PowerFlow)
+'@
+  }
+
+  'df' = @{
+    Brother = 'diskfree'
+    Topic   = 'disk'
+    Short   = 'how much space is LEFT?'
+    Body    = @'
+  diskfree  →  df   "disk free"
+
+  df -h                  every filesystem, human-readable
+  df -h /                just the root filesystem
+  df -h .                the filesystem THIS folder lives on
+  df -i                  INODES, not bytes
+
+  Filesystem  Size  Used Avail Use% Mounted on
+  /dev/sda1    50G   47G  0.5G  99% /
+                                 ↑ this is the number that pages you at 3am
+
+  💡 "No space left on device" but df shows free space? Check `df -i`. You are out of
+     INODES — millions of tiny files. Space is free; the slots to describe them are not.
+  💡 Deleted a huge file and nothing came back? A process still holds it open. The space
+     returns when that process exits:  lsof +L1
+
+  see also:  du (what is using it) · lsblk (the disks)
+'@
+  }
+
+  'lsblk' = @{
+    Brother = 'listdisks'
+    Topic   = 'disk'
+    Short   = 'what disks and partitions exist?'
+    Body    = @'
+  listdisks  →  lsblk   "list block devices"
+
+  lsblk                  the tree: disks → partitions → mount points
+  lsblk -f               ...plus FILESYSTEM and UUID  ← the useful one
+  lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
+
+  NAME    SIZE TYPE MOUNTPOINT
+  sda     500G disk
+  ├─sda1    1G part /boot
+  └─sda2  499G part /
+
+  💡 No MOUNTPOINT = the partition exists but is not mounted. That is why you cannot
+     see your data — not because it is gone.
+  💡 A new disk with no partitions shows as a bare `disk` with no children.
+
+  see also:  df (free space) · du (what is using it)
+'@
+  }
+
+  # ── Text ────────────────────────────────────────────────────────────────────
+  'head' = @{
+    Brother = 'firstlines'
+    Topic   = 'text'
+    Short   = 'the FIRST lines of a file'
+    Body    = @'
+  firstlines  →  head
+
+  head file.log           first 10 lines (the default)
+  head -n 50 file.log     first 50
+  head -c 100 file.bin    first 100 BYTES, not lines
+
+  💡 The safe way to peek at a file you do not trust. `cat` on a 4 GB log — or on a
+     binary — will flood your terminal and can garble it. head never will.
+
+  see also:  tail (the end) · grep (find in it) · less (page through it)
+'@
+  }
+
+  'tail' = @{
+    Brother = 'lastlines'
+    Topic   = 'text'
+    Short   = 'the LAST lines — and watch them arrive live'
+    Body    = @'
+  lastlines  →  tail
+
+  tail file.log           last 10 lines
+  tail -n 100 file.log    last 100
+  tail -f  file.log       FOLLOW: keep printing new lines as they are written
+  tail -F  file.log       ...and survive the file being rotated/recreated
+
+  💡 `tail -f` is how you watch a service misbehave in real time. Ctrl-C to stop.
+     For systemd services, the modern equivalent is:  journalctl -u NAME -f
+  💡 -F over -f on anything logrotate touches, or you end up following a deleted file
+     forever and wondering why nothing appears.
+
+  see also:  head (the start) · journalctl (systemd logs) · grep
+'@
+  }
+
+  # ── Files ───────────────────────────────────────────────────────────────────
+  'ln' = @{
+    Brother = 'makelink'
+    Topic   = 'files'
+    Short   = 'link one path to another'
+    Body    = @'
+  makelink  →  ln   "link"
+
+  ln -s  /real/target  /path/link      SYMBOLIC link  ← almost always what you want
+  ln     /real/target  /path/link      HARD link
+
+  ORDER: target FIRST, link second. Backwards is the classic mistake, and it will
+  happily create a link named after your target, pointing at nothing.
+
+  SYMLINK (-s)                      HARD LINK
+  a signpost holding a PATH         a second NAME for the same data
+  breaks if the target moves        survives the original being deleted
+  can cross filesystems             cannot cross filesystems
+  can point at a directory          files only
+
+  ln -sfn /new/target /path/link    re-point an EXISTING symlink
+       -f force · -n treat the link itself as a file, not follow into it
+
+  💡 Use ABSOLUTE paths for the target unless you know exactly what you are doing —
+     a relative symlink resolves relative to the LINK's directory, not to yours.
+  ⚠️  Deleting a symlink deletes the SIGNPOST. Deleting `link/` with a trailing slash
+     can follow through to the target. Do not add the slash.
+
+  see also:  stat (what does this link point at?) · ls -l (shows link -> target)
+'@
+  }
+
+  'stat' = @{
+    Brother = 'fileinfo'
+    Topic   = 'files'
+    Short   = 'everything the kernel knows about a file'
+    Body    = @'
+  fileinfo  →  stat
+
+  stat file.txt              the lot: size, mode, owner, timestamps, inode
+  stat -c '%a %U %G' f       just what you asked for — 644 munya media
+  stat -c '%s' f             size in bytes
+
+  %a  numeric mode (644)     %A  symbolic (-rw-r--r--)
+  %U  owner       %G  group   %s  size       %h  hard links
+  %y  modified    %F  type ("directory" / "regular file" / "symbolic link")
+
+  THREE TIMESTAMPS, and they are not the same thing:
+    Modify  the CONTENTS changed          ← what `ls -l` shows
+    Change  the METADATA changed (chmod, chown, rename) — you cannot fake this
+    Access  it was read (often disabled for performance; do not trust it)
+
+  💡 This is what PowerFlow's `perms` is built on — stat reports what the kernel
+     actually holds, rather than parsing `ls -l` output, which differs between distros.
+
+  see also:  perms (PowerFlow, with the columns explained) · chmod · ls
+'@
+  }
+
+  # ── Network ─────────────────────────────────────────────────────────────────
+  'ss' = @{
+    Brother = 'listports'
+    Topic   = 'network'
+    Short   = 'what is listening on which port?'
+    Body    = @'
+  listports  →  ss   "socket statistics"   (replaces the old netstat)
+
+  ss -tulpn              THE one to memorise
+  ss -tlnp               just TCP listeners
+  ss -tunap | grep 8096  who is on port 8096?
+
+  -t  TCP        -u  UDP        -l  LISTENING only
+  -n  numeric ports (do not resolve 80 → "http")
+  -p  which PROCESS  ← needs sudo, or the process column comes back empty
+  -a  all sockets, not just listening
+
+  State   Local Address:Port    Process
+  LISTEN  0.0.0.0:8096          users:(("jellyfin",pid=812,fd=91))
+          ↑                     ↑ sudo gives you this
+          0.0.0.0 = every interface.  127.0.0.1 = localhost ONLY.
+
+  💡 "Connection refused" from another machine but it works locally? The service is
+     bound to 127.0.0.1, not 0.0.0.0. Nothing to do with the firewall.
+  💡 "Address already in use"?  sudo ss -tulpn | grep :PORT  tells you who has it.
+
+  see also:  systemctl (control the service) · kill (stop the process)
+'@
+  }
+
+  # ── Processes / logs ────────────────────────────────────────────────────────
+  'journalctl' = @{
+    Brother = 'systemlogs'
+    Topic   = 'processes'
+    Short   = 'read the systemd logs — why did it die?'
+    Body    = @'
+  systemlogs  →  journalctl
+
+  journalctl -u jellyfin -e        that service, jump to the END   ← start here
+  journalctl -u jellyfin -f        FOLLOW live (like tail -f)
+  journalctl -u jellyfin -n 100    last 100 lines
+  journalctl -u jellyfin -p err    errors only
+  journalctl --since "1 hour ago"
+  journalctl --since today --until "10:00"
+  journalctl -b                    THIS boot only
+  journalctl -b -1                 the PREVIOUS boot — why did it crash?
+  journalctl -xe                   recent + explanatory hints
+
+  -u  unit (service)   -f  follow   -e  jump to end   -b  boot
+  -p  priority: emerg alert crit err warning notice info debug
+
+  💡 `systemctl status X` shows you the LAST TEN LINES and everyone stops there.
+     The answer is nearly always further back:  journalctl -u X -e
+  💡 Service dies instantly on start? The reason is in the journal, not the terminal.
+  ⚠️  Logs not surviving reboot? The journal is in RAM by default on some distros.
+     Persist it:  sudo mkdir -p /var/log/journal
+
+  see also:  systemctl (control it) · tail -f · ss (is it even listening?)
+'@
+  }
 }
 
 function Get-LessonTopics {

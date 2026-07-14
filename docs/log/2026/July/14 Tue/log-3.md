@@ -120,6 +120,41 @@ Two traps in that code, both commented in place:
 `defaultmode` now also prints what the mask *produces* (`022` → files `644`, dirs `755`), because
 a umask is subtractive and that is the part everyone gets wrong.
 
+**Finished the COMMAND-MAP backlog — and it turned up a data-loss bug:**
+
+Added the last nine lessons (`du`, `df`, `lsblk`, `head`, `tail`, `ln`, `stat`, `ss`,
+`journalctl`) with brothers for each, bringing it to **24 lessons across 7 topics**
+(`permissions`, `files`, `text`, `disk`, `network`, `processes`, `archives`). Two new topics.
+
+Then the "harmless on Windows" item — GNU flags for `rm`/`mv`/`mkdir`/`touch`. It was not
+harmless. Reproducing it first, as always, produced three findings:
+
+1. 🚨 **`touch` DESTROYED existing files.** `New-Item -ItemType File -Path $f -Force` on a
+   file that already exists **truncates it to zero bytes**. `touch README.md` silently
+   emptied README.md. Measured: 42-byte file → 0 bytes, contents gone. This has been
+   shipping. GNU touch only moves the timestamp; creating is what it does when the file is
+   *absent*. Rewritten so an existing file is never rewritten.
+
+2. 💥 **`rm -rf <dir>` HUNG THE SHELL.** `param([switch]$f)` meant `-rf` matched nothing,
+   fell through into the *filename* list, `-f` was never seen, the confirm prompt fired and
+   `Read-Host` blocked forever. My test harness timed out at two minutes, which is how I
+   found it.
+
+3. 💥 **`mkdir` rejected digits and slashes** (`^[a-zA-Z ._-]+$`), so `mkdir v2` threw and
+   `mkdir src/app` threw; and it joined args with spaces, so `mkdir a b` made one directory
+   called `a b`. `rmdir` did `$MyInvocation.Line.Replace("rmdir","")`, so `rmdir ./rmdir-tests`
+   tried to remove `./-tests`.
+
+All four now hand-parse `$args` through a shared `Split-GnuArgs` (bundled shorts `-rf`, long
+flags `--recursive`, and `--` to name a file literally `-rf`). `rm` also adopts GNU's refusal
+to delete a directory without `-r` — that is a real safety feature, not pedantry.
+
+**The through-line:** items 2 and 3 are the *same root cause* as the `ls -ld` bug from this
+morning. **A `param()` block makes PowerShell bind `-r`/`-p`/`-f`/`-l` as parameter names**,
+and it then either throws "ambiguous" or silently drops the flag into `$args` where it is
+mistaken for a filename. Three separate features, one mistake, made three times. It is now
+written down in `COMPONENTS.md` footnote 5 rather than left for the next person to rediscover.
+
 **A mistake worth recording:**
 
 While fixing the `nav` array-unrolling trap (`return @($path)` unrolls to a bare string, so

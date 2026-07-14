@@ -20,7 +20,52 @@ All notable changes to PowerFlow will be documented in this file.
 
 ### Fixed
 
-- 💥 **`ls` silently listed the WRONG DIRECTORY.** This is the headline bug.
+- 🚨 **`touch` DESTROYED existing files on Windows.** Read that again.
+
+  ```powershell
+  function touch { param($f); New-Item -ItemType File -Path $f -Force }
+  ```
+
+  `New-Item -Force` on a file that **already exists** truncates it to zero bytes. So
+  `touch README.md` — a completely ordinary thing to type — silently emptied README.md.
+  Verified: a 42-byte file, `touch`ed, came back 0 bytes with its contents gone.
+
+  GNU `touch` never does this. It updates the *timestamp*; creating the file is what it
+  does only when the file is **absent**. That is now what PowerFlow's does, and an
+  existing file is never rewritten. `-c` (never create) is supported.
+
+  *(Windows only — on Linux `touch` has always resolved to the GNU binary.)*
+
+- 💥 **`rm -rf <dir>` HUNG THE SHELL on Windows.** `rm` declared `param([switch]$f)`, so
+  `-rf` matched nothing, fell through into the *filename* list, and `-f` was never seen.
+  The confirmation prompt then fired and `Read-Host` blocked — forever, in any
+  non-interactive context. `mkdir -p a/b/c` threw outright (*"the parameter name 'p' is
+  ambiguous"*). Both are the same root cause as the `ls` bug below: **a `param()` block
+  makes PowerShell bind `-r`/`-p`/`-f` as parameter names.**
+
+  `rm`, `mkdir`, `touch` and `rmdir` now hand-parse `$args`, so GNU flags work as written:
+
+  | | |
+  |---|---|
+  | `rm -rf node_modules` | recursive + force, no prompt |
+  | `rm <dir>` (no `-r`) | **refuses**, exactly like GNU — a typo'd path should not take a tree with it |
+  | `mkdir -p src/components/ui` | creates the whole chain |
+  | `touch -c maybe.txt` | bump the timestamp, but never create |
+  | `rm -- -rf` | delete a file genuinely *named* `-rf` |
+
+  Bundled shorts (`-rf`), long flags (`--recursive`), and `--` all work.
+
+- 💥 **`mkdir` rejected digits and slashes.** Its validation was `^[a-zA-Z ._-]+$`, so
+  `mkdir v2` **threw** (a digit), and `mkdir src/app` **threw** (a slash). It also joined
+  its arguments with spaces, so `mkdir a b` produced a single directory named `a b`. Now:
+  one directory per argument, and only characters the *filesystem* actually forbids are
+  rejected.
+
+- 💥 **`rmdir` mangled any path containing "rmdir".** It read `$MyInvocation.Line` and did
+  a string `.Replace("rmdir", "")` on it — so `rmdir ./rmdir-tests` tried to remove
+  `./-tests`. It also could not see flags at all. Rewritten to parse `$args`.
+
+- 💥 **`ls` silently listed the WRONG DIRECTORY.** Same root cause as the two above.
 
   ```
   ls -ld ward-a
@@ -179,6 +224,22 @@ All notable changes to PowerFlow will be documented in this file.
   | `changemode`→`chmod` | `changeowner`→`chown` | `changegroup`→`chgrp` | `defaultmode`→`umask` |
   | `whoamifull`→`id` | `mygroups`→`groups` | `lookupentry`→`getent` | `findtext`→`grep` |
   | `findfile`→`find` | `listprocs`→`ps` | `stopproc`→`kill` | `service`→`systemctl` |
+  | `fileinfo`→`stat` | `makelink`→`ln` | `firstlines`→`head` | `lastlines`→`tail` |
+  | `dirsize`→`du` | `diskfree`→`df` | `listdisks`→`lsblk` | `listports`→`ss` |
+  | `systemlogs`→`journalctl` | `archive`→`tar` | `removefile`→`rm` | `listfiles`→`ls` |
+
+- 📖 **24 lessons across 7 topics** — `permissions`, `files`, `text`, `disk`, `network`,
+  `processes`, `archives`. The nine added here are the ones you reach for when something
+  is actually broken at 3am:
+
+  | | |
+  |---|---|
+  | `lesson df` | *"No space left on device" but `df` shows free space? Check `df -i` — you are out of **inodes**.* |
+  | `lesson ss` | *Connection refused from another machine but fine locally? The service is bound to `127.0.0.1`, not `0.0.0.0`. Nothing to do with the firewall.* |
+  | `lesson journalctl` | *`systemctl status` shows the last ten lines and everyone stops there. The answer is nearly always further back: `journalctl -u X -e`.* |
+  | `lesson ln` | *Target FIRST, link second — backwards is the classic mistake, and it will happily create a link pointing at nothing.* |
+  | `lesson tail` | *`-F` over `-f` on anything logrotate touches, or you follow a deleted file forever.* |
+  | `lesson du` · `lesson lsblk` · `lesson head` · `lesson stat` | |
 
 - 📚 **`lesson <command>`** — learn any Linux command. It **runs nothing**, so it is always
   safe, even for `rm`. Shorthand `l`, and it tab-completes:

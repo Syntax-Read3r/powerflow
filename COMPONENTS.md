@@ -62,12 +62,22 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `components/shell/history.ps1` | Shell | `history`, `Get-LastCommand`, `Get-LastArg` + PSReadLine handlers for **`!!`** and **`!$`** |
 | `components/shell/lessons.ps1` | Shell | **`lesson`**, **`l`** (alias), `Show-LessonIndex`, `Get-LinuxLesson`, `Show-Lesson`, `Get-LessonTopics` — the **one source of truth** for every lesson. Tab-completes commands, brothers and topics. |
 | `components/shell/teach.ps1` | Shell | `perms`, `linux-lessons`, `Show-PermissionBreakdown`, `Format-ModeColons`, `Get-LessonMode` |
-| `components/shell/brothers.ps1` | Shell | `changemode`, `changeowner`, `changegroup`, `defaultmode`⁴, `whoamifull`, `mygroups`, `lookupentry`, `findfile`, `findtext`, `removefile`, `archive`, `listprocs`, `stopproc`, `service`, `listfiles`, `Get-UmaskResult` — each supports `-lesson` |
+| `components/shell/brothers.ps1` | Shell | `changemode`, `changeowner`, `changegroup`, `defaultmode`⁴, `whoamifull`, `mygroups`, `lookupentry`, `findfile`, `findtext`, `removefile`, `archive`, `listprocs`, `stopproc`, `service`, `systemlogs`, `listfiles`, `makelink`, `fileinfo`, `firstlines`, `lastlines`, `dirsize`, `diskfree`, `listdisks`, `listports`, `Get-UmaskResult` — each supports `-lesson` |
 
 > ¹ **`alias` is a function, not `Set-Alias`.** PowerShell's `Set-Alias` maps a name to a
 > single command and **cannot carry arguments**, so `alias ll='ls -la'` — the most common
 > thing anyone does with an alias in bash — is impossible with it. PowerFlow compiles
 > bash-style aliases into functions instead, which can.
+>
+> ⁵ **`Split-GnuArgs` is why `rm -rf` works on Windows.** These functions take **no
+> `param()` block**, deliberately. A `param()` block makes PowerShell try to bind `-r`,
+> `-p` and `-f` as *parameter names* — it then either throws (*"the parameter name 'p' is
+> ambiguous"*) or silently drops the flag into `$args`, where it is mistaken for a
+> filename. That is the identical bug that made `ls -ld dir` list the wrong directory.
+> Hand-parsing `$args` is the only way a PowerShell function can accept `rm -rf x`.
+> It handles bundled shorts (`-rf`), long flags (`--recursive`), and `--` (so you can
+> delete a file genuinely named `-rf`). None of it runs on Linux — bindings hands those
+> names back to the GNU coreutils.
 >
 > ³ **`umask` is a shell builtin, not a binary.** There is no `/usr/bin/umask` to run, and
 > `sh -c 'umask 022'` sets the umask of a subshell that then exits — changing nothing. It
@@ -101,7 +111,7 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `components/navigation/nav.ps1` | Navigation | `nav`, `nav roots`, `Test-NavFunction`, `z` (alias) |
 | `components/navigation/directory.ps1` | Navigation | `here`, `..`, `...`, `....`, `.....`, `~`, `back`, `cd-` (alias), `copy-pwd` |
 | `components/files/listing.ps1` | Files | `ls`, `la`, `ll`, `clr` (alias), `cat` (alias)¹, `cp` (alias)¹ |
-| `components/files/operations.ps1` | Files | `rm`¹, `mv`¹, `mv-t`, `mv-c`, `rmdir`¹, `touch`¹, `mkdir`¹ |
+| `components/files/operations.ps1` | Files | `rm`¹, `mv`¹, `mv-t`, `mv-c`, `rmdir`¹, `touch`¹, `mkdir`¹, `Split-GnuArgs`⁵ |
 | `components/files/rename.ps1` | Files | `rn` |
 | `components/files/clipboard.ps1` | Files | `open-pwd`, `op`, `paste-file`, `copy-file`, `cf`, `pf` |
 | `components/git/remote.ps1` | Git | `Create-RemoteRepository` |

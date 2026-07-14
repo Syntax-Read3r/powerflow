@@ -5,10 +5,12 @@
 # File     : components/shell/brothers.ps1
 # Purpose  : Full-word twins of cryptic Linux commands. Same flags, same result —
 #            but they always tell you the real command, so you learn it as you go.
-# Functions: changemode, changeowner, changegroup, defaultmode, listfiles,
+# Functions: changemode, changeowner, changegroup, defaultmode, listfiles, makelink,
+#            fileinfo, firstlines, lastlines, dirsize, diskfree, listdisks, listports,
 #            findtext, findfile, whoamifull, mygroups, lookupentry, listprocs,
-#            stopproc, service, archive, removefile
-# Depends  : Show-Lesson (lessons.ps1), Get-LessonMode (teach.ps1)
+#            stopproc, service, systemlogs, archive, removefile
+# Depends  : Show-Lesson (lessons.ps1), Get-LessonMode (teach.ps1),
+#            Get-Umask / Set-Umask (perms adapter)
 # ==============================================================================
 #
 # A brother is NOT a dumbed-down version. It takes the SAME flags and produces the
@@ -152,10 +154,26 @@ function findtext    { Invoke-Brother -Real 'grep'   -Arguments $args }
 function removefile  { Invoke-Brother -Real 'rm'     -Arguments $args }
 function archive     { Invoke-Brother -Real 'tar'    -Arguments $args }
 
+function makelink    { Invoke-Brother -Real 'ln'     -Arguments $args }
+function fileinfo    { Invoke-Brother -Real 'stat'   -Arguments $args }
+
+# ── Text ──────────────────────────────────────────────────────────────────────
+function firstlines  { Invoke-Brother -Real 'head'   -Arguments $args }
+function lastlines   { Invoke-Brother -Real 'tail'   -Arguments $args }
+
+# ── Disk ──────────────────────────────────────────────────────────────────────
+function dirsize     { Invoke-Brother -Real 'du'     -Arguments $args }
+function diskfree    { Invoke-Brother -Real 'df'     -Arguments $args }
+function listdisks   { Invoke-Brother -Real 'lsblk'  -Arguments $args }
+
+# ── Network ───────────────────────────────────────────────────────────────────
+function listports   { Invoke-Brother -Real 'ss'     -Arguments $args }
+
 # ── Processes ─────────────────────────────────────────────────────────────────
-function listprocs   { Invoke-Brother -Real 'ps'        -Arguments $args }
-function stopproc    { Invoke-Brother -Real 'kill'      -Arguments $args }
-function service     { Invoke-Brother -Real 'systemctl' -Arguments $args }
+function listprocs   { Invoke-Brother -Real 'ps'         -Arguments $args }
+function stopproc    { Invoke-Brother -Real 'kill'       -Arguments $args }
+function service     { Invoke-Brother -Real 'systemctl'  -Arguments $args }
+function systemlogs  { Invoke-Brother -Real 'journalctl' -Arguments $args }
 
 # ── listfiles: the one exception ──────────────────────────────────────────────
 # `ls` IS PowerFlow's own (pretty, lsd-backed, GNU-flag-compatible), so listfiles

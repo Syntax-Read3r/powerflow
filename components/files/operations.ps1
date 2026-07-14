@@ -12,13 +12,77 @@ Remove-Item Alias:rm    -Force -ErrorAction SilentlyContinue
 Remove-Item Alias:rmdir -Force -ErrorAction SilentlyContinue
 Remove-Item Alias:mv    -Force -ErrorAction SilentlyContinue
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  GNU FLAG PARSING
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# These functions take NO param() block, and that is deliberate. A param() block makes
+# PowerShell try to bind `-r`, `-p` and `-f` as PARAMETER NAMES. It then either throws
+# ("the parameter name 'p' is ambiguous") or silently drops the flag into $args, where it
+# is mistaken for a filename. This is the identical bug that made `ls -ld dir` list the
+# wrong directory — see components/files/listing.ps1.
+#
+# Parsing $args by hand is the only way a PowerShell function can accept `rm -rf x`.
+#
+# On Linux none of this runs: platform/linux/bindings.ps1 removes these functions so the
+# real GNU coreutils are reached. It exists so that the SAME muscle memory works on
+# Windows, where there is no GNU tool to fall back to.
+<#
+.SYNOPSIS
+    Split argv into GNU-style flags and paths.
+.DESCRIPTION
+    Handles bundled short flags (-rf == -r -f), long flags (--recursive), and `--`
+    (everything after it is a path, even if it starts with a dash — the only way to
+    delete a file genuinely named "-rf").
+    Returns @{ Flags = @{r=$true; f=$true}; Paths = @('x'); Unknown = @() }
+#>
+function Split-GnuArgs {
+    param([string[]]$Argv, [hashtable]$LongMap = @{})
+
+    $flags   = @{}
+    $paths   = @()
+    $unknown = @()
+    $endOfFlags = $false
+
+    foreach ($a in $Argv) {
+        $s = [string]$a
+
+        if ($endOfFlags)      { $paths += $s; continue }
+        if ($s -eq '--')      { $endOfFlags = $true; continue }
+
+        if ($s -match '^--(.+)$') {
+            $long = $matches[1]
+            if ($LongMap.ContainsKey($long)) { $flags[$LongMap[$long]] = $true }
+            else                             { $unknown += $s }
+            continue
+        }
+
+        # -rf  ->  r, f.  A lone "-" is a path (stdin convention), not a flag.
+        if ($s -match '^-(.+)$') {
+            foreach ($c in $matches[1].ToCharArray()) { $flags["$c"] = $true }
+            continue
+        }
+
+        $paths += $s
+    }
+
+    return @{ Flags = $flags; Paths = $paths; Unknown = $unknown }
+}
+
 function rm {
-    [CmdletBinding()]
-    param(
-        [Parameter(ValueFromRemainingArguments)]
-        [string[]]$Name,
-        [switch]$f
-    )
+    $parsed = Split-GnuArgs -Argv $args -LongMap @{
+        'recursive' = 'r'; 'force' = 'f'; 'verbose' = 'v'; 'interactive' = 'i'; 'dir' = 'd'
+    }
+
+    $force     = $parsed.Flags.ContainsKey('f')
+    $recurse   = $parsed.Flags.ContainsKey('r') -or $parsed.Flags.ContainsKey('R')
+    $askAlways = $parsed.Flags.ContainsKey('i')
+    $Name      = $parsed.Paths
+
+    foreach ($u in $parsed.Unknown) { Write-Host "rm: unknown option '$u'" -ForegroundColor Yellow }
+
+    # -i beats -f, exactly as in GNU: whichever you meant, the safe one wins.
+    if ($askAlways) { $force = $false }
 
     $targets = @()
 
@@ -69,7 +133,23 @@ function rm {
     # Overlapping patterns (rm *.log *.txt a.log) can match the same item twice
     $targets = @($targets | Sort-Object -Property FullName -Unique)
 
-    if (-not $f) {
+    # GNU refuses to delete a directory without -r, and that is a real safety feature, not
+    # pedantry: `rm build` with a typo'd path should not silently take a tree with it.
+    # (Only when paths were NAMED. Picking a directory in the fzf picker is explicit intent.)
+    if (-not $recurse -and $Name -and $Name.Count -gt 0) {
+        $dirs = @($targets | Where-Object { $_.PSIsContainer })
+        if ($dirs.Count -gt 0) {
+            foreach ($d in $dirs) {
+                Write-Host "rm: cannot remove '$($d.Name)': Is a directory" -ForegroundColor Red
+            }
+            Write-Host "💡 Use -r to recurse:  " -NoNewline -ForegroundColor DarkGray
+            Write-Host "rm -rf $($dirs[0].Name)" -ForegroundColor Cyan
+            $targets = @($targets | Where-Object { -not $_.PSIsContainer })
+            if ($targets.Count -eq 0) { return }
+        }
+    }
+
+    if (-not $force) {
         if ($targets.Count -eq 1) {
             $confirm = Read-Host "⚠️ Delete '$($targets[0].FullName)'? [y/N]"
         }
@@ -477,114 +557,188 @@ function mv-c {
     Write-Host "✅ Move operation cancelled" -ForegroundColor Green
 }
 
+<#
+.SYNOPSIS
+    rmdir <dir>...  — remove a directory. Asks before taking anything with it.
+.DESCRIPTION
+    The old version read $MyInvocation.Line and did a string .Replace("rmdir", "") on it —
+    which mangled any path with "rmdir" in it (rmdir ./rmdir-tests → "./-tests"), could not
+    see flags at all, and broke on quoting.
+#>
 function rmdir {
-    $line = $MyInvocation.Line.Replace("rmdir", "").Trim()
+    $parsed = Split-GnuArgs -Argv $args -LongMap @{ 'parents' = 'p'; 'verbose' = 'v' }
 
-    if (-not $line) {
-        Write-Warning "⚠️ No path provided"
+    foreach ($u in $parsed.Unknown) { Write-Host "rmdir: unknown option '$u'" -ForegroundColor Yellow }
+
+    if ($parsed.Paths.Count -eq 0) {
+        Write-Host "❌ rmdir: no directory given" -ForegroundColor Red
+        Write-Host "   usage: rmdir <dir>...   (use 'rm -rf <dir>' to force)" -ForegroundColor DarkGray
         return
     }
 
-    $path = $line.Trim('"')
-    $resolved = Resolve-Path -LiteralPath $path -ErrorAction SilentlyContinue
+    foreach ($p in $parsed.Paths) {
+        $resolved = Resolve-Path -LiteralPath $p -ErrorAction SilentlyContinue
+        if (-not $resolved) {
+            Write-Host "rmdir: failed to remove '$p': No such file or directory" -ForegroundColor Red
+            continue
+        }
 
-    if (-not $resolved) {
-        Write-Warning "⚠️ Path not found: $path"
-        return
-    }
+        $full = $resolved.Path
+        if (-not (Test-Path -LiteralPath $full -PathType Container)) {
+            Write-Host "rmdir: failed to remove '$p': Not a directory" -ForegroundColor Red
+            continue
+        }
 
-    $fullPath = $resolved.Path
+        $children = @(Get-ChildItem -LiteralPath $full -Force -ErrorAction SilentlyContinue)
+        if ($children.Count -gt 0) {
+            Write-Host "⚠️  '$p' is not empty — $($children.Count) item(s) inside." -ForegroundColor Yellow
+            $confirm = Read-Host "   Delete it and everything in it? [y/N]"
+            if ($confirm -notin @('y','Y')) {
+                Write-Host "❌ Cancelled." -ForegroundColor Yellow
+                continue
+            }
+        }
 
-    # Check for children
-    $children = Get-ChildItem -LiteralPath $fullPath -Force -ErrorAction SilentlyContinue
-    $hasChildren = $children.Count -gt 0
-
-    if ($hasChildren) {
-        $confirm = Read-Host "⚠️ Directory '$path' contains items. Delete everything? [y/N]"
-        if ($confirm -ne 'y' -and $confirm -ne 'Y') {
-            Write-Host "❌ Deletion cancelled." -ForegroundColor Yellow
-            return
+        try {
+            Remove-Item -LiteralPath $full -Recurse -Force -ErrorAction Stop
+            Write-Host "✅ Removed: $p" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "❌ rmdir: failed to remove '$p': $($_.Exception.Message)" -ForegroundColor Red
         }
     }
+}
 
-    try {
-        Remove-Item -LiteralPath $fullPath -Recurse -Force -ErrorAction Stop
-        Write-Host "✅ Directory '$path' deleted successfully" -ForegroundColor Green
-    } catch {
-        Write-Warning "❌ Failed to delete '$path': $($_.Exception.Message)"
+<#
+.SYNOPSIS
+    touch <file>...  — update a file's timestamp, creating it if it does not exist.
+.DESCRIPTION
+    ⚠️ THIS USED TO DESTROY YOUR FILE.
+
+        function touch { param($f); New-Item -ItemType File -Path $f -Force }
+
+    `New-Item -Force` on an EXISTING file truncates it to zero bytes. So `touch README.md`
+    silently emptied README.md. GNU touch does no such thing — it only updates the
+    timestamp, and creating the file is what it does when the file is ABSENT.
+
+    An existing file is now never rewritten; only its LastWriteTime moves.
+.EXAMPLE
+    touch new.txt            create it (or bump its timestamp if it exists)
+    touch a.txt b.txt        several at once
+    touch -c maybe.txt       bump it ONLY if it exists; never create
+#>
+function touch {
+    $parsed = Split-GnuArgs -Argv $args -LongMap @{
+        'no-create' = 'c'; 'verbose' = 'v'
+    }
+    $noCreate = $parsed.Flags.ContainsKey('c')
+    $verbose  = $parsed.Flags.ContainsKey('v')
+
+    foreach ($u in $parsed.Unknown) { Write-Host "touch: unknown option '$u'" -ForegroundColor Yellow }
+
+    if ($parsed.Paths.Count -eq 0) {
+        Write-Host "❌ touch: no file given" -ForegroundColor Red
+        Write-Host "   usage: touch <file>...   ·   touch -c <file>  (never create)" -ForegroundColor DarkGray
         return
     }
 
-    ls
+    foreach ($p in $parsed.Paths) {
+        if (Test-Path -LiteralPath $p) {
+            # Exists: move the timestamp, and DO NOT touch the contents.
+            try {
+                $now = Get-Date
+                $item = Get-Item -LiteralPath $p -Force
+                $item.LastWriteTime  = $now
+                $item.LastAccessTime = $now
+                if ($verbose) { Write-Host "🕒 $($item.Name)" -ForegroundColor DarkGray }
+            }
+            catch {
+                Write-Host "❌ touch: cannot update '$p': $($_.Exception.Message)" -ForegroundColor Red
+            }
+            continue
+        }
+
+        if ($noCreate) { continue }   # -c: absent and we were told not to create it
+
+        try {
+            New-Item -ItemType File -Path $p -ErrorAction Stop | Out-Null
+            Write-Host "📄 $p" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "❌ touch: cannot create '$p': $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
 }
 
 <#
 .SYNOPSIS
-    Create new empty file (Unix-style touch command)
-.PARAMETER f
-    File path to create
-#>
-function touch {
-    param($f)
-    New-Item -ItemType File -Path $f -Force
-}
+    mkdir [-p] <dir>...  — create directories.
+.DESCRIPTION
+    The old version rejected any name matching anything other than ^[a-zA-Z ._-]+$ — so
+    `mkdir v2` threw (a digit!), `mkdir src/app` threw (a slash!), and `mkdir -p a/b/c`
+    threw before it even got that far, because param() tried to bind -p as a parameter
+    name and reported it as "ambiguous". It also joined all its arguments with spaces, so
+    `mkdir a b` made a single directory called "a b".
 
-<#
-.SYNOPSIS
-    Create new directory (enhanced mkdir)
-.PARAMETER name
-    Directory name/path to create
+    Now: real names, real flags, one directory per argument.
+.EXAMPLE
+    mkdir dist
+    mkdir -p src/components/ui      create the whole chain
+    mkdir a b c                     three directories, not one called "a b c"
 #>
-
 function mkdir {
-    param(
-        [Parameter(ValueFromRemainingArguments)]
-        [string[]]$name
-    )
-
-    # Join all arguments with spaces
-    $folderName = $name -join ' '
-
-    # Check if name is empty or whitespace only
-    if ([string]::IsNullOrWhiteSpace($folderName)) {
-        throw "Directory name cannot be empty or whitespace only"
+    $parsed = Split-GnuArgs -Argv $args -LongMap @{
+        'parents' = 'p'; 'verbose' = 'v'
     }
+    $parents = $parsed.Flags.ContainsKey('p')
+    $verbose = $parsed.Flags.ContainsKey('v')
 
-    # Check for leading or trailing spaces
-    if ($folderName.StartsWith(' ') -or $folderName.EndsWith(' ')) {
-        throw "Directory name cannot start or end with spaces"
+    foreach ($u in $parsed.Unknown) { Write-Host "mkdir: unknown option '$u'" -ForegroundColor Yellow }
+
+    if ($parsed.Paths.Count -eq 0) {
+        Write-Host "❌ mkdir: no directory name given" -ForegroundColor Red
+        Write-Host "   usage: mkdir <dir>...   ·   mkdir -p a/b/c  (create parents)" -ForegroundColor DarkGray
+        return
     }
 
-    # Check that name contains only allowed characters
-    if ($folderName -notmatch '^[a-zA-Z ._-]+$') {
-        throw "Directory name can only contain letters (a-z, A-Z), spaces, and the symbols: hyphen (-), period (.), underscore (_)"
-    }
+    foreach ($p in $parsed.Paths) {
+        # Only reject what the FILESYSTEM would reject. The previous character allowlist
+        # was so strict it excluded digits.
+        $invalid = [IO.Path]::GetInvalidFileNameChars() | Where-Object { $_ -notin @('\', '/') }
+        $leaf    = Split-Path $p -Leaf
+        $bad     = @($leaf.ToCharArray() | Where-Object { $_ -in $invalid })
+        if ($bad.Count -gt 0) {
+            Write-Host "❌ mkdir: '$p' contains characters this filesystem forbids: $($bad -join ' ')" -ForegroundColor Red
+            continue
+        }
 
-    # Count special symbols and ensure only one of each is allowed
-    $hyphenCount = ($folderName.ToCharArray() | Where-Object { $_ -eq '-' } | Measure-Object).Count
-    $periodCount = ($folderName.ToCharArray() | Where-Object { $_ -eq '.' } | Measure-Object).Count
-    $underscoreCount = ($folderName.ToCharArray() | Where-Object { $_ -eq '_' } | Measure-Object).Count
-    $spaceCount = ($folderName.ToCharArray() | Where-Object { $_ -eq ' ' } | Measure-Object).Count
+        if (Test-Path -LiteralPath $p) {
+            # GNU: `mkdir -p existing` succeeds silently; plain `mkdir existing` is an error.
+            if (-not $parents) {
+                Write-Host "mkdir: cannot create directory '$p': File exists" -ForegroundColor Red
+            }
+            elseif ($verbose) {
+                Write-Host "📁 $p (already exists)" -ForegroundColor DarkGray
+            }
+            continue
+        }
 
-    if ($hyphenCount -gt 1) {
-        throw "Directory name can contain at most one hyphen (-). Found $hyphenCount."
-    }
-    if ($periodCount -gt 1) {
-        throw "Directory name can contain at most one period (.). Found $periodCount."
-    }
-    if ($underscoreCount -gt 1) {
-        throw "Directory name can contain at most one underscore (_). Found $underscoreCount."
-    }
-    if ($spaceCount -gt 1) {
-        throw "Directory name can contain at most 2 words (1 space). Found $($spaceCount + 1) words."
-    }
+        # Without -p, the parent must already exist — again, GNU's behaviour, and it
+        # catches a typo'd path instead of silently building the whole wrong tree.
+        $parent = Split-Path $p -Parent
+        if (-not $parents -and $parent -and -not (Test-Path -LiteralPath $parent)) {
+            Write-Host "mkdir: cannot create directory '$p': No such file or directory" -ForegroundColor Red
+            Write-Host "💡 Use -p to create the parents:  " -NoNewline -ForegroundColor DarkGray
+            Write-Host "mkdir -p $p" -ForegroundColor Cyan
+            continue
+        }
 
-    # Create the directory
-    try {
-        New-Item -ItemType Directory -Path $folderName -Force
-        Write-Host "Directory '$folderName' created successfully" -ForegroundColor Green
-    }
-    catch {
-        throw "Failed to create directory '$folderName': $($_.Exception.Message)"
+        try {
+            New-Item -ItemType Directory -Path $p -Force:$parents -ErrorAction Stop | Out-Null
+            Write-Host "📁 $p" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "❌ mkdir: cannot create '$p': $($_.Exception.Message)" -ForegroundColor Red
+        }
     }
 }
