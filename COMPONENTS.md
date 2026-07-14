@@ -38,6 +38,7 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `adapters/env.ps1` | `Get-PersistentPath`, `Add-PersistentPathEntry`, `Test-PersistentPathEntry`, `Get-PathScopeLabel` | Registry (`SetEnvironmentVariable`) | PowerFlow-managed rc fragment |
 | `adapters/locations.ps1` | `Get-StarshipConfigPath`, `Get-TerminalSettingsPath`, `Get-TempPath`, `Get-HomePath`, `Get-PowerFlowDataPath`, `Get-PowerFlowConfigPath` | `%LOCALAPPDATA%`, `%TEMP%` | XDG (`~/.config`, `~/.local/share`), `$TMPDIR` |
 | `adapters/pwsh-update.ps1` | `Invoke-PowerShellUpdate` | winget / MSI / Store | apt / snap / dotnet-tool |
+| `adapters/apps.ps1` | `Get-InstalledApplication`, `Uninstall-Application`, `Get-DiskHotspot`, `Measure-FolderSize`, `Move-ToTrash`, `Remove-PathPermanently`, `Test-TrashSupport`, `Test-ProtectedPath` | registry + Scoop; Recycle Bin | dpkg / rpm / pacman; `gio trash` |
 
 ### Command bindings — loaded **after** components
 
@@ -69,7 +70,7 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `components/git/branches.ps1` | Git | `git-branch`, `Invoke-DeleteBranch`, `git-b`, `git-cm`, `git-bd`, `git-bD`, `git-c.sb` |
 | `components/git/rollback.ps1` | Git | `git-rba`, `grba` (alias), `git-rb` |
 | `components/git/interactive.ps1` | Git | `git-l`, `git-log`, `git-s`, `git-st`, `git-pick`, `git-p`, `git-stash`, `git-remote`, `git-sh`, `git-r` |
-| `components/git/release.ps1` | Git | `git-release`, `git-rl` |
+| `components/git/release.ps1` | Git | `git-release`, `git-rl`, `git-rl -h` (setup a new project), `Show-GitReleaseSetupPrompt`, `Write-GitReleaseGuide`, `Get-GitReleaseDocs` |
 | `components/git/reset.ps1` | Git | `git-f`, `git-next` |
 | `components/github/browser.ps1` | GitHub | `gh-l`, `gh-l-reset`, `gh-l-status`, `gh-l-org` |
 | `components/terminal/tabs.ps1` | Terminal | `send-keys`, `open-nt`, `close-ct`, `next-t`, `prev-t`, `open-t`, `close-t` |
@@ -77,6 +78,7 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `components/system/config-files.ps1` | System | `pwsh-profile`, `pwsh-starship`, `pwsh-settings` |
 | `components/system/shutdown.ps1` | System | `shutdown`, `s` |
 | `components/system/path.ps1` | System | `set-path` |
+| `components/system/apps.ps1` | System | `installed-apps`, `i-a` (alias), `disk-big`, `d-b` (alias), `Get-SizeBands`, `Convert-ToBytes`, `Format-Size`, `Format-Age`, `Resolve-SizeRange`, `Show-SizeBandMenu`, `Show-AppPicker`, `Show-BandOverview`, `Invoke-AppAction` |
 | `components/help/menu.ps1` | Help | `pwsh-h` |
 
 > ¹ **Rebound on Linux.** `platform/linux/bindings.ps1` removes these so the GNU

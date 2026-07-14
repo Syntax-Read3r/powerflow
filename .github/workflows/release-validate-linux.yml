@@ -16,6 +16,91 @@ on:
   workflow_call:
 
 jobs:
+
+  # ============================================================================
+  # Distro matrix — the installer must work on more than the CI runner's Ubuntu.
+  #
+  # v3.0.0 shipped an installer that could not install PowerShell on Debian at all:
+  # it built an *Ubuntu* repo URL from the distro's VERSION_ID, then fell back to a
+  # hardcoded debian/12 repo whose SHA1-signed key modern apt rejects. Nobody caught
+  # it because every test ran on Ubuntu. A real user found it on a Proxmox server.
+  #
+  # Every package manager PowerFlow claims to support is now exercised on a real
+  # container of that distro, on every release.
+  # ============================================================================
+  distros:
+    name: 📦 Install on ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+      options: --user root
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "Debian 13 (apt)",   image: "debian:13",                   pm: apt    }
+          - { name: "Debian 12 (apt)",   image: "debian:12",                   pm: apt    }
+          - { name: "Ubuntu 24.04 (apt)",image: "ubuntu:24.04",                pm: apt    }
+          - { name: "Ubuntu 22.04 (apt)",image: "ubuntu:22.04",                pm: apt    }
+          - { name: "Fedora (dnf)",      image: "fedora:42",                   pm: dnf    }
+          - { name: "Arch (pacman)",     image: "archlinux:latest",            pm: pacman }
+          - { name: "openSUSE (zypper)", image: "opensuse/tumbleweed:latest",  pm: zypper }
+          - { name: "Alpine (apk/musl)", image: "alpine:latest",               pm: apk    }
+
+    steps:
+      - name: 🧰 Bootstrap the container
+        shell: sh
+        run: |
+          set -e
+          case "${{ matrix.pm }}" in
+            apt)    apt-get update -qq && apt-get install -y -qq bash sudo curl ca-certificates git ;;
+            dnf)    dnf install -y -q bash sudo curl ca-certificates git tar ;;
+            pacman) pacman -Sy --noconfirm bash sudo curl ca-certificates git tar ;;
+            zypper) zypper --non-interactive install bash sudo curl ca-certificates git tar gzip ;;
+            apk)    apk add --quiet bash sudo curl ca-certificates git tar ;;
+          esac
+
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 📦 Install PowerFlow (as root, from this checkout)
+        shell: bash
+        run: bash ./install.sh --yes
+
+      # `command -v pwsh` is NOT enough — the binary archive can place a pwsh that
+      # exists on PATH but dies instantly with "Couldn't find a valid ICU package".
+      # It must actually RUN.
+      - name: 🐚 PowerShell must actually run
+        shell: bash
+        run: |
+          pwsh --version || { echo "::error::pwsh is installed but cannot run on ${{ matrix.name }}"; exit 1; }
+
+      - name: 🔧 Dependencies installed
+        shell: bash
+        run: |
+          fail=0
+          for t in starship fzf zoxide lsd git; do
+            if command -v "$t" >/dev/null 2>&1; then echo "  ok $t"
+            else echo "::error::${{ matrix.name }}: dependency missing: $t"; fail=1; fi
+          done
+          [ "$fail" -eq 0 ] || exit 1
+
+      - name: 🚀 Profile loads and coreutils stay unshadowed
+        shell: bash
+        run: |
+          pwsh -NoProfile -Command '
+            . "$HOME/.config/powershell/Microsoft.PowerShell_profile.ps1" *>$null
+            if ($script:PowerFlowOS -ne "linux") { Write-Error "platform=$script:PowerFlowOS"; exit 1 }
+            foreach ($t in "rm","mv","cp","cat","grep") {
+              $c = Get-Command $t -EA SilentlyContinue
+              if (-not $c -or $c.CommandType -ne "Application") { Write-Error "$t is shadowed!"; exit 1 }
+            }
+            foreach ($c in "nav","git-a","del","mvf","pwsh-h") {
+              if (-not (Get-Command $c -EA SilentlyContinue)) { Write-Error "missing: $c"; exit 1 }
+            }
+            Write-Host "OK — loads, coreutils intact, del/mvf present"
+          '
+
   linux:
     name: 🐧 Validate Linux (install → use → uninstall)
     runs-on: ubuntu-latest
@@ -57,7 +142,17 @@ jobs:
             || { echo "::error::linux adapters were not installed"; exit 1; }
           test -f "$HOME/.config/powershell/.powerflow-manifest.json" \
             || { echo "::error::manifest was not written"; exit 1; }
-          echo "✅ installed"
+
+          # `git-rl -h` READS these at runtime to write a setup guide into a user's
+          # project. They are a dependency, not documentation — install.ps1 originally
+          # copied only config/components/platform/windows-only, so git-rl -h found
+          # nothing after a real install and had to fall back to a network fetch.
+          test -f "$HOME/.config/powershell/docs/git-rl/SETUP-PROMPT.md" \
+            || { echo "::error::docs/git-rl/SETUP-PROMPT.md did not survive install — git-rl -h will break"; exit 1; }
+          test -f "$HOME/.config/powershell/docs/git-rl/README.md" \
+            || { echo "::error::docs/git-rl/README.md did not survive install"; exit 1; }
+
+          echo "✅ installed (including the git-rl runtime docs)"
 
       # Dependency install is where the real breakage hides: apt needs an index
       # refresh on a clean box, and starship/lsd are not in Ubuntu's repos at all,

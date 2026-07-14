@@ -140,6 +140,8 @@ $verLine
 │  🏷️  RELEASE WORKFLOW:                                                       │
 │  git-release         → 🚀 bump version → update settings → commit → tag     │
 │  git-rl              → alias for git-release                                 │
+│  git-rl -h           → 🧰 set up git-rl in ANOTHER project (writes a guide   │
+│                         into it + copies an AI setup prompt to clipboard)    │
 │    patch             → v2.0.0 → v2.0.1  (bug fixes)                         │
 │    minor             → v2.0.0 → v2.1.0  (new features)                      │
 │    major             → v2.0.0 → v3.0.0  (breaking changes)                  │
@@ -209,6 +211,17 @@ $verLine
 │  📍 PATH MANAGEMENT:                                                         │
 │  set-path <path>            → add directory to User PATH (no quotes needed)  │
 │  set-path -system <path>    → add directory to System PATH (admin required)  │
+│                                                                              │
+│  🗄️ DISK RECLAIM:  (nothing under 1 GB is ever listed)                       │
+│  installed-apps -o       → 📊 overview of ALL bands, then drill into one     │
+│  i-a -o                  → shorthand for installed-apps                      │
+│  i-a                     → pick a size band, then browse installed apps      │
+│  i-a 2gb-4gb             → apps in a range (must fit inside ONE band)        │
+│  disk-big                → large FOLDERS and FILES (vhdx, node_modules, …)   │
+│  d-b 50gb-200gb          → shorthand — the biggest offenders on disk         │
+│  d-b -Path D:\           → scan a specific location instead of the hot spots │
+│    bands: 1-5GB · 5-20GB · 20-50GB · 50GB+   (a query cannot span two)       │
+│    actions: open folder · copy path · uninstall · trash · permanent delete   │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌─ 🔧 DEBUGGING & TESTING ─────────────────────────────────────────────────────┐

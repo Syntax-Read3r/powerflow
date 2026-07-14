@@ -77,17 +77,41 @@ detect_pm() {
     elif command -v dnf     >/dev/null 2>&1; then echo "dnf"
     elif command -v pacman  >/dev/null 2>&1; then echo "pacman"
     elif command -v zypper  >/dev/null 2>&1; then echo "zypper"
+    elif command -v apk     >/dev/null 2>&1; then echo "apk"
     else echo "none"; fi
 }
 PM="$(detect_pm)"
 
 # ── 2. Install pwsh if missing ────────────────────────────────────────────────
 
-# Universal fallback: install PowerShell from Microsoft's official release tarball.
-# Needs no apt/dnf repo, no GPG key, and therefore cannot hit repo-signing problems.
-# This is Microsoft's documented "binary archive" method and works on any distro.
+# Is PowerShell actually USABLE?
+#
+# `command -v pwsh` is NOT sufficient. The binary archive can install a pwsh that
+# exists on PATH but dies instantly with "Couldn't find a valid ICU package" — so the
+# installer would report success and then everything downstream fails. Run it.
+pwsh_works() {
+    command -v pwsh >/dev/null 2>&1 || return 1
+    pwsh --version >/dev/null 2>&1
+}
+
+# Runtime libraries the PowerShell binary needs.
+#
+# A distro package pulls these in automatically. The tarball does NOT — hence the
+# ICU crash above. Install them explicitly before falling back to the archive.
+install_pwsh_prereqs() {
+    case "$PM" in
+        apt)    $SUDO apt-get install -y -qq libicu-dev  >/dev/null 2>&1 || true ;;
+        dnf)    $SUDO dnf install -y -q libicu            >/dev/null 2>&1 || true ;;
+        zypper) $SUDO zypper --non-interactive install libicu >/dev/null 2>&1 || true ;;
+        pacman) $SUDO pacman -S --noconfirm icu           >/dev/null 2>&1 || true ;;
+        apk)    $SUDO apk add --quiet icu-libs libstdc++ >/dev/null 2>&1 || true ;;
+    esac
+}
+
+# Universal fallback: install PowerShell from Microsoft's official release archive.
+# Needs no apt/dnf repo and no GPG key, so it cannot hit repo-signing problems.
 install_pwsh_tarball() {
-    local arch tag ver url tmp
+    local arch libc tag ver url tmp
     case "$(uname -m)" in
         x86_64)  arch="x64" ;;
         aarch64) arch="arm64" ;;
@@ -95,15 +119,22 @@ install_pwsh_tarball() {
         *) err "Unsupported architecture: $(uname -m)"; return 1 ;;
     esac
 
+    # Alpine is musl, not glibc — it needs a different archive entirely.
+    libc="linux"
+    if [[ "$PM" == "apk" ]] || ! ldd /bin/sh 2>/dev/null | grep -q 'libc\.so\.6'; then
+        if [[ "$PM" == "apk" ]]; then libc="linux-musl"; fi
+    fi
+
     command -v curl >/dev/null 2>&1 || { err "curl is required to download PowerShell."; return 1; }
 
     info "⬇️  Installing PowerShell from the official release archive..."
+    install_pwsh_prereqs
 
     tag="$(curl -fsSL https://api.github.com/repos/PowerShell/PowerShell/releases/latest \
             | grep -m1 '"tag_name"' | cut -d'"' -f4)"
     [[ -n "$tag" ]] || { err "Could not determine the latest PowerShell release."; return 1; }
     ver="${tag#v}"
-    url="https://github.com/PowerShell/PowerShell/releases/download/${tag}/powershell-${ver}-linux-${arch}.tar.gz"
+    url="https://github.com/PowerShell/PowerShell/releases/download/${tag}/powershell-${ver}-${libc}-${arch}.tar.gz"
 
     tmp="$(mktemp -d)"
     if ! curl -fsSL "$url" -o "${tmp}/pwsh.tar.gz"; then
@@ -116,11 +147,11 @@ install_pwsh_tarball() {
     $SUDO ln -sf /opt/microsoft/powershell/7/pwsh /usr/local/bin/pwsh
     rm -rf "$tmp"
 
-    command -v pwsh >/dev/null 2>&1
+    pwsh_works
 }
 
 install_pwsh() {
-    if command -v pwsh >/dev/null 2>&1; then
+    if pwsh_works; then
         ok "PowerShell already installed ($(pwsh --version))"
         return 0
     fi
@@ -129,7 +160,7 @@ install_pwsh() {
 
     # snap is the fewest moving parts when it is available.
     if command -v snap >/dev/null 2>&1; then
-        if $SUDO snap install powershell --classic; then
+        if $SUDO snap install powershell --classic 2>/dev/null && pwsh_works; then
             ok "PowerShell installed via snap"
             return 0
         fi
@@ -149,16 +180,40 @@ install_pwsh() {
 
     case "$PM" in
         apt)
-            $SUDO apt-get update -qq
-            $SUDO apt-get install -y curl gnupg apt-transport-https ca-certificates
+            # A previous or failed install may have left a Microsoft apt source pointing
+            # at the WRONG release — e.g. a bookworm repo on a trixie box. Its signing
+            # key uses SHA1, which Debian 13's apt rejects, and that poisons EVERY
+            # subsequent `apt-get update`. With `set -e` the script would then abort here,
+            # before it could reach the correct-repo logic below — so the machine stays
+            # broken no matter how many times you re-run a fixed installer.
+            #
+            # Clear any stale Microsoft source before touching apt.
+            if compgen -G "/etc/apt/sources.list.d/microsoft*" >/dev/null 2>&1; then
+                warn "Removing a stale Microsoft apt source (it blocks apt-get update)"
+                # PURGE, not remove: -r leaves the conffile registered, so installing the
+                # correct repo later hits an interactive conffile prompt, dies with
+                # "end of file on stdin at conffile prompt", and leaves a .dpkg-new orphan.
+                $SUDO dpkg --purge packages-microsoft-prod >/dev/null 2>&1 || true
+                $SUDO rm -f /etc/apt/sources.list.d/microsoft*.list \
+                            /etc/apt/sources.list.d/microsoft*.sources \
+                            /etc/apt/sources.list.d/microsoft*.dpkg-* 2>/dev/null || true
+            fi
+
+            # Never let a third-party repo error abort the install.
+            $SUDO apt-get update -qq 2>/dev/null || warn "apt-get update reported errors — continuing"
+            $SUDO apt-get install -y curl gnupg apt-transport-https ca-certificates >/dev/null 2>&1 || true
 
             local url="https://packages.microsoft.com/config/${distro}/${version}/packages-microsoft-prod.deb"
             info "🔎 Microsoft repo for ${distro} ${version}"
 
             if curl -fsSL "$url" -o /tmp/packages-microsoft-prod.deb 2>/dev/null; then
-                $SUDO dpkg -i /tmp/packages-microsoft-prod.deb >/dev/null 2>&1
-                $SUDO apt-get update -qq
-                if $SUDO apt-get install -y powershell; then
+                # noninteractive + force-confnew: dpkg must never stop for a prompt here,
+                # and every failure below is recoverable via the archive fallback.
+                $SUDO DEBIAN_FRONTEND=noninteractive dpkg -i --force-confnew \
+                    /tmp/packages-microsoft-prod.deb >/dev/null 2>&1 || true
+                $SUDO apt-get update -qq 2>/dev/null || true
+
+                if $SUDO apt-get install -y powershell >/dev/null 2>&1 && pwsh_works; then
                     ok "PowerShell installed from the ${distro} ${version} repository"
                     return 0
                 fi
@@ -169,25 +224,46 @@ install_pwsh() {
 
             install_pwsh_tarball || return 1
             ;;
-        dnf)
-            $SUDO rpm --import https://packages.microsoft.com/keys/microsoft.asc 2>/dev/null || true
-            if ! $SUDO dnf install -y powershell 2>/dev/null; then
-                install_pwsh_tarball || return 1
+
+        dnf|zypper)
+            # Microsoft publishes an .rpm repo config for rhel / fedora / opensuse.
+            # Importing the signing key alone is NOT enough — without the repo config
+            # the `powershell` package simply does not exist and the install fails.
+            local rpm_url="https://packages.microsoft.com/config/${distro}/${version}/packages-microsoft-prod.rpm"
+            info "🔎 Microsoft repo for ${distro} ${version}"
+
+            $SUDO rpm --import https://packages.microsoft.com/keys/microsoft.asc >/dev/null 2>&1 || true
+
+            if curl -fsSL -o /tmp/packages-microsoft-prod.rpm "$rpm_url" 2>/dev/null; then
+                if [[ "$PM" == "dnf" ]]; then
+                    $SUDO dnf install -y -q /tmp/packages-microsoft-prod.rpm >/dev/null 2>&1 || true
+                    $SUDO dnf install -y -q powershell >/dev/null 2>&1 || true
+                else
+                    $SUDO zypper --non-interactive install /tmp/packages-microsoft-prod.rpm >/dev/null 2>&1 || true
+                    $SUDO zypper --non-interactive --gpg-auto-import-keys refresh >/dev/null 2>&1 || true
+                    $SUDO zypper --non-interactive install powershell >/dev/null 2>&1 || true
+                fi
+
+                if pwsh_works; then
+                    ok "PowerShell installed from the ${distro} ${version} repository"
+                    return 0
+                fi
+                warn "Repository install failed — falling back to the official archive"
+            else
+                warn "No Microsoft repo for ${distro} ${version} — using the official archive"
             fi
-            ;;
-        zypper)
-            $SUDO rpm --import https://packages.microsoft.com/keys/microsoft.asc 2>/dev/null || true
-            if ! $SUDO zypper --non-interactive install powershell 2>/dev/null; then
-                install_pwsh_tarball || return 1
-            fi
-            ;;
-        pacman)
-            # PowerShell is only in the AUR on Arch, which we must not drive for the
-            # user. The official archive works fine and needs no AUR helper.
+
             install_pwsh_tarball || return 1
             ;;
+
+        pacman|apk)
+            # Arch only has PowerShell in the AUR, and Alpine has no official package.
+            # We must not drive an AUR helper on the user's behalf — the official
+            # archive works on both and needs neither.
+            install_pwsh_tarball || return 1
+            ;;
+
         *)
-            # No recognised package manager — the official archive needs none.
             warn "Unrecognised package manager — using the official archive"
             install_pwsh_tarball || {
                 err "Could not install PowerShell automatically. Install it manually:"
@@ -197,7 +273,8 @@ install_pwsh() {
             ;;
     esac
 
-    command -v pwsh >/dev/null 2>&1 || { err "PowerShell installation failed."; exit 1; }
+    # Verify it RUNS, not merely that it exists on PATH.
+    pwsh_works || { err "PowerShell was placed but cannot run. Install it manually."; exit 1; }
     ok "PowerShell installed ($(pwsh --version))"
 }
 

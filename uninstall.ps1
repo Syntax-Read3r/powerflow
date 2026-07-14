@@ -53,7 +53,7 @@ if (-not (Test-Path $manifestPath)) {
         Write-Host "❌ Cancelled" -ForegroundColor Yellow; exit 0
     }
 
-    foreach ($d in @('config', 'components', 'platform', 'windows-only')) {
+    foreach ($d in @('config', 'components', 'platform', 'windows-only', 'docs')) {
         $p = Join-Path $profileDir $d
         if (Test-Path $p) { Remove-Item $p -Recurse -Force; Write-Host "  ✅ removed $d/" -ForegroundColor Green }
     }
@@ -130,7 +130,7 @@ foreach ($f in $manifest.files) {
 }
 Write-Host "✅ Removed $removed of $($manifest.files.Count) tracked files" -ForegroundColor Green
 
-foreach ($d in @('config', 'components', 'platform', 'windows-only')) {
+foreach ($d in @('config', 'components', 'platform', 'windows-only', 'docs')) {
     $p = Join-Path $manifest.installRoot $d
     if (Test-Path $p) { Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue }
 }

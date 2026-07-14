@@ -1,8 +1,17 @@
 # `git-rl` Project Setup Guide
 
-> Hand this file to an AI in any new project and say:
-> **"Set this project up to work with `git-rl` from PowerFlow."**
-> Everything the AI needs is documented here.
+> 🚀 **You probably want `git-rl -h` instead of reading this by hand.**
+>
+> Run it from inside the project you want to set up. It writes
+> **`docs/git-release-help.md`** into that project and copies a ready-made AI setup prompt
+> to your clipboard — paste it into any AI assistant and it builds the whole pipeline, then
+> verifies it.
+>
+> | | |
+> |---|---|
+> | [`docs/git-rl/SETUP-PROMPT.md`](git-rl/SETUP-PROMPT.md) | The prompt `git-rl -h` prints. |
+> | [`docs/git-rl/README.md`](git-rl/README.md) | The short manual — releasing by hand, aborting a bad release. |
+> | **This file** | The deep technical reference: every workflow, field by field. |
 
 ---
 

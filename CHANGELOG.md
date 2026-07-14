@@ -9,7 +9,140 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [3.0.0] - Unreleased
+## [3.1.0] - Unreleased
+
+> 🗄️ **New: find what is actually eating your disk** — `installed-apps` and `disk-big`.
+>
+> 🐧 **Plus: the Linux installer now works on every distro it claims to support.**
+> v3.0.0 and v3.0.1 were only ever tested on Ubuntu; the `dnf`, `pacman`, `zypper` and
+> `apk` paths were written but **never executed once**. Every package manager is now
+> exercised on a real container of that distro, on every release.
+
+### Added
+
+- 🗄️ **`installed-apps` — find installed applications by size, then act on them.**
+
+  ```powershell
+  installed-apps -o          # 📊 overview of every band, then drill into one
+  installed-apps             # pick a size band, then browse it
+  installed-apps 2gb-4gb     # apps in a range
+  ```
+
+  `installed-apps -o` scans once and reports where the space actually is:
+
+  ```
+  BAND           APPS          TOTAL
+  1 - 5 GB          9       22.41 GB
+  5 - 20 GB         2       11.33 GB
+  20 - 50 GB        0           0 KB
+  50 GB +           5      502.12 GB
+  TOTAL            16      535.86 GB
+  ```
+
+  Pick a band in fzf to drill straight into it — no rescan, because the overview and the
+  drill-in share the same pass. Each row shows **size *and* age**, since "big *and* old"
+  is the strongest signal that something is safe to remove. Age comes from the registry's
+  `InstallDate` on Windows (falling back to folder creation time), `rpm INSTALLTIME` and
+  pacman's Install Date on Linux, and — because dpkg records none — the mtime of
+  `/var/lib/dpkg/info/<pkg>.list`.
+
+- 📁 **`disk-big` — find large FOLDERS and FILES, not just apps.**
+  A registry enumeration will never surface a 169 GB `docker_data.vhdx`, a bloated
+  `node_modules`, or a Downloads folder full of ISOs — none of those are "installed
+  apps". `disk-big` scans the places where bulk actually accumulates (`%LOCALAPPDATA%`,
+  `ProgramData`, `scoop`, `.gradle`/`.cargo`/`.m2`, Downloads … and on Linux
+  `/var/lib/docker`, `/var/cache`, `~/.cache`, `/snap`) rather than walking all of `C:\`,
+  which is slow and spends most of its time in directories that are protected anyway.
+
+- 🛡️ **Safety model.** These commands delete things, so:
+  - **Nothing below 1 GB is ever listed.** If the disk is full, a 50 MB utility is not
+    the cause.
+  - **A query cannot span two size bands.** `2gb-4gb` is fine; `1gb-100gb` is refused.
+    An unreviewable list in front of a delete action is how people destroy things.
+  - **Protected paths are refused outright** and cannot be overridden — `C:\Windows`,
+    `System32`, `Program Files`, `C:\`, `$HOME`; `/`, `/usr`, `/etc`, `/boot`, `/opt/microsoft`.
+  - **Apps are uninstalled, never `rm -rf`'d.** Deleting an app's folder leaves its
+    uninstaller, registry keys and PATH shims behind — the tool says so and offers the
+    real uninstaller first.
+  - **Recycle Bin / trash by default; permanent delete requires typing the name.**
+  - **Virtual disks are special-cased.** Deleting a `.vhdx`/`.vmdk` destroys every image,
+    container and volume inside it — and would not even reclaim the space, because a
+    VHDX grows but never shrinks. It recommends `docker system prune` *then* compacting.
+
+- 🧰 **`git-rl -h` — set up `git-rl` in another project.**
+  `git-rl` only works in a repository that satisfies its contract (a version source, a
+  CHANGELOG it can parse, and a `v*`-tag-triggered pipeline). That knowledge previously
+  lived nowhere.
+
+  Run `git-rl -h` from inside the project you want to set up. It asks — via fzf — whether
+  you are in the right folder. If yes it creates `docs/` if needed, writes
+  **`docs/git-release-help.md`** into the project, and copies an **AI setup prompt** to
+  your clipboard. If no, it tells you to navigate there and exits **without printing
+  anything** — dumping a 13,000-character prompt into the scrollback of the wrong
+  directory helps nobody.
+
+  The generated file is self-contained: the **AI prompt** (paste it into any assistant and
+  it builds the version file, CHANGELOG and all six workflows, then verifies them) *and*
+  the **manual** — how to cut a release by hand, how to abort a bad one, and post-release
+  verification. So the project keeps everything even if PowerFlow is never installed on
+  that machine again.
+
+  Source docs: `docs/git-rl/SETUP-PROMPT.md` and `docs/git-rl/README.md`.
+
+- 🧪 **CI distro matrix.** `release-validate-linux.yml` now installs PowerFlow on **Debian
+  12/13, Ubuntu 22.04/24.04, Fedora, Arch, openSUSE and Alpine** — all five package
+  managers — and asserts on each that pwsh *runs*, all five dependencies install, the
+  profile loads, and the GNU coreutils are not shadowed. A release can no longer ship a
+  distro that was never executed.
+
+### Fixed
+
+- 📦 **`docs/git-rl/` did not survive installation.** `install.ps1` copied only `config/`,
+  `components/`, `platform/` and `windows-only/`. But `git-rl -h` **reads** those docs at
+  runtime to write the guide into a user's project — they are a dependency, not
+  documentation. On a real install they were absent, so `git-rl -h` silently fell back to
+  fetching from GitHub and simply failed offline. The installer now ships them, the
+  uninstaller removes them, and CI asserts they survive an install.
+
+- 🩹 **A failed install left the machine permanently broken.** If an earlier attempt
+  installed the wrong Microsoft repo (e.g. a *bookworm* source on a *trixie* box), its
+  SHA1-signed key poisons **every** subsequent `apt-get update`. Because `install.sh` runs
+  `set -e`, the script then aborted on its very first apt call — *before* reaching the
+  fixed repo logic — so re-running even a corrected installer could never recover. The
+  installer now detects a stale Microsoft source, **purges** it (`dpkg --purge`, not `-r`,
+  which would leave the conffile registered and trigger an interactive
+  `"end of file on stdin at conffile prompt"` failure), and treats third-party repo errors
+  as non-fatal.
+- 💥 **PowerShell "installed" but could not run on Fedora / Arch / openSUSE / Alpine.**
+  The release-archive fallback installs no runtime libraries, so pwsh died on first use
+  with `"Couldn't find a valid ICU package"` — and the installer reported
+  `✅ PowerShell installed ()` and carried on, because it only checked
+  `command -v pwsh`. It now installs `libicu`/`icu-libs` first and verifies pwsh **runs**
+  (`pwsh --version`) rather than merely existing on PATH.
+- 📦 **`dnf` / `zypper` never added the Microsoft repository** — they imported the signing
+  key and then ran `dnf install powershell`, which cannot work because the package does
+  not exist without the repo config. Both now install
+  `config/<distro>/<version>/packages-microsoft-prod.rpm` first.
+- 🏔️ **Alpine could never work** — it is musl, not glibc, so the standard archive is the
+  wrong binary. `apk` was also missing from package-manager detection entirely. Alpine now
+  gets the `linux-musl` archive and is a supported target.
+- 🏹 **Arch no longer dead-ends.** It previously printed "PowerShell is in the AUR" and
+  exited; it now installs from the official archive, which needs no AUR helper.
+
+## [3.0.1] - 2026-07-14
+
+### Fixed
+
+- 🐧 **PowerShell could not install on Debian.** `install.sh` built an *Ubuntu* repo URL
+  from the distro's `VERSION_ID` without ever reading `ID`, so on Debian it 404'd and fell
+  back to a hardcoded `debian/12` repo. That places a *bookworm* source on a *trixie*
+  machine, and the bookworm signing key carries a **SHA1** binding signature that Debian
+  13's apt rejects: `"SHA1 is not considered secure"` → `"The repository is not signed."`
+  The installer now reads the real `ID`/`VERSION_ID` and requests the correct repo.
+  Added a universal fallback that installs PowerShell from Microsoft's official release
+  archive (no repo, no GPG key), so repo-signing problems cannot block installation.
+
+## [3.0.0] - 2026-07-14
 
 > 🐧 **Linux is back — rebuilt from scratch on a shared codebase.**
 >

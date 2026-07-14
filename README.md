@@ -344,6 +344,7 @@ PowerFlow includes automated release workflows:
 | ----------------- | ---------------------------------------------------- |
 | `git-a`           | Beautiful add → commit → push workflow               |
 | `git-rl`          | Interactive release: bump version, commit, tag, push |
+| `git-rl -h`       | Set up `git-rl` in **another** project — writes a guide into it and copies an AI setup prompt to your clipboard |
 | `git-rb <commit>` | Create rollback branch from commit                   |
 | `git-rba`         | Rollback branch add-commit-push                      |
 | `git-mrb`         | Merge rollback branch to main                        |
@@ -373,6 +374,26 @@ PowerFlow includes automated release workflows:
 | `shutdown cancel` / `s c`| Cancel a scheduled shutdown                     |
 | `set-path <dir>`         | Add a directory to the User PATH (no quotes)     |
 | `set-path -system <dir>` | Add to the System PATH (requires Administrator)  |
+
+### Disk Reclaim
+
+Nothing below **1 GB** is ever listed, and a query **cannot span two size bands** —
+an unreviewable list in front of a delete action is how people destroy things.
+
+| Command                  | Description                                             |
+| ------------------------ | ------------------------------------------------------- |
+| `installed-apps -o`      | Overview of every size band, then drill into one         |
+| `installed-apps`         | Pick a size band, then browse installed apps             |
+| `installed-apps 2gb-4gb` | Apps in a range (must fit inside a single band)          |
+| `disk-big`               | Large **folders and files** (vhdx, node_modules, caches) |
+| `disk-big 50gb-200gb`    | The biggest offenders on disk                            |
+| `disk-big -Path D:\`     | Scan a specific location instead of the usual hot spots  |
+
+Bands: `1–5 GB` · `5–20 GB` · `20–50 GB` · `50 GB+`.
+Each row shows **size and age** — big *and* old is the strongest reclaim signal.
+Actions: open folder · copy path · **uninstall properly** · Recycle Bin · permanent delete.
+Protected system paths are refused outright, and virtual disks (`.vhdx`/`.vmdk`) warn that
+deleting them destroys every container and volume inside.
 
 ### Version Management
 

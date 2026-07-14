@@ -115,8 +115,8 @@ else {
 }
 
 # ── Copy the tree ─────────────────────────────────────────────────────────────
-# platform/ and windows-only/ are new in v3.0.0 and are REQUIRED — without them
-# no adapters load and every component call fails.
+# platform/ and windows-only/ are REQUIRED — without them no adapters load and every
+# component call fails.
 Write-Host ""
 Write-Host "📂 Installing components..." -ForegroundColor Yellow
 
@@ -135,6 +135,21 @@ foreach ($dir in @('config', 'components', 'platform', 'windows-only')) {
 
     Get-ChildItem $dst -Recurse -File | ForEach-Object { $installedFiles.Add($_.FullName) }
     Write-Host "   ✅ $dir/" -ForegroundColor Green
+}
+
+# Runtime docs. `git-rl -h` READS docs/git-rl/ at runtime to print the setup prompt and
+# write the guide into a user's project — so these are not documentation, they are a
+# dependency. Without them, git-rl -h has to fall back to fetching from GitHub, which
+# fails offline. The rest of docs/ (logs, plans) is deliberately NOT installed.
+$docsSrc = Join-Path $source 'docs/git-rl'
+if (Test-Path $docsSrc) {
+    $docsDst = Join-Path $profileDir 'docs/git-rl'
+    if (Test-Path $docsDst) { Remove-Item $docsDst -Recurse -Force }
+    New-Item -ItemType Directory -Path $docsDst -Force | Out-Null
+    Copy-Item "$docsSrc/*" $docsDst -Recurse -Force
+
+    Get-ChildItem $docsDst -Recurse -File | ForEach-Object { $installedFiles.Add($_.FullName) }
+    Write-Host "   ✅ docs/git-rl/  (git-rl -h reads these at runtime)" -ForegroundColor Green
 }
 
 # uninstall.ps1 ships alongside so the profile can remove itself later
