@@ -11,22 +11,33 @@
 $script:BookmarkFile = Join-Path (Get-HomePath) '.nav_bookmarks.json'
 
 function Initialize-DefaultBookmarks {
-    $defaultBookmarks = @{
-        "code" = "$HOME\Code"
-        "documents" = "$HOME\Documents"
-        "docs" = "$HOME\Documents"
-        "pictures" = "$HOME\Pictures"
-        "pics" = "$HOME\Pictures"
-        "downloads" = "$HOME\Downloads"
-        "download" = "$HOME\Downloads"
-        "videos" = "$HOME\Videos"
+    # Only create if file doesn't exist
+    if (Test-Path $script:BookmarkFile) { return }
+
+    $homeDir = Get-HomePath
+
+    # Join-Path, never "$HOME\Code" — a hardcoded backslash produces the literal
+    # path "/home/munya\Code" on Linux, which of course never exists.
+    $candidates = [ordered]@{
+        "code"      = (Join-Path $homeDir 'Code')
+        "documents" = (Join-Path $homeDir 'Documents')
+        "docs"      = (Join-Path $homeDir 'Documents')
+        "pictures"  = (Join-Path $homeDir 'Pictures')
+        "pics"      = (Join-Path $homeDir 'Pictures')
+        "downloads" = (Join-Path $homeDir 'Downloads')
+        "download"  = (Join-Path $homeDir 'Downloads')
+        "videos"    = (Join-Path $homeDir 'Videos')
     }
 
-    # Only create if file doesn't exist
-    if (-not (Test-Path $script:BookmarkFile)) {
-        $defaultBookmarks | ConvertTo-Json | Set-Content $script:BookmarkFile
-        Write-Host "📚 Initialized default bookmarks" -ForegroundColor Green
+    # Bookmark only what exists. A headless server has no ~/Pictures and no ~/Code,
+    # and a bookmark that points nowhere is worse than no bookmark at all.
+    $defaultBookmarks = @{ "home" = $homeDir }
+    foreach ($entry in $candidates.GetEnumerator()) {
+        if (Test-Path $entry.Value) { $defaultBookmarks[$entry.Key] = $entry.Value }
     }
+
+    $defaultBookmarks | ConvertTo-Json | Set-Content $script:BookmarkFile
+    Write-Host "📚 Initialized $($defaultBookmarks.Count) default bookmarks" -ForegroundColor Green
 }
 
 function Get-Bookmarks {

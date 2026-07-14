@@ -75,7 +75,7 @@ if ! gui_confirm "$WELCOME"; then
 fi
 
 # ── 2. Dependencies ───────────────────────────────────────────────────────────
-NO_DEPS_FLAG=""
+INSTALL_ARGS=(--yes)
 DEPS_TEXT="Install the recommended tools?
 
   • <b>starship</b> — prompt
@@ -89,13 +89,13 @@ Tools you already have will be left alone.
 Choosing <b>No</b> installs PowerFlow only."
 
 if ! gui_confirm "$DEPS_TEXT"; then
-    NO_DEPS_FLAG="--no-deps"
+    INSTALL_ARGS+=(--no-deps)
 fi
 
 # ── 2b. Start on login? ───────────────────────────────────────────────────────
 # PowerFlow only loads when pwsh runs. Without this the install "succeeds" and the
 # user reboots into bash wondering where PowerFlow went.
-LOGIN_FLAG="--login-shell none"
+LOGIN_MODE="none"
 LOGIN_TEXT="Start PowerFlow automatically when you log in?
 
 PowerFlow is a PowerShell profile — it only loads when <b>pwsh</b> runs. Your login
@@ -107,8 +107,9 @@ interactive login.
 <i>It cannot lock you out: if pwsh is ever removed or broken, you still get bash.</i>"
 
 if gui_confirm "$LOGIN_TEXT"; then
-    LOGIN_FLAG="--login-shell auto"
+    LOGIN_MODE="auto"
 fi
+INSTALL_ARGS+=(--login-shell "$LOGIN_MODE")
 
 # ── 3. Run the real installer, streaming progress into a dialog ───────────────
 # install.sh needs sudo for the package manager. pkexec gives a graphical prompt
@@ -117,7 +118,10 @@ LOG="$(mktemp)"
 trap 'rm -f "$LOG"' EXIT
 
 run_install() {
-    bash "$INSTALL_SH" --yes $NO_DEPS_FLAG $LOGIN_FLAG 2>&1 | tee "$LOG"
+    # An ARRAY, not "--yes $FLAGS". A flag whose value contains a space (or none at
+    # all) either word-splits into the wrong arguments or collapses to an empty one.
+    # "${INSTALL_ARGS[@]}" passes exactly the arguments we built, and nothing else.
+    bash "$INSTALL_SH" "${INSTALL_ARGS[@]}" 2>&1 | tee "$LOG"
 }
 
 case "$GUI" in

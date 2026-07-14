@@ -20,8 +20,8 @@ function Search-Projects {
                   1=exact  2=prefix(starts-with)  3=contains
                   Shallowest wins among equal-quality matches.
     .EXAMPLE
-        Search-Projects -Name "power" -BaseDir "$HOME\Code" -MaxDepth 4
-        Search-Projects -BaseDir "$HOME\Code" -MaxDepth 4 -All
+        Search-Projects -Name "power" -BaseDir (Get-HomePath) -MaxDepth 4
+        Search-Projects -BaseDir (Get-HomePath) -MaxDepth 4 -All
     #>
     param(
         [string]$Name    = "",
@@ -41,12 +41,20 @@ function Search-Projects {
         [string[]]@(
             'node_modules', '.git', 'dist', 'build', 'target',
             'bin', 'obj', '.next', '.nuxt', '__pycache__', '.venv', 'venv',
-            '.cache', 'coverage', '.turbo', 'out'
+            '.cache', 'coverage', '.turbo', 'out',
+
+            # Linux virtual/system filesystems. These matter only if a root above them
+            # is in scope (someone ran `nav roots add /`), but when they are, they are
+            # catastrophic: /proc alone is thousands of kernel-backed pseudo-dirs.
+            'proc', 'sys', 'dev', 'run', 'lost+found', 'snap'
         ),
         [System.StringComparer]::OrdinalIgnoreCase
     )
 
-    $baseNorm = $BaseDir.TrimEnd('\')
+    # TrimEnd takes the platform's separator, not a hardcoded '\'. On Linux the old
+    # code trimmed a backslash that was never there — harmless — but the paths it was
+    # handed had backslashes baked in, which was not.
+    $baseNorm = $BaseDir.TrimEnd([IO.Path]::DirectorySeparatorChar)
     $queue    = [System.Collections.Generic.Queue[object]]::new()
     $queue.Enqueue([PSCustomObject]@{ Path = $baseNorm; Depth = 0 })
 

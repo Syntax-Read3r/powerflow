@@ -97,6 +97,16 @@ $_pf_components = @(
 
     "components\shared\strings.ps1"
 
+    # Shell: bash builtins PowerShell lacks, plus the Linux teaching layer.
+    # lessons.ps1 MUST precede teach.ps1 and brothers.ps1 — both read its data.
+    "components\shell\bash-compat.ps1"
+    "components\shell\history.ps1"
+    "components\shell\lessons.ps1"
+    "components\shell\teach.ps1"
+    "components\shell\brothers.ps1"
+
+    # roots.ps1 MUST precede nav.ps1 — nav resolves its search roots through it.
+    "components\navigation\roots.ps1"
     "components\navigation\bookmarks.ps1"
     "components\navigation\projects.ps1"
     "components\navigation\nav.ps1"

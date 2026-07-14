@@ -54,7 +54,14 @@ foreach ($a in @('del', 'erase', 'rd', 'ri', 'rm', 'rmdir', 'mv', 'cp', 'cat', '
 # ── 3. Remove FUNCTIONS that shadow a native tool ─────────────────────────────
 # rm/mv are preserved above as del/mvf. cp/mkdir/touch/rmdir/which are pure
 # reimplementations — Linux already ships better versions.
-foreach ($fn in @('rm', 'mv', 'cp', 'mkdir', 'touch', 'rmdir', 'which')) {
+#
+# grep is here as a BACKSTOP. Nothing defines it today — lessons are reached by `lesson
+# grep`, not by wrapping the command — but a function named grep is uniquely dangerous:
+# it is almost always downstream in a pipe, and a PowerShell function does not forward
+# stdin to the binary it calls, so `cat f | grep x` would hang on the console rather than
+# fail. That bug shipped once. This line runs after every component, so it catches the
+# mistake no matter who makes it.
+foreach ($fn in @('rm', 'mv', 'cp', 'mkdir', 'touch', 'rmdir', 'which', 'grep')) {
     if (Test-Path "Function:\$fn") { Remove-Item "Function:\$fn" -Force -ErrorAction SilentlyContinue }
 }
 

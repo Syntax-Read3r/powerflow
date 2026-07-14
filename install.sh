@@ -381,6 +381,30 @@ install_login_shell() {
     return 1
 }
 
+# Copy the source tree into PREFIX.
+#
+# NOT `cp -r "$src"/. "$PREFIX"/`. That copies .git along with everything else, and git's
+# loose objects are mode 444 — read-only. On a FIRST install that is merely wasteful (a
+# few MB the runtime never reads). On a SECOND install cp cannot overwrite them, fails,
+# and `set -euo pipefail` kills the installer with a wall of "Permission denied".
+#
+# Which means: re-running install.sh from a clone — the normal way to change your mind
+# about --login-shell — was impossible. It also broke the release CI, which installs
+# twice on purpose to prove the login hook is idempotent.
+#
+# .github, node_modules and assets/ are excluded for the same "the runtime never reads it"
+# reason. assets/ alone is 58 MB of README screenshots — it was landing in every Linux
+# install, while the Windows installer (which copies a curated list) never shipped it.
+copy_tree() {
+    local src="$1" dst="$2"
+    ( cd "$src" && tar -cf - \
+          --exclude=./.git \
+          --exclude=./.github \
+          --exclude=./node_modules \
+          --exclude=./assets \
+          . ) | ( cd "$dst" && tar -xf - )
+}
+
 configure_login_shell() {
     # Already launching pwsh? Say so and stop.
     if bashrc_hook_present; then
@@ -506,7 +530,7 @@ main() {
 
     # Copy into PREFIX unless we are already installing from it
     if [[ "$(cd "$src" && pwd)" != "$(cd "$PREFIX" && pwd)" ]]; then
-        cp -r "$src"/. "$PREFIX"/
+        copy_tree "$src" "$PREFIX"
     fi
     ok "PowerFlow files placed in ${PREFIX}"
 

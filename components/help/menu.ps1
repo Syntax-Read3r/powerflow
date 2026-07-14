@@ -4,11 +4,75 @@
 # Domain   : Help
 # File     : components/help/menu.ps1
 # Purpose  : Comprehensive command reference and help display
-# Functions: pwsh-h
-# Depends  : none
+# Functions: pwsh-h, Show-HelpTopic
+# Depends  : Get-LinuxLesson, Get-LessonTopics (components/shell/lessons.ps1)
+# ==============================================================================
+#
+# ONE menu, not two. But the full reference is ~16k characters, so bolting 40+ Linux
+# commands onto it would make it unreadable. It takes a TOPIC instead:
+#
+#     pwsh-h                 everything (unchanged)
+#     pwsh-h permissions     chmod / chown / groups only
+#     pwsh-h files           ls / rm / find
+#     pwsh-h linux           every Linux lesson
+#     lesson chmod           one command's lesson  (or: l chmod)
+#
+# All of it reads from components/shell/lessons.ps1 — one source of truth, so the
+# menu, `lesson`, and the inline hints can never drift apart.
 # ==============================================================================
 
+# pwsh-h <topic> — the Linux lessons for one topic.
+function Show-HelpTopic {
+    param([Parameter(Mandatory)][string]$Topic)
+
+    $t = $Topic.ToLower()
+
+    # An exact command name wins: `pwsh-h chmod` is the lesson for chmod.
+    $direct = Get-LinuxLesson -Command $t
+    if ($direct) { Show-Lesson -Command $t; return }
+
+    $topics  = Get-LessonTopics
+    $matches = @($script:PF_Lessons.GetEnumerator() | Where-Object { $_.Value.Topic -eq $t })
+
+    if ($t -eq 'linux') { $matches = @($script:PF_Lessons.GetEnumerator()) }
+
+    if ($matches.Count -eq 0) {
+        Write-Host ""
+        Write-Host "  ❌ No topic '$Topic'." -ForegroundColor Red
+        Write-Host "     Topics : $($topics -join ' · ') · linux" -ForegroundColor DarkGray
+        Write-Host "     Or a command name, e.g.  pwsh-h chmod" -ForegroundColor DarkGray
+        Write-Host ""
+        return
+    }
+
+    Write-Host ""
+    Write-Host "  🐧 $($t.ToUpper())" -ForegroundColor Cyan
+    Write-Host "  ────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+    Write-Host ("  {0,-14} {1,-14} {2}" -f 'LINUX', 'BROTHER', 'WHAT IT DOES') -ForegroundColor DarkGray
+
+    foreach ($m in ($matches | Sort-Object { $_.Key })) {
+        Write-Host ("  {0,-14} " -f $m.Key) -NoNewline -ForegroundColor Yellow
+        Write-Host ("{0,-14} " -f $m.Value.Brother) -NoNewline -ForegroundColor Green
+        Write-Host $m.Value.Short -ForegroundColor White
+    }
+
+    Write-Host ""
+    Write-Host "  Full lesson for any of them:  " -NoNewline -ForegroundColor DarkGray
+    Write-Host "lesson <command>" -NoNewline -ForegroundColor Cyan
+    Write-Host "   or   " -NoNewline -ForegroundColor DarkGray
+    Write-Host "l <command>" -ForegroundColor Cyan
+    Write-Host "  e.g.  " -NoNewline -ForegroundColor DarkGray
+    Write-Host "lesson chmod" -NoNewline -ForegroundColor Cyan
+    Write-Host "  ·  " -NoNewline -ForegroundColor DarkGray
+    Write-Host "l grep" -ForegroundColor Cyan
+    Write-Host ""
+}
+
 function pwsh-h {
+    param([Parameter(Position = 0)][string]$Topic = '')
+
+    if ($Topic) { Show-HelpTopic -Topic $Topic; return }
+
     # Build the version banner line with centred padding so the box stays aligned
     $verText   = "Enhanced Profile v$($script:POWERFLOW_VERSION)"
     $innerWidth = 78
@@ -26,9 +90,15 @@ $verLine
 
 ┌─ 🧭 SMART NAVIGATION & BOOKMARKS ────────────────────────────────────────────┐
 │  🎯 CORE NAVIGATION:                                                         │
-│  nav <project>       → smart project search in ~/Code and bookmarked dirs    │
+│  nav <project>       → smart project search in your roots + bookmarked dirs  │
 │  nav -verbose        → detailed search output for troubleshooting            │
 │  z <project>         → alias for nav                                         │
+│                                                                              │
+│  📍 SEARCH ROOTS (where nav looks):                                          │
+│  nav roots           → show current roots  (Win: ~/Code · Linux: ~)          │
+│  nav roots add <dir> → also search <dir>   e.g. /srv, /opt, /mnt/data        │
+│  nav roots rm <dir>  → stop searching <dir>                                  │
+│  nav roots reset     → back to the platform default                          │
 │                                                                              │
 │  🔖 BOOKMARK MANAGEMENT:                                                     │
 │  nav b <bookmark>    → navigate to bookmark                                  │
@@ -222,6 +292,35 @@ $verLine
 │  d-b -Path D:\           → scan a specific location instead of the hot spots │
 │    bands: 1-5GB · 5-20GB · 20-50GB · 50GB+   (a query cannot span two)       │
 │    actions: open folder · copy path · uninstall · trash · permanent delete   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌─ 🐧 LINUX & BASH ────────────────────────────────────────────────────────────┐
+│  🎓 LEARN LINUX WHILE YOU USE IT:                                            │
+│  lesson <command>    → learn any command — runs nothing, always safe         │
+│  l <command>         → shorthand.  l grep · l chmod · l rm                   │
+│  lesson              → the full index, grouped by topic                      │
+│  lesson <topic>      → every lesson in a topic (e.g. lesson permissions)     │
+│  perms <path>        → permissions, with every column explained              │
+│  pwsh-h permissions  → chmod · chown · chgrp · id · groups · getent          │
+│  pwsh-h files        → ls · rm · find    ·  pwsh-h linux → everything        │
+│  linux-lessons off   → hide the teaching (full · hint · off)                 │
+│                                                                              │
+│  👬 BROTHER COMMANDS — full words, same flags, teaches the real one:         │
+│  changemode → chmod     changeowner → chown     changegroup → chgrp          │
+│  findtext   → grep      findfile    → find      listprocs   → ps             │
+│  whoamifull → id        mygroups    → groups    lookupentry → getent         │
+│  service    → systemctl archive     → tar       stopproc    → kill           │
+│                                                                              │
+│  🐚 BASH BUILTINS POWERSHELL LACKS:                                          │
+│  export VAR=value    → set an env var, bash-style                            │
+│  alias ll='ls -lh'   → an alias WITH ARGUMENTS (Set-Alias cannot)            │
+│  unset VAR           → remove it       source .env → load KEY=value lines    │
+│  jobs · fg · bg      → job control     history     → numbered history        │
+│  !!  ·  !$           → last command · last argument  (sudo !!)               │
+│                                                                              │
+│  ⚠️  SINGLE DASH IS LINUX'S. LONG DASH IS POWERFLOW'S:                       │
+│  ls -l -a -d -h -t   → GNU semantics, exactly                                │
+│  ls --tree --depth 3 → PowerFlow's extras                                    │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌─ 🔧 DEBUGGING & TESTING ─────────────────────────────────────────────────────┐

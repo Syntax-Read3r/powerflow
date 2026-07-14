@@ -39,6 +39,7 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `adapters/locations.ps1` | `Get-StarshipConfigPath`, `Get-TerminalSettingsPath`, `Get-TempPath`, `Get-HomePath`, `Get-PowerFlowDataPath`, `Get-PowerFlowConfigPath` | `%LOCALAPPDATA%`, `%TEMP%` | XDG (`~/.config`, `~/.local/share`), `$TMPDIR` |
 | `adapters/pwsh-update.ps1` | `Invoke-PowerShellUpdate` | winget / MSI / Store | apt / snap / dotnet-tool |
 | `adapters/apps.ps1` | `Get-InstalledApplication`, `Uninstall-Application`, `Get-DiskHotspot`, `Measure-FolderSize`, `Move-ToTrash`, `Remove-PathPermanently`, `Test-TrashSupport`, `Test-ProtectedPath` | registry + Scoop; Recycle Bin | dpkg / rpm / pacman; `gio trash` |
+| `adapters/perms.ps1` | `Get-FileMode`, `Test-PermsSupported`, `Get-Umask`, `Set-Umask` | **returns `$null`** — Windows has ACLs, not POSIX mode bits, and inventing a fake `755` would teach something false | `stat(1)` for the mode; **libc `umask(2)` via P/Invoke** for the umask³ |
 
 ### Command bindings — loaded **after** components
 
@@ -57,9 +58,47 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `components/core/dependencies.ps1` | Core | `Get-RequiredTools`, `Initialize-Dependencies`, `Check-PowerShellUpdates` |
 | `components/core/recovery.ps1` | Core | `pwsh-recovery`, `powerflow-uninstall` |
 | `components/shared/strings.ps1` | Shared | `Convert-ToKebabCase`, `Convert-ToSnakeCase`, `Convert-ToPascalCase`, `Convert-ToCamelCase` |
+| `components/shell/bash-compat.ps1` | Shell | `export`, `unset`, `source`, `alias`¹, `unalias`, `jobs`, `fg`, `bg` — the bash builtins PowerShell lacks |
+| `components/shell/history.ps1` | Shell | `history`, `Get-LastCommand`, `Get-LastArg` + PSReadLine handlers for **`!!`** and **`!$`** |
+| `components/shell/lessons.ps1` | Shell | **`lesson`**, **`l`** (alias), `Show-LessonIndex`, `Get-LinuxLesson`, `Show-Lesson`, `Get-LessonTopics` — the **one source of truth** for every lesson. Tab-completes commands, brothers and topics. |
+| `components/shell/teach.ps1` | Shell | `perms`, `linux-lessons`, `Show-PermissionBreakdown`, `Format-ModeColons`, `Get-LessonMode` |
+| `components/shell/brothers.ps1` | Shell | `changemode`, `changeowner`, `changegroup`, `defaultmode`⁴, `whoamifull`, `mygroups`, `lookupentry`, `findfile`, `findtext`, `removefile`, `archive`, `listprocs`, `stopproc`, `service`, `listfiles`, `Get-UmaskResult` — each supports `-lesson` |
+
+> ¹ **`alias` is a function, not `Set-Alias`.** PowerShell's `Set-Alias` maps a name to a
+> single command and **cannot carry arguments**, so `alias ll='ls -la'` — the most common
+> thing anyone does with an alias in bash — is impossible with it. PowerFlow compiles
+> bash-style aliases into functions instead, which can.
+>
+> ³ **`umask` is a shell builtin, not a binary.** There is no `/usr/bin/umask` to run, and
+> `sh -c 'umask 022'` sets the umask of a subshell that then exits — changing nothing. It
+> must be done in-process, so the Linux adapter P/Invokes libc's `umask(2)` (verified on
+> both glibc and musl). Note that `umask(2)` has **no getter**: it always *sets*, returning
+> the previous value, so `Get-Umask` sets `0`, captures the old value, and restores it
+> immediately. Skip that restore and you have silently made every new file world-writable.
+>
+> ⁴ **`defaultmode` does not go through `Invoke-Brother`** for exactly that reason — there
+> is no binary to exec. It calls the adapter, and prints what the mask actually *produces*
+> (`022` → files `644`, dirs `755`), because a umask is **subtractive** and that is the
+> part people get wrong.
+>
+> **PowerFlow does not wrap the real command names.** An earlier design defined a function
+> per command so `chmod -lesson` would work; it was removed. A PowerShell function does not
+> forward stdin, so a wrapped `grep` would make `cat f | grep x` **hang** — which meant
+> `grep`/`rm`/`cp`/`cat` had to be denylisted, i.e. the commands a beginner most needs were
+> the ones that could not have a lesson. `lesson <command>` shadows nothing, so it covers
+> every command instead. See [components/shell/lessons.ps1](components/shell/lessons.ps1).
+>
+> ² **`nav` used to hardcode `~/Code`** — as the literal string `"$HOME\Code"`, which on
+> Linux interpolates to `/home/you\Code` (a backslash is a legal *filename* character
+> there, not a separator) and therefore matches nothing, ever. Roots are now a
+> configurable list: `~/Code` on Windows, `~` on Linux, plus whatever you add.
+> **The default is deliberately not `/`** — that walks `/proc`, `/sys`, `/dev` and `/run`,
+> which are kernel-backed pseudo-filesystems, and throws permission errors across most of
+> the rest. Add the real ones you want instead: `nav roots add /srv`.
+| `components/navigation/roots.ps1` | Navigation | `Get-NavSearchRoots`, `Get-NavDefaultRoots`, `Add-NavSearchRoot`, `Remove-NavSearchRoot`, `Reset-NavSearchRoots`, `Show-NavSearchRoots`, `Format-NavPath` — **where `nav` looks**, persisted to `~/.nav_roots.json`² |
 | `components/navigation/bookmarks.ps1` | Navigation | `Initialize-DefaultBookmarks`, `Get-Bookmarks`, `Save-Bookmarks`, `Add-Bookmark`, `Remove-Bookmark`, `Rename-Bookmark`, `Show-BookmarkList` |
 | `components/navigation/projects.ps1` | Navigation | `Search-Projects` |
-| `components/navigation/nav.ps1` | Navigation | `nav`, `Test-NavFunction`, `z` (alias) |
+| `components/navigation/nav.ps1` | Navigation | `nav`, `nav roots`, `Test-NavFunction`, `z` (alias) |
 | `components/navigation/directory.ps1` | Navigation | `here`, `..`, `...`, `....`, `.....`, `~`, `back`, `cd-` (alias), `copy-pwd` |
 | `components/files/listing.ps1` | Files | `ls`, `la`, `ll`, `clr` (alias), `cat` (alias)¹, `cp` (alias)¹ |
 | `components/files/operations.ps1` | Files | `rm`¹, `mv`¹, `mv-t`, `mv-c`, `rmdir`¹, `touch`¹, `mkdir`¹ |

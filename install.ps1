@@ -79,12 +79,38 @@ if (-not (Test-Path $profileDir)) {
 }
 
 # ── Back up an existing profile so uninstall can restore it ───────────────────
+#
+# The subtlety: on a RE-install the profile sitting on disk is PowerFlow's own. Backing
+# that up would make the backup a copy of PowerFlow — and uninstall, which restores the
+# backup, would then put PowerFlow back after deleting components/ and platform/. The
+# user would be left with a profile that errors on every shell start.
+#
+# So: back up only what we did not write. If PowerFlow is already installed, keep
+# pointing at the ORIGINAL pre-PowerFlow backup recorded in the existing manifest —
+# which may legitimately be $null, meaning the user had no profile to begin with.
+$manifestPath = Join-Path $profileDir '.powerflow-manifest.json'
+$alreadyInstalled = Test-Path $manifestPath
+
 $backup = $null
 if (Test-Path $profilePath) {
-    $stamp  = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $backup = "$profilePath.powerflow-backup.$stamp"
-    Copy-Item $profilePath $backup -Force
-    Write-Host "💾 Backed up existing profile -> $(Split-Path $backup -Leaf)" -ForegroundColor Yellow
+    if ($alreadyInstalled) {
+        try {
+            $backup = (Get-Content $manifestPath -Raw | ConvertFrom-Json).backup
+        } catch {
+            $backup = $null
+        }
+        if ($backup -and (Test-Path $backup)) {
+            Write-Host "💾 Reinstall — keeping your original backup: $(Split-Path $backup -Leaf)" -ForegroundColor Yellow
+        } else {
+            $backup = $null
+        }
+    }
+    else {
+        $stamp  = Get-Date -Format 'yyyyMMdd-HHmmss'
+        $backup = "$profilePath.powerflow-backup.$stamp"
+        Copy-Item $profilePath $backup -Force
+        Write-Host "💾 Backed up existing profile -> $(Split-Path $backup -Leaf)" -ForegroundColor Yellow
+    }
 }
 
 # ── Source: local tree if we have one, else download ──────────────────────────

@@ -9,7 +9,228 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [3.2.0] - Unreleased
+## [3.3.0] - 2026-07-14
+
+> 🐧 **PowerFlow now behaves like a real shell on Linux — and teaches you Linux while you
+> use it.**
+>
+> **Includes everything from 3.2.0**, which was tagged but never published — its release
+> workflow failed and the fixes for that failure are in this release. Upgrading from 3.1.x
+> gets you both.
+
+### Fixed
+
+- 💥 **`ls` silently listed the WRONG DIRECTORY.** This is the headline bug.
+
+  ```
+  ls -ld ward-a
+    GNU:        drwxr-xr-x 2 munya media 4096 ... ward-a
+    PowerFlow:  <listed the current directory instead>
+  ```
+
+  `ls` declared a `param()` block (`$path`, `$t`, `$d`) and **no `[CmdletBinding()]`**.
+  PowerShell therefore tried to bind `-l` as a *parameter name*, failed, and **silently
+  dumped it — and the path — into `$args`, where they were discarded**. No error.
+
+  Worse, two flags actively **contradicted** GNU:
+
+  | Flag | GNU means | PowerFlow meant |
+  |---|---|---|
+  | `ls -t` | sort by **time** | tree view |
+  | `ls -d` | the **directory itself**, not its contents | tree depth |
+
+  So `ls -t` on Linux quietly produced a *tree* instead of a time-sorted list.
+
+  **The rule now: single dash belongs to Linux; long dash belongs to PowerFlow.**
+  `ls -l -a -d -h -R -t -S -r -i` all mean exactly what they mean on Linux.
+  PowerFlow's extras moved to `--tree` and `--depth`, which GNU `ls` does not have and so
+  can never collide. (Not `--t` — in Linux `--` introduces a *long* flag, so `--t` would
+  teach the wrong convention.)
+
+- 💥 **`nav` was completely non-functional on Linux.**
+
+  ```
+  ❯ nav linux lab
+  ❌ No directories found in /home/munya\Code
+                                          ↑ a literal backslash
+  ```
+
+  `nav` built its search root as the string `"$HOME\Code"`. On Windows that is a path.
+  On Linux it interpolates to `/home/munya\Code` — and because a backslash is a perfectly
+  legal **filename character** on Linux, not a separator, this is not an error. It is a
+  request for a directory that has never existed. `nav` dutifully searched it, found
+  nothing, and said so. Every default bookmark (`~\Documents`, `~\Pictures`, …) was built
+  the same way, so **every one of them was dead on Linux too**.
+
+  Underneath sat a second bug: the bookmark-context logic compared paths with
+  `TrimEnd('\')` and `StartsWith($bmPath + '\')`. On Linux that separator never appears,
+  so "am I inside a bookmark?" was permanently false — silently, with no symptom.
+
+  All path handling now goes through `Join-Path` and
+  `[IO.Path]::DirectorySeparatorChar`. Path comparison is case-insensitive on Windows and
+  **case-sensitive on Linux**, where `/home/Foo` and `/home/foo` are genuinely different
+  directories.
+
+- 🔖 **Default bookmarks no longer point at directories that do not exist.** A headless
+  server has no `~/Pictures` and no `~/Code`; PowerFlow bookmarked them anyway. Defaults
+  are now filtered by `Test-Path` at first run, and `~` is always among them.
+
+- 💥 **`defaultmode` (umask) never worked at all.** It printed *"'umask' is not available
+  on this system"* every single time — because `umask` is a **shell builtin, not a
+  binary**. There is no `/usr/bin/umask` to execute, and `sh -c 'umask 022'` sets the umask
+  of a subshell that immediately exits, changing nothing. It has to be done in-process, so
+  the perms adapter now calls libc's `umask(2)` directly (verified on glibc *and* musl).
+
+  `defaultmode` also now shows what the mask actually *produces*, since a umask is
+  **subtractive** and that is the part everyone gets wrong:
+
+  ```
+  ❯ defaultmode 027
+    umask 0022 → 0027   new files 640, new dirs 750
+    🐧 real linux command: umask 027
+  ```
+
+  (A trap worth knowing: `umask(2)` has **no getter**. It always *sets*, returning the
+  previous value — so reading it means setting `0` and restoring immediately. Skip the
+  restore and every file the shell creates from then on is world-writable.)
+
+- 💥 **Re-installing then uninstalling left a dead profile behind.** `install.ps1` backed
+  up *any* existing profile — including PowerFlow's own. So on a second install the
+  "backup" was a copy of PowerFlow, and `uninstall.ps1`, which restores the backup,
+  put PowerFlow back **after** deleting `components/` and `platform/`. The result was a
+  profile that errored on every single shell start. Install now backs up only what it did
+  not write, and keeps pointing at your genuine pre-PowerFlow backup across re-installs.
+
+- 🐧 **`install.sh` could not be run twice.** It copied the whole source tree into
+  `~/.local/share/powerflow` with `cp -r`, **including `.git/`**. Git's loose objects are
+  mode `444`, so the second run could not overwrite them; `cp` failed, `set -euo pipefail`
+  aborted, and the installer died in a wall of *Permission denied*. Re-running the
+  installer from a clone — the normal way to change your mind about `--login-shell` — was
+  therefore impossible. `.git`, `.github`, `node_modules` and `assets/` are now excluded.
+
+- 📦 **A Linux install was 60 MB; it is now 1.3 MB.** `assets/` — 58 MB of README
+  screenshots that nothing reads at runtime — was being copied into every install. The
+  Windows installer never shipped it; now neither does the Linux one.
+
+- 🧰 **`install-gui.sh` built its arguments by string-splitting** (`--yes $NO_DEPS_FLAG
+  $LOGIN_FLAG`), so a flag whose value contained a space depended on word-splitting to
+  land correctly. Now an array (`"${INSTALL_ARGS[@]}"`), which passes exactly the
+  arguments intended and nothing else. (shellcheck SC2086 — it was right.)
+
+### Added
+
+- 📍 **`nav roots` — configurable search roots.** `nav` no longer assumes your work lives
+  in `~/Code`.
+
+  ```
+  nav roots              # show where nav looks
+  nav roots add /srv     # also search /srv  (or /opt, /mnt/data, …)
+  nav roots rm  /srv
+  nav roots reset
+  ```
+
+  Defaults: **`~/Code` on Windows** (unchanged), **`~` on Linux** — which already contains
+  `~/Code`, `~/linux-lab` and anything else you actually work in.
+
+  **The default is deliberately not `/`.** Scanning `/` walks `/proc`, `/sys`, `/dev` and
+  `/run` — kernel-backed pseudo-filesystems, not directories in any useful sense — and
+  hits permission errors across most of the rest. On a bare Debian container `/` holds
+  ~1,600 directories to `$HOME`'s 5, and a real server is far worse; you would wait
+  seconds to fuzzy-match against mostly noise. Those paths are now skipped outright even
+  if you do add `/`. Add the roots you actually want instead.
+
+  With more than one root, the picker shows each entry under its real root
+  (`~/linux-lab`, `/srv/media`) so two same-named directories are never ambiguous.
+  If your current directory is inside a bookmark, that bookmark still wins — it is a
+  better guess at what you meant than any global scan.
+
+- 🎓 **A Linux teaching layer.** `perms <path>` explains a file's permissions — including
+  **which column is which**, the thing that is genuinely hard to remember:
+
+  ```
+    d : rwx : rwx : r-x   2   munya   media   4.0K   Jul 14 12:05   ward-a
+    ╷    ╷     ╷     ╷    ╷     ╷       ╷
+    │    │     │     │    │     │       └── GROUP  · members of 'media'
+    │    │     │     │    │     └── OWNER  · the user who owns it
+    │    │     │     │    └── hard links
+    │    │     │     └── others · r-x = read + enter
+    │    │     └── group  · rwx = read + write + enter
+    │    └── owner  · rwx = read + write + enter
+    └── type · d = directory
+
+    🔢 numeric : 775          chmod 775 ward-a
+    🐧 real linux command : ls -ld ward-a
+    💡 On a DIRECTORY, x means 'may enter', not 'may run'.
+  ```
+
+  Colon-separated (`d:rwx:rwx:r-x`) because the three triads are the whole point and
+  `drwxr-xr-x` runs them together.
+
+- 🎚️ **`linux-lessons full | hint | off`** — teaching is a phase, not a permanent state.
+  `off` produces byte-identical GNU output. Persisted to settings; defaults to `full` on
+  Linux and `off` on Windows (nobody on Windows is learning `chmod`).
+
+- 👬 **Brother commands.** Full-word twins of cryptic Linux names — **same flags, same
+  result** — that always print the real command, so you build muscle memory for `chmod`
+  while typing `changemode`:
+
+  | | | | |
+  |---|---|---|---|
+  | `changemode`→`chmod` | `changeowner`→`chown` | `changegroup`→`chgrp` | `defaultmode`→`umask` |
+  | `whoamifull`→`id` | `mygroups`→`groups` | `lookupentry`→`getent` | `findtext`→`grep` |
+  | `findfile`→`find` | `listprocs`→`ps` | `stopproc`→`kill` | `service`→`systemctl` |
+
+- 📚 **`lesson <command>`** — learn any Linux command. It **runs nothing**, so it is always
+  safe, even for `rm`. Shorthand `l`, and it tab-completes:
+
+  ```
+  lesson chmod          # the real command
+  l grep                # shorthand
+  lesson changemode     # the brother name finds the same lesson
+  lesson permissions    # every lesson in a topic
+  lesson                # the full index
+  ```
+
+  **Why a verb and not `chmod -lesson`.** `chmod -lesson` would require PowerFlow to define
+  a *function* named `chmod` — PowerShell gives no other way to see a native command's
+  arguments. That was built, and then removed, because a function is not a transparent
+  stand-in for a binary: **it does not forward stdin**, so a wrapped `grep` would make
+  `cat access.log | grep ERROR` start the real grep with no input and **hang on the
+  console**. Defending against that meant denylisting `grep`, `rm`, `cp`, `cat` — which
+  left the commands a beginner most needs as exactly the ones that could not have a lesson.
+
+  `lesson <command>` shadows nothing. So it covers **every** command, `grep` and `rm`
+  included, and there is no failure mode to defend against. Brothers keep `-lesson`
+  (`changemode -lesson`), since a brother name is not a real command.
+
+  One data file backs `lesson`, `pwsh-h <topic>` and the inline hints, so they cannot drift.
+
+- 🔍 **One menu, with topics.** No separate `linux-h`. `pwsh-h` already renders 16k
+  characters, so it now takes a topic: `pwsh-h permissions`, `pwsh-h files`, `pwsh-h linux`,
+  or a command name (`pwsh-h chmod`).
+
+- 🐚 **The bash builtins PowerShell lacks**, so you never have to leave PowerFlow:
+
+  | | |
+  |---|---|
+  | `export VAR=value` | bash-style env vars |
+  | **`alias ll='ls -lh'`** | **an alias WITH ARGUMENTS** — `Set-Alias` fundamentally cannot do this |
+  | `unset` · `source` | remove a var · load `KEY=value` lines from a file |
+  | `jobs` · `fg` · `bg` | job control, mapped onto PowerShell jobs |
+  | `history` · **`!!`** · **`!$`** | `sudo !!` is muscle memory. Implemented as PSReadLine handlers that rewrite the line **in place**, so you see what will run before pressing Enter — arguably better than bash, where `!!` expands invisibly. |
+
+  (`&&`, `\|\|`, pipes, redirection, `$()` and globbing already worked in PowerShell 7.)
+
+- 🪟 **Windows tells the truth.** `perms` on Windows does **not** invent a fake `755` —
+  Windows has ACLs, not POSIX mode bits, and there is no honest mapping. It says so and
+  points at `icacls`. The **lessons still work** on Windows; only the *action* does not.
+
+## [3.2.0] - 2026-07-14 · tagged, never published
+
+> ⚠️ **This version was tagged but no release was ever published — its release workflow
+> failed** (shellcheck SC2086 in `install-gui.sh`, and `install.sh` could not run twice
+> because it copied read-only `.git` objects). Both are fixed in **3.3.0**, which contains
+> everything below. There is nothing to install here; go to 3.3.0.
 
 > 🌍 **`git-rl` now works in any project — not just PowerFlow's.**
 >
