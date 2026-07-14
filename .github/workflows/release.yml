@@ -6,13 +6,15 @@
 # This file is the entry point. It calls component workflows in declared order.
 # To modify release behaviour, edit the relevant component file:
 #
-#   release-validate.yml          — version check, file existence, syntax test
+#   release-validate.yml          — version check, syntax, platform-separation gate
+#   release-validate-linux.yml    — Linux install -> use -> uninstall, end to end
 #   release-generate-scripts.yml  — install/uninstall scripts + release notes
-#   release-bundle-archive.yml    — component zip archive + ubuntu/.bashrc
+#   release-bundle-archive.yml    — component zip archive
 #   release-publish.yml           — create GitHub release with all assets
 #   release-notify.yml            — post-release log / notifications
 #
-# generate-scripts and bundle-archive run in parallel (no dependency on each other).
+# validate-linux runs alongside the build jobs and BLOCKS publish. A release can
+# no longer ship with a broken Linux port — which is exactly how the old one rotted.
 # ==============================================================================
 
 name: PowerFlow Release
@@ -31,7 +33,11 @@ jobs:
   validate:
     uses: ./.github/workflows/release-validate.yml
 
-  # ── Stage 2: Build (parallel) ───────────────────────────────────────────────
+  # ── Stage 2: Validate Linux + Build (parallel) ──────────────────────────────
+  validate-linux:
+    needs: validate
+    uses: ./.github/workflows/release-validate-linux.yml
+
   generate-scripts:
     needs: validate
     uses: ./.github/workflows/release-generate-scripts.yml
@@ -45,9 +51,9 @@ jobs:
     with:
       version: ${{ needs.validate.outputs.version }}
 
-  # ── Stage 3: Publish ────────────────────────────────────────────────────────
+  # ── Stage 3: Publish (blocked until Linux is proven working) ────────────────
   publish:
-    needs: [validate, generate-scripts, bundle-archive]
+    needs: [validate, validate-linux, generate-scripts, bundle-archive]
     permissions:
       contents: write
     uses: ./.github/workflows/release-publish.yml

@@ -159,7 +159,7 @@ function nav {
     } else {
         Write-Host "❌ No project matching '$query' found" -ForegroundColor Red
         Write-Host "   Searched 4 levels deep in: $searchRoot" -ForegroundColor DarkGray
-        Write-Host "💡 Install fzf for fuzzy search: scoop install fzf" -ForegroundColor DarkGray
+        Write-Host "💡 Install fzf for fuzzy search: $(Get-DependencyInstallHint 'fzf')" -ForegroundColor DarkGray
     }
 }
 

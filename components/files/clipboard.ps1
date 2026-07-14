@@ -29,7 +29,7 @@ function open-pwd {
         }
 
         # Open in File Explorer
-        explorer.exe $currentPath
+        Open-Path $currentPath
 
         Write-Host "📁 Opened File Explorer: $currentPath" -ForegroundColor Green
 
@@ -50,7 +50,7 @@ function paste-file {
 
     try {
         # Get clipboard content as text (file path stored by copy-file with 'FILE:' prefix)
-        $clipboardContent = Get-Clipboard -ErrorAction SilentlyContinue
+        $clipboardContent = Get-FromClipboard
 
         if (-not $clipboardContent -or -not $clipboardContent.StartsWith('FILE:')) {
             Write-Host "❌ No file found in clipboard" -ForegroundColor Red
@@ -193,7 +193,7 @@ function copy-file {
         $fullPath = (Resolve-Path $filePath).Path
 
         # Store file path in clipboard with 'FILE:' prefix for paste-file to recognize
-        Set-Clipboard -Value "FILE:$fullPath"
+        Copy-ToClipboard "FILE:$fullPath"
 
         $fileInfo = Get-Item $fullPath
         Write-Host "📋 Copied file to clipboard: $($fileInfo.Name)" -ForegroundColor Green

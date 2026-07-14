@@ -1,22 +1,58 @@
 # ==============================================================================
 # PowerFlow — Bootloader
 # ==============================================================================
-# Version  : 2.0.0
+# Version  : 3.0.0
 # Repo     : https://github.com/Syntax-Read3r/powerflow
-# Purpose  : Thin bootloader that dot-sources all component files in order
+# Purpose  : Platform-aware bootloader. Detects the OS, loads that platform's
+#            adapters, then the shared components, then the platform bindings.
+# ==============================================================================
+#
+# This same file is $PROFILE on BOTH platforms — pwsh looks for
+# Microsoft.PowerShell_profile.ps1 on Windows and Linux alike.
+#
+# Load order matters:
+#   1. settings            — script-scoped variables everything else reads
+#   2. platform adapters   — MUST precede components; components call them
+#   3. platform paths      — PATH, prompt, shell integrations
+#   4. components          — shared domain logic (no OS APIs)
+#   5. windows-only        — features with no Linux equivalent (WSL)
+#   6. platform bindings   — MUST follow components; rebinds command names
+#   7. help                — references everything above
 # ==============================================================================
 
-# Resolve root path relative to this file so the profile works regardless of
-# where $PROFILE points on any machine.
 $script:PowerFlowRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# Helper: resolve a component path and warn if the file is missing.
-# Returns the full path, or $null if not found.
-#
-# IMPORTANT: the actual dot-source (. $_p) is intentionally done in the
-# bootloader body — NOT inside this function.  Dot-sourcing inside a function
-# places all definitions in the function's local scope, which is destroyed when
-# the function returns, making every component function invisible afterwards.
+# ------------------------------------------------------------------------------
+# Platform detection
+# ------------------------------------------------------------------------------
+# CAREFUL: $IsWindows does NOT exist in Windows PowerShell 5.1 — it is $null there,
+# which is falsy. A naive `if ($IsWindows)` would classify a 5.1 box as "not
+# Windows", the platform layer would never load, and the profile would break for
+# every 5.1 user. 5.1 is always Desktop edition and always Windows, so check that
+# first. PowerFlow supports 5.1+ (see install.ps1's `#Requires -Version 5.1`).
+# ------------------------------------------------------------------------------
+$script:PowerFlowOS =
+    if ($PSVersionTable.PSEdition -eq 'Desktop') { 'windows' }   # Windows PowerShell 5.1
+    elseif ($IsWindows)                          { 'windows' }   # pwsh 6+ on Windows
+    elseif ($IsLinux)                            { 'linux' }
+    elseif ($IsMacOS)                            { 'macos' }
+    else                                         { 'unknown' }
+
+if ($script:PowerFlowOS -eq 'macos') {
+    Write-Warning "PowerFlow: macOS is not supported yet. Falling back to the Linux platform layer."
+    $script:PowerFlowOS = 'linux'
+}
+elseif ($script:PowerFlowOS -eq 'unknown') {
+    Write-Warning "PowerFlow: could not detect the platform. Aborting profile load."
+    return
+}
+
+# ------------------------------------------------------------------------------
+# Source helpers
+# ------------------------------------------------------------------------------
+# IMPORTANT: the dot-source (. $_p) happens in the bootloader body, NOT inside a
+# function. Dot-sourcing inside a function puts the definitions in that function's
+# local scope, which is destroyed on return — every component would vanish.
 function _pf_path {
     param([string]$relativePath)
     $fullPath = Join-Path $script:PowerFlowRoot $relativePath
@@ -25,85 +61,95 @@ function _pf_path {
     return $null
 }
 
+# Enumerate every .ps1 under a directory, in stable order.
+function _pf_files {
+    param([string]$relativeDir)
+    $dir = Join-Path $script:PowerFlowRoot $relativeDir
+    if (-not (Test-Path $dir)) {
+        Write-Warning "PowerFlow: directory not found: $dir"
+        return @()
+    }
+    return @(Get-ChildItem -Path $dir -Filter *.ps1 -File | Sort-Object Name | Select-Object -ExpandProperty FullName)
+}
+
 # ------------------------------------------------------------------------------
-# 1. Settings & Paths (must load first — other components read these variables)
+# 1. Settings
 # ------------------------------------------------------------------------------
 $_p = _pf_path "config\PowerFlow.settings.ps1"; if ($_p) { . $_p }
-$_p = _pf_path "config\PowerFlow.paths.ps1";    if ($_p) { . $_p }
 
 # ------------------------------------------------------------------------------
-# 2. Core — version management, dependency checks, recovery
+# 2. Platform adapters — MUST load before components
 # ------------------------------------------------------------------------------
-$_p = _pf_path "components\core\version.ps1";      if ($_p) { . $_p }
-$_p = _pf_path "components\core\dependencies.ps1"; if ($_p) { . $_p }
-$_p = _pf_path "components\core\recovery.ps1";     if ($_p) { . $_p }
+foreach ($_p in (_pf_files "platform\$script:PowerFlowOS\adapters")) { . $_p }
 
 # ------------------------------------------------------------------------------
-# 3. Shared utilities (string helpers, aliases used by multiple domains)
+# 3. Platform paths — PATH, Starship, zoxide, auto-navigate
 # ------------------------------------------------------------------------------
-$_p = _pf_path "components\shared\strings.ps1"; if ($_p) { . $_p }
-$_p = _pf_path "components\shared\aliases.ps1"; if ($_p) { . $_p }
+$_p = _pf_path "config\paths.$script:PowerFlowOS.ps1"; if ($_p) { . $_p }
 
 # ------------------------------------------------------------------------------
-# 4. Navigation
+# 4. Components — shared domain logic (dependency order within each domain)
 # ------------------------------------------------------------------------------
-$_p = _pf_path "components\navigation\bookmarks.ps1"; if ($_p) { . $_p }
-$_p = _pf_path "components\navigation\projects.ps1";  if ($_p) { . $_p }
-$_p = _pf_path "components\navigation\nav.ps1";       if ($_p) { . $_p }
-$_p = _pf_path "components\navigation\directory.ps1"; if ($_p) { . $_p }
+$_pf_components = @(
+    "components\core\version.ps1"
+    "components\core\dependencies.ps1"
+    "components\core\recovery.ps1"
+
+    "components\shared\strings.ps1"
+
+    "components\navigation\bookmarks.ps1"
+    "components\navigation\projects.ps1"
+    "components\navigation\nav.ps1"
+    "components\navigation\directory.ps1"
+
+    "components\files\listing.ps1"
+    "components\files\operations.ps1"
+    "components\files\rename.ps1"
+    "components\files\clipboard.ps1"
+
+    "components\git\remote.ps1"        # Create-RemoteRepository — used by git-a
+    "components\git\commit.ps1"
+    "components\git\branches.ps1"
+    "components\git\rollback.ps1"
+    "components\git\interactive.ps1"
+    "components\git\release.ps1"
+    "components\git\reset.ps1"
+
+    "components\github\browser.ps1"
+
+    "components\terminal\tabs.ps1"
+
+    "components\projects\create-next.ps1"
+
+    "components\system\config-files.ps1"
+    "components\system\shutdown.ps1"
+    "components\system\path.ps1"
+)
+foreach ($_c in $_pf_components) {
+    $_p = _pf_path $_c; if ($_p) { . $_p }
+}
 
 # ------------------------------------------------------------------------------
-# 5. File operations
+# 5. Windows-only features (WSL launchers — no Linux equivalent)
 # ------------------------------------------------------------------------------
-$_p = _pf_path "components\files\listing.ps1";    if ($_p) { . $_p }
-$_p = _pf_path "components\files\operations.ps1"; if ($_p) { . $_p }
-$_p = _pf_path "components\files\rename.ps1";     if ($_p) { . $_p }
-$_p = _pf_path "components\files\clipboard.ps1";  if ($_p) { . $_p }
+if ($script:PowerFlowOS -eq 'windows') {
+    foreach ($_p in (_pf_files "windows-only")) { . $_p }
+}
 
 # ------------------------------------------------------------------------------
-# 6. Git workflows
+# 6. Platform bindings — MUST load after components (rebinds command names)
 # ------------------------------------------------------------------------------
-$_p = _pf_path "components\git\remote.ps1";      if ($_p) { . $_p }
-$_p = _pf_path "components\git\commit.ps1";      if ($_p) { . $_p }
-$_p = _pf_path "components\git\branches.ps1";    if ($_p) { . $_p }
-$_p = _pf_path "components\git\rollback.ps1";    if ($_p) { . $_p }
-$_p = _pf_path "components\git\interactive.ps1"; if ($_p) { . $_p }
-$_p = _pf_path "components\git\release.ps1";     if ($_p) { . $_p }
-$_p = _pf_path "components\git\reset.ps1";       if ($_p) { . $_p }
+$_p = _pf_path "platform\$script:PowerFlowOS\bindings.ps1"; if ($_p) { . $_p }
 
 # ------------------------------------------------------------------------------
-# 7. GitHub integration
-# ------------------------------------------------------------------------------
-$_p = _pf_path "components\github\browser.ps1"; if ($_p) { . $_p }
-
-# ------------------------------------------------------------------------------
-# 8. Terminal management
-# ------------------------------------------------------------------------------
-$_p = _pf_path "components\terminal\tabs.ps1"; if ($_p) { . $_p }
-$_p = _pf_path "components\terminal\wsl.ps1";  if ($_p) { . $_p }
-
-# ------------------------------------------------------------------------------
-# 9. Project generators
-# ------------------------------------------------------------------------------
-$_p = _pf_path "components\projects\create-next.ps1"; if ($_p) { . $_p }
-
-# ------------------------------------------------------------------------------
-# 10. System utilities
-# ------------------------------------------------------------------------------
-$_p = _pf_path "components\system\config-files.ps1"; if ($_p) { . $_p }
-$_p = _pf_path "components\system\shutdown.ps1";     if ($_p) { . $_p }
-$_p = _pf_path "components\system\path.ps1";         if ($_p) { . $_p }
-
-# ------------------------------------------------------------------------------
-# 11. Help system
+# 7. Help (last — its text references everything above)
 # ------------------------------------------------------------------------------
 $_p = _pf_path "components\help\menu.ps1"; if ($_p) { . $_p }
 
-# Clean up temp variable
-Remove-Variable _p -ErrorAction SilentlyContinue
+Remove-Variable _p, _c, _pf_components -ErrorAction SilentlyContinue
 
 # ------------------------------------------------------------------------------
-# Startup checks (non-blocking, run after all components are loaded)
+# Startup checks (non-blocking, after all components are loaded)
 # ------------------------------------------------------------------------------
 if ($script:CHECK_PROFILE_UPDATES) { Check-PowerFlowUpdates }
 if ($script:CHECK_DEPENDENCIES)    { Initialize-Dependencies }
@@ -112,6 +158,8 @@ if ($script:CHECK_UPDATES)         { Check-PowerShellUpdates }
 # ------------------------------------------------------------------------------
 # Done
 # ------------------------------------------------------------------------------
-Write-Host "✅ PowerFlow v${script:POWERFLOW_VERSION} loaded. Type " -NoNewline -ForegroundColor Green
+Write-Host "✅ PowerFlow v${script:POWERFLOW_VERSION} loaded" -NoNewline -ForegroundColor Green
+Write-Host " ($script:PowerFlowOS)" -NoNewline -ForegroundColor DarkGray
+Write-Host ". Type " -NoNewline -ForegroundColor Green
 Write-Host "pwsh-h" -NoNewline -ForegroundColor Yellow
 Write-Host " for help" -ForegroundColor Green

@@ -22,9 +22,6 @@ on:
 env:
   PROFILE_FILE:    Microsoft.PowerShell_profile.ps1
   SETTINGS_FILE:   config/PowerFlow.settings.ps1
-  UBUNTU_BASHRC:   ubuntu/.bashrc
-  UBUNTU_INSTALL:  ubuntu/install.sh
-  UBUNTU_UNINSTALL: ubuntu/uninstall.sh
 
 jobs:
   validate:
@@ -53,21 +50,12 @@ jobs:
         run: |
           $required = @(
             "${{ env.PROFILE_FILE }}",
-            "${{ env.SETTINGS_FILE }}",
-            "${{ env.UBUNTU_BASHRC }}"
-          )
-          $optional = @(
-            "${{ env.UBUNTU_INSTALL }}",
-            "${{ env.UBUNTU_UNINSTALL }}"
+            "${{ env.SETTINGS_FILE }}"
           )
           $failed = $false
           foreach ($f in $required) {
             if (Test-Path $f) { Write-Host "✅ $f" }
             else { Write-Error "❌ Required file missing: $f"; $failed = $true }
-          }
-          foreach ($f in $optional) {
-            if (Test-Path $f) { Write-Host "✅ $f" }
-            else { Write-Warning "⚠️  Optional file not found: $f" }
           }
           if ($failed) { exit 1 }
 
@@ -94,13 +82,6 @@ jobs:
             }
           }
 
-          # Advisory check: ubuntu/.bashrc version (warn only, not a blocker)
-          $bashrc = Get-Content "${{ env.UBUNTU_BASHRC }}" -Raw
-          if ($bashrc -match 'WSL_PROFILE_VERSION="([^"]+)"') {
-            if ($matches[1] -ne $expected) {
-              Write-Warning "⚠️  Ubuntu .bashrc WSL_PROFILE_VERSION ($($matches[1])) does not match tag ($expected)"
-            }
-          }
           Write-Host "✅ Version validated"
 
       - name: 🧪 Test Bootloader Syntax
@@ -114,3 +95,53 @@ jobs:
             Write-Error "❌ Syntax error in ${{ env.PROFILE_FILE }}: $($_.Exception.Message)"
             exit 1
           }
+
+      # The architectural invariant: components/ must never call an OS API directly.
+      # It must go through platform/<os>/adapters/. If this fails, the Linux port
+      # is broken even if Windows still works — which is exactly how the old port
+      # rotted without anyone noticing.
+      - name: 🚧 Enforce Platform Separation
+        shell: pwsh
+        run: |
+          $forbidden = 'Set-Clipboard|Get-Clipboard|explorer\.exe|\bscoop\b|Start-Process "wt"|WindowsPrincipal|shutdown\.exe|SetEnvironmentVariable|System\.Windows\.Forms|winget|\$env:(TEMP|USERPROFILE|LOCALAPPDATA|APPDATA)'
+          $hits = Get-ChildItem components -Recurse -Filter *.ps1 |
+                  Where-Object { $_.Name -ne 'create-next.ps1' } |   # generated-project template
+                  Select-String -Pattern $forbidden |
+                  Where-Object { $_.Line -notmatch '^\s*#' }         # comments are fine
+
+          if ($hits) {
+            Write-Error "❌ components/ calls an OS API directly — it must use a platform adapter:"
+            $hits | ForEach-Object { Write-Host "   $($_.RelativePath ?? $_.Path):$($_.LineNumber): $($_.Line.Trim())" }
+            exit 1
+          }
+          Write-Host "✅ components/ is platform-agnostic"
+
+      - name: 🔌 Verify Adapter Contract Parity
+        shell: pwsh
+        run: |
+          # Every adapter function on one platform must exist on the other, or a
+          # component call will explode at runtime on the platform that lacks it.
+          function Get-Contract($os) {
+            Get-ChildItem "platform/$os/adapters" -Filter *.ps1 |
+              Select-String -Pattern '^function ([A-Za-z][A-Za-z0-9-]*)' |
+              ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique
+          }
+          $win   = Get-Contract 'windows'
+          $linux = Get-Contract 'linux'
+
+          # Internal helpers may be platform-specific; the SHARED contract is what
+          # components/ actually call, so check that every component call resolves.
+          $calls = Get-ChildItem components, config -Recurse -Filter *.ps1 |
+                   Select-String -Pattern '\b(Copy-ToClipboard|Get-FromClipboard|Open-Path|Open-Editor|Open-Url|Test-Admin|Assert-Admin|Test-Dependency|Install-Dependency|Uninstall-Dependency|Test-PackageManager|Install-PackageManager|Get-PackageManagerName|Get-DependencyInstallHint|New-TerminalTab|Switch-TerminalTab|Close-TerminalTabAt|Send-TerminalKeys|Invoke-Shutdown|Stop-Shutdown|Add-PersistentPathEntry|Test-PersistentPathEntry|Get-PathScopeLabel|Get-StarshipConfigPath|Get-TerminalSettingsPath|Get-TempPath|Get-HomePath|Get-PowerFlowConfigPath|Invoke-PowerShellUpdate)\b' |
+                   ForEach-Object { $_.Matches[0].Value } | Sort-Object -Unique
+
+          $failed = $false
+          foreach ($c in $calls) {
+            $inWin = $win -contains $c; $inLinux = $linux -contains $c
+            if (-not $inWin -or -not $inLinux) {
+              Write-Error "❌ '$c' is called by components/ but missing on: $(@(if(-not $inWin){'windows'}; if(-not $inLinux){'linux'}) -join ', ')"
+              $failed = $true
+            }
+          }
+          if ($failed) { exit 1 }
+          Write-Host "✅ All $($calls.Count) adapter calls resolve on BOTH platforms"

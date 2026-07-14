@@ -1,0 +1,176 @@
+# ==============================================================================
+# PowerFlow — Validate Linux (reusable workflow)
+# ==============================================================================
+# Called by  : .github/workflows/release.yml
+# Responsibility: Prove the Linux port actually works, end to end, on a real box:
+#                 INSTALL -> LOAD -> USE -> UNINSTALL.
+#
+# This is the guard the old Ubuntu port never had. It shipped for months as a
+# parallel bash re-implementation that nobody exercised, and it silently rotted.
+# If this job passes, Linux genuinely works. If it fails, the release stops.
+# ==============================================================================
+
+name: Validate Linux
+
+on:
+  workflow_call:
+
+jobs:
+  linux:
+    name: 🐧 Validate Linux (install → use → uninstall)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🐚 Install PowerShell
+        shell: bash
+        run: |
+          sudo snap install powershell --classic
+          pwsh --version
+
+      - name: 🧪 Parse every .ps1 under pwsh on Linux
+        shell: pwsh
+        run: |
+          $bad = 0
+          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            $errs = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errs) | Out-Null
+            if ($errs) { $bad++; Write-Host "::error file=$($_.FullName)::$($errs[0].Message)" }
+          }
+          if ($bad -gt 0) { exit 1 }
+          Write-Host "✅ All .ps1 parse under Linux pwsh"
+
+      - name: 📦 Install PowerFlow (non-interactive, WITH dependencies)
+        shell: bash
+        run: |
+          # git is pre-installed on the runner. It must be recorded as
+          # installedByPowerFlow=false and must SURVIVE the uninstall below.
+          command -v git >/dev/null || { echo "::error::expected git preinstalled"; exit 1; }
+
+          bash ./install.sh --yes
+
+          test -f "$HOME/.config/powershell/Microsoft.PowerShell_profile.ps1" \
+            || { echo "::error::profile was not installed"; exit 1; }
+          test -d "$HOME/.config/powershell/platform/linux/adapters" \
+            || { echo "::error::linux adapters were not installed"; exit 1; }
+          test -f "$HOME/.config/powershell/.powerflow-manifest.json" \
+            || { echo "::error::manifest was not written"; exit 1; }
+          echo "✅ installed"
+
+      # Dependency install is where the real breakage hides: apt needs an index
+      # refresh on a clean box, and starship/lsd are not in Ubuntu's repos at all,
+      # so they must come from GitHub. If any of this regresses, PowerFlow "installs"
+      # but ls has no lsd and the prompt has no starship.
+      - name: 🔧 Every dependency actually installed
+        shell: bash
+        run: |
+          fail=0
+          for t in starship fzf zoxide lsd git; do
+            if command -v "$t" >/dev/null 2>&1; then echo "  ✅ $t -> $(command -v $t)"
+            else echo "::error::dependency not installed: $t"; fail=1; fi
+          done
+          [ "$fail" -eq 0 ] || exit 1
+
+      - name: 🚀 Load the profile and exercise it
+        shell: pwsh
+        run: |
+          . "$HOME/.config/powershell/Microsoft.PowerShell_profile.ps1"
+
+          if ($script:PowerFlowOS -ne 'linux') {
+            Write-Error "❌ platform detected as '$script:PowerFlowOS', expected 'linux'"; exit 1
+          }
+          Write-Host "✅ platform detected: linux"
+
+          # Adapters must be present
+          $adapters = @('Copy-ToClipboard','Test-Admin','Install-Dependency','New-TerminalTab',
+                        'Invoke-Shutdown','Add-PersistentPathEntry','Get-TempPath','Get-PackageManagerName')
+          foreach ($a in $adapters) {
+            if (-not (Get-Command $a -EA SilentlyContinue)) { Write-Error "❌ adapter missing: $a"; exit 1 }
+          }
+          Write-Host "✅ all $($adapters.Count) adapters loaded"
+
+          # Commands must be present
+          foreach ($c in @('nav','git-a','pwsh-h','set-path','ls','del','mvf')) {
+            if (-not (Get-Command $c -EA SilentlyContinue)) { Write-Error "❌ command missing: $c"; exit 1 }
+          }
+          Write-Host "✅ commands available"
+
+          # WSL launchers must NOT load on Linux
+          foreach ($w in @('open-ubuntu','open-wsl-simple')) {
+            if (Get-Command $w -EA SilentlyContinue) { Write-Error "❌ Windows-only '$w' leaked onto Linux"; exit 1 }
+          }
+          Write-Host "✅ windows-only/ correctly excluded"
+
+          # pwsh-h must render.
+          # NOTE the 6>&1 — pwsh-h uses Write-Host, which writes to the information
+          # stream, NOT the pipeline. `pwsh-h | Out-String` returns an EMPTY string
+          # even on a perfectly working build, so without this redirect the check
+          # would fail every release for no reason.
+          $help = pwsh-h 6>&1 | Out-String
+          if ($help -notmatch 'POWERSHELL COMMAND REFERENCE') { Write-Error "❌ pwsh-h did not render"; exit 1 }
+          if ($help -notmatch 'GNU coreutils are NOT shadowed') { Write-Error "❌ pwsh-h is missing the Linux command-shadowing section"; exit 1 }
+          Write-Host "✅ pwsh-h renders (and documents del/mvf)"
+
+      - name: 🛡️ THE regression that matters — coreutils are not shadowed
+        shell: pwsh
+        run: |
+          . "$HOME/.config/powershell/Microsoft.PowerShell_profile.ps1"
+
+          # PowerFlow's rm deletes a directory tree recursively after one prompt.
+          # GNU rm REFUSES without -r. If PowerFlow's rm ever shadows /usr/bin/rm
+          # on Linux, a user with muscle memory loses a directory. Never again.
+          $failed = $false
+          foreach ($tool in @('rm','mv','cp','cat','mkdir','touch','rmdir','which','grep')) {
+            $cmd = Get-Command $tool -EA SilentlyContinue
+            if (-not $cmd) { Write-Error "❌ '$tool' resolves to nothing"; $failed = $true; continue }
+            if ($cmd.CommandType -ne 'Application') {
+              Write-Error "❌ '$tool' is shadowed by a PowerFlow $($cmd.CommandType) — GNU $tool is unreachable!"
+              $failed = $true
+            } else {
+              Write-Host "  ✅ $tool -> $($cmd.Source)"
+            }
+          }
+          if ($failed) { exit 1 }
+
+          # ...and the renamed PowerFlow versions still exist
+          foreach ($f in @('del','mvf')) {
+            if ((Get-Command $f -EA SilentlyContinue).CommandType -ne 'Function') {
+              Write-Error "❌ PowerFlow's '$f' is missing — the feature was lost, not renamed"; exit 1
+            }
+          }
+          Write-Host "✅ coreutils intact; PowerFlow features preserved as del/mvf"
+
+      - name: 🗑️ Uninstall cleanly — and DO NOT remove tools the user already had
+        shell: bash
+        run: |
+          pwsh -NoProfile -File "$HOME/.config/powershell/uninstall.ps1" -Yes
+
+          # 1. Nothing left behind
+          for p in "Microsoft.PowerShell_profile.ps1" "components" "platform" "config" ".powerflow-manifest.json"; do
+            if [ -e "$HOME/.config/powershell/$p" ]; then
+              echo "::error::uninstall left $p behind"; exit 1
+            fi
+          done
+
+          # 2. THE SAFETY GUARANTEE. git was on the runner BEFORE PowerFlow, so the
+          #    manifest marks it installedByPowerFlow=false and uninstall must not
+          #    touch it. The old uninstaller ripped out shared tools regardless of
+          #    who installed them; that must never happen again.
+          command -v git >/dev/null 2>&1 \
+            || { echo "::error::uninstall removed git — but the user already had it!"; exit 1; }
+
+          # 3. Tools PowerFlow DID install must actually be gone. Removals must run
+          #    one-per-package: batching makes apt abort the whole command when one
+          #    name is not an apt package, silently leaving everything installed.
+          for t in starship lsd zoxide; do
+            if command -v "$t" >/dev/null 2>&1; then
+              echo "::error::uninstall claimed to remove $t but it is still present"; exit 1
+            fi
+          done
+
+          echo "✅ uninstalled cleanly; pre-existing git survived; PowerFlow's tools removed"
+
+      - name: ✅ Linux validated
+        run: echo "install → load → use → uninstall all passed on Linux"

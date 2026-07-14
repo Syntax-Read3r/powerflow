@@ -2,108 +2,231 @@
 
 <#
 .SYNOPSIS
-    PowerFlow Installation Script
+    PowerFlow installer — shared by Windows and Linux.
 .DESCRIPTION
-    Installs PowerFlow PowerShell profile with all dependencies
-.PARAMETER Force
-    Overwrite existing profile without confirmation
+    THE installer. install.sh is only a bootstrap that installs pwsh and then calls
+    this file, so there is exactly one installer codebase for both platforms.
+
+    Installs the full component tree next to $PROFILE, installs dependencies via
+    the platform's package manager, and writes a manifest recording precisely what
+    was placed and which tools PowerFlow itself installed — so uninstall can undo
+    exactly that and nothing more.
+.PARAMETER Yes
+    Assume yes; no prompts (CI-safe).
+.PARAMETER NoDeps
+    Install PowerFlow only; skip starship/fzf/zoxide/lsd.
+.PARAMETER Prefix
+    Directory holding the PowerFlow source to install from. When omitted, the
+    source is downloaded from GitHub.
+.PARAMETER Platform
+    Override platform detection (windows|linux). Defaults to auto-detect.
 .EXAMPLE
-    .\install.ps1
-    .\install.ps1 -Force
+    irm https://github.com/Syntax-Read3r/powerflow/releases/latest/download/install.ps1 | iex
+.EXAMPLE
+    ./install.ps1 -Yes -NoDeps
 #>
 
-param([switch]$Force)
+param(
+    [switch]$Yes,
+    [switch]$Force,
+    [switch]$NoDeps,
+    [string]$Prefix,
+    [ValidateSet('windows', 'linux', 'auto')][string]$Platform = 'auto'
+)
 
 $ErrorActionPreference = "Stop"
+$REPO = "Syntax-Read3r/powerflow"
 
-Write-Host "🚀 PowerFlow Installation Script" -ForegroundColor Cyan
-Write-Host "=================================" -ForegroundColor Cyan
+if ($Force) { $Yes = $true }   # -Force kept for backward compatibility
 
-# Check PowerShell version
-if ($PSVersionTable.PSVersion.Major -lt 5) {
-    Write-Host "❌ PowerShell 5.1 or higher required" -ForegroundColor Red
+Write-Host ""
+Write-Host "🚀 PowerFlow Installation" -ForegroundColor Cyan
+Write-Host "=========================" -ForegroundColor Cyan
+
+# ── Platform detection ────────────────────────────────────────────────────────
+# $IsWindows does not exist on PowerShell 5.1 (it is $null, which is falsy), so
+# check the edition first — 5.1 is always Desktop and always Windows.
+if ($Platform -eq 'auto') {
+    $Platform =
+        if     ($PSVersionTable.PSEdition -eq 'Desktop') { 'windows' }
+        elseif ($IsWindows)                              { 'windows' }
+        elseif ($IsLinux)                                { 'linux' }
+        else                                             { 'unsupported' }
+}
+if ($Platform -eq 'unsupported') {
+    Write-Host "❌ Unsupported platform. PowerFlow supports Windows and Linux." -ForegroundColor Red
     exit 1
 }
+Write-Host "🖥️  Platform: $Platform" -ForegroundColor White
 
-# Get profile path
+# ── Destination: the component tree lives beside $PROFILE ─────────────────────
+#   Windows : ~/Documents/PowerShell/
+#   Linux   : ~/.config/powershell/
 $profilePath = $PROFILE
-$profileDir = Split-Path $profilePath -Parent
+$profileDir  = Split-Path $profilePath -Parent
+Write-Host "📁 Install location: $profileDir" -ForegroundColor White
 
-Write-Host "📁 Profile location: $profilePath" -ForegroundColor White
-
-# Check if profile exists
-if ((Test-Path $profilePath) -and -not $Force) {
-    Write-Host "⚠️  PowerShell profile already exists!" -ForegroundColor Yellow
-    $choice = Read-Host "Overwrite existing profile? (y/n)"
-    if ($choice -ne 'y') {
+if ((Test-Path $profilePath) -and -not $Yes) {
+    Write-Host "⚠️  A PowerShell profile already exists." -ForegroundColor Yellow
+    if ((Read-Host "Overwrite it? (y/n)") -ne 'y') {
         Write-Host "❌ Installation cancelled" -ForegroundColor Red
         exit 1
     }
 }
 
-# Create profile directory if needed
 if (-not (Test-Path $profileDir)) {
-    Write-Host "📂 Creating profile directory..." -ForegroundColor Yellow
     New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
 }
 
-# Download latest profile
-try {
-    Write-Host "⬇️  Downloading PowerFlow profile..." -ForegroundColor Yellow
-    $downloadUrl = "https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/Microsoft.PowerShell_profile.ps1"
-    Invoke-RestMethod -Uri $downloadUrl -OutFile $profilePath
-    Write-Host "✅ Profile downloaded successfully" -ForegroundColor Green
-} catch {
-    Write-Host "❌ Failed to download profile: $($_.Exception.Message)" -ForegroundColor Red
-    exit 1
+# ── Back up an existing profile so uninstall can restore it ───────────────────
+$backup = $null
+if (Test-Path $profilePath) {
+    $stamp  = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $backup = "$profilePath.powerflow-backup.$stamp"
+    Copy-Item $profilePath $backup -Force
+    Write-Host "💾 Backed up existing profile -> $(Split-Path $backup -Leaf)" -ForegroundColor Yellow
 }
 
-# Install Scoop if missing
-if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
-    Write-Host "`n📦 Installing Scoop package manager..." -ForegroundColor Yellow
-    try {
-        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-        Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
-        Write-Host "✅ Scoop installed" -ForegroundColor Green
-    } catch {
-        Write-Host "❌ Failed to install Scoop: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "💡 Install Scoop manually then re-run this script" -ForegroundColor DarkGray
+# ── Source: local tree if we have one, else download ──────────────────────────
+$tempDir = $null
+if ($Prefix -and (Test-Path (Join-Path $Prefix 'components'))) {
+    $source = $Prefix
+    Write-Host "📦 Installing from: $source" -ForegroundColor White
+}
+elseif (Test-Path (Join-Path $PSScriptRoot 'components')) {
+    $source = $PSScriptRoot
+    Write-Host "📦 Installing from: $source (local checkout)" -ForegroundColor White
+}
+else {
+    Write-Host "⬇️  Downloading PowerFlow..." -ForegroundColor Yellow
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "powerflow-$(Get-Random)"
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+    $zip = Join-Path $tempDir 'powerflow.zip'
+
+    Invoke-WebRequest -Uri "https://github.com/$REPO/archive/refs/heads/main.zip" -OutFile $zip
+    Expand-Archive -Path $zip -DestinationPath $tempDir -Force
+    $source = (Get-ChildItem -Path $tempDir -Directory -Filter 'powerflow-*' | Select-Object -First 1).FullName
+
+    if (-not $source) {
+        Write-Host "❌ Unexpected archive layout." -ForegroundColor Red
         exit 1
     }
-} else {
-    Write-Host "`n✅ Scoop already installed" -ForegroundColor Green
+    Write-Host "✅ Downloaded" -ForegroundColor Green
 }
 
-# Install required tools
-Write-Host "`n📦 Installing required tools..." -ForegroundColor Yellow
-$tools = @(
-    @{ Name = "starship"; Description = "Cross-shell prompt" },
-    @{ Name = "fzf";      Description = "Fuzzy finder (used by nav)" },
-    @{ Name = "zoxide";   Description = "Smart directory navigation" },
-    @{ Name = "lsd";      Description = "Modern ls replacement" },
-    @{ Name = "git";      Description = "Version control" }
-)
+# ── Copy the tree ─────────────────────────────────────────────────────────────
+# platform/ and windows-only/ are new in v3.0.0 and are REQUIRED — without them
+# no adapters load and every component call fails.
+Write-Host ""
+Write-Host "📂 Installing components..." -ForegroundColor Yellow
 
-foreach ($tool in $tools) {
-    if (Get-Command $tool.Name -ErrorAction SilentlyContinue) {
-        Write-Host "   ✅ $($tool.Name) already installed" -ForegroundColor DarkGray
-    } else {
-        try {
-            Write-Host "   Installing $($tool.Name) ($($tool.Description))..." -ForegroundColor DarkGray
-            scoop install $tool.Name *>$null
-            Write-Host "   ✅ $($tool.Name) installed" -ForegroundColor Green
-        } catch {
-            Write-Host "   ❌ Failed to install $($tool.Name): $($_.Exception.Message)" -ForegroundColor Red
+$installedFiles = New-Object System.Collections.Generic.List[string]
+
+Copy-Item (Join-Path $source 'Microsoft.PowerShell_profile.ps1') $profilePath -Force
+$installedFiles.Add($profilePath)
+
+foreach ($dir in @('config', 'components', 'platform', 'windows-only')) {
+    $src = Join-Path $source $dir
+    if (-not (Test-Path $src)) { continue }
+
+    $dst = Join-Path $profileDir $dir
+    if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
+    Copy-Item $src $dst -Recurse -Force
+
+    Get-ChildItem $dst -Recurse -File | ForEach-Object { $installedFiles.Add($_.FullName) }
+    Write-Host "   ✅ $dir/" -ForegroundColor Green
+}
+
+# uninstall.ps1 ships alongside so the profile can remove itself later
+$uninstallSrc = Join-Path $source 'uninstall.ps1'
+if (Test-Path $uninstallSrc) {
+    $uninstallDst = Join-Path $profileDir 'uninstall.ps1'
+    Copy-Item $uninstallSrc $uninstallDst -Force
+    $installedFiles.Add($uninstallDst)
+}
+
+# ── Dependencies ──────────────────────────────────────────────────────────────
+# Load the platform's packages adapter and use it, rather than hardcoding Scoop
+# here — this is why the adapter layer exists.
+$dependencies = @()
+
+if (-not $NoDeps) {
+    Write-Host ""
+    Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
+
+    . (Join-Path $profileDir "platform/$Platform/adapters/packages.ps1")
+    if ($Platform -eq 'linux') {
+        . (Join-Path $profileDir "platform/$Platform/adapters/locations.ps1")
+    }
+
+    if (-not (Test-PackageManager)) {
+        Write-Host "   Setting up package manager..." -ForegroundColor DarkGray
+        Install-PackageManager | Out-Null
+    }
+
+    foreach ($tool in @('starship', 'fzf', 'zoxide', 'lsd', 'git')) {
+        # Record whether PowerFlow installed it — uninstall must NEVER remove a
+        # tool the user already had.
+        $preExisting = Test-Dependency $tool
+
+        if ($preExisting) {
+            Write-Host "   ✅ $tool (already present)" -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host "   Installing $tool..." -ForegroundColor DarkGray
+            if (Install-Dependency $tool) {
+                Write-Host "   ✅ $tool installed" -ForegroundColor Green
+            } else {
+                Write-Host "   ⚠️  $tool failed — try: $(Get-DependencyInstallHint $tool)" -ForegroundColor Yellow
+            }
+        }
+
+        $dependencies += @{
+            name                 = $tool
+            manager              = (Get-PackageManagerName)
+            installedByPowerFlow = (-not $preExisting)
         }
     }
 }
 
-# Refresh PATH so newly installed tools are immediately available in this session
-$env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
-            [System.Environment]::GetEnvironmentVariable("PATH", "User")
+# ── Manifest ──────────────────────────────────────────────────────────────────
+# The uninstaller reads this. Without it, uninstall is guesswork — which is how
+# the old Ubuntu port ended up deleting people's ~/.bashrc outright.
+$version = 'unknown'
+$settings = Join-Path $profileDir 'config/PowerFlow.settings.ps1'
+if (Test-Path $settings) {
+    $m = Select-String -Path $settings -Pattern '\$script:POWERFLOW_VERSION\s*=\s*"([^"]+)"'
+    if ($m) { $version = $m.Matches[0].Groups[1].Value }
+}
 
-Write-Host "`n🎉 PowerFlow installed successfully!" -ForegroundColor Green
-Write-Host "   Profile : $profilePath" -ForegroundColor DarkGray
-Write-Host "   Tools   : starship, fzf, zoxide, lsd, git" -ForegroundColor DarkGray
-Write-Host "`n🔄 Restart PowerShell to activate your profile" -ForegroundColor Cyan
-Write-Host "💡 Type 'pwsh-h' for the full command reference" -ForegroundColor Yellow
+$manifest = [ordered]@{
+    version      = $version
+    platform     = $Platform
+    installedAt  = (Get-Date).ToUniversalTime().ToString('o')
+    profilePath  = $profilePath
+    installRoot  = $profileDir
+    backup       = $backup
+    files        = @($installedFiles)
+    dependencies = @($dependencies)
+}
+
+$manifestPath = Join-Path $profileDir '.powerflow-manifest.json'
+$manifest | ConvertTo-Json -Depth 5 | Set-Content $manifestPath -Encoding UTF8
+Write-Host ""
+Write-Host "📝 Manifest written ($($installedFiles.Count) files tracked)" -ForegroundColor DarkGray
+
+if ($tempDir -and (Test-Path $tempDir)) { Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue }
+
+# ── Done ──────────────────────────────────────────────────────────────────────
+Write-Host ""
+Write-Host "🎉 PowerFlow v$version installed!" -ForegroundColor Green
+Write-Host "   Platform : $Platform" -ForegroundColor DarkGray
+Write-Host "   Profile  : $profilePath" -ForegroundColor DarkGray
+if ($backup) { Write-Host "   Backup   : $backup" -ForegroundColor DarkGray }
+Write-Host ""
+Write-Host "🔄 Restart your shell to activate PowerFlow" -ForegroundColor Cyan
+Write-Host "💡 Then type 'pwsh-h' for the full command reference" -ForegroundColor Yellow
+if ($Platform -eq 'linux') {
+    Write-Host "🐧 Note: rm/mv/cp/cat stay as the GNU tools. PowerFlow's versions are 'del' and 'mvf'." -ForegroundColor DarkGray
+}
+Write-Host ""

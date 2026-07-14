@@ -134,7 +134,7 @@ The version-match check reads this exact pattern — do not change it:
 $content -match '\$script:POWERFLOW_VERSION = "([^"]+)"'
 ```
 
-If the project also tracks version elsewhere (e.g. `package.json`), add an advisory check (warn-only, like the `.bashrc` check in the original) rather than a hard fail.
+If the project also tracks version elsewhere (e.g. `package.json`), add an advisory check (warn-only) rather than a hard fail.
 
 ---
 
@@ -188,8 +188,6 @@ $paths = @(
 Compress-Archive -Path $paths -DestinationPath $zipName -Force
 ```
 
-Remove the `.bashrc` step (that is PowerFlow-specific).
-
 **Artifact name must stay:** `component-archive`
 
 ---
@@ -202,7 +200,7 @@ Remove the `.bashrc` step (that is PowerFlow-specific).
 
 - Change `name:` to your project name
 - Update the `files:` list to match the assets your generate and bundle steps produce
-- Remove assets that don't apply (e.g. `ubuntu-install.sh` if there's no Ubuntu version)
+- Remove assets that don't apply to your project
 
 ```yaml
 - uses: softprops/action-gh-release@v3

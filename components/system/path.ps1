@@ -3,9 +3,10 @@
 # ==============================================================================
 # Domain   : System
 # File     : components/system/path.ps1
-# Purpose  : Add directories to User or System PATH without quoting
+# Purpose  : Add directories to the User or System PATH without quoting
 # Functions: set-path
-# Depends  : none
+# Depends  : Add-PersistentPathEntry, Test-PersistentPathEntry, Get-PathScopeLabel
+#            (platform/<os>/adapters/env.ps1)
 # ==============================================================================
 
 function set-path {
@@ -16,39 +17,21 @@ function set-path {
     )
 
     $newPath = ($PathParts -join ' ').Trim()
-    $scope   = if ($System) { 'Machine' } else { 'User' }
-    $label   = if ($System) { 'System'  } else { 'User' }
-
-    if ($System) {
-        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-        if (-not $isAdmin) {
-            Write-Host "❌ System PATH requires an elevated (Administrator) session." -ForegroundColor Red
-            return
-        }
-    }
+    $scope   = if ($System) { 'System' } else { 'User' }
+    $label   = Get-PathScopeLabel -Scope $scope
 
     if (-not (Test-Path $newPath)) {
         Write-Host "⚠️  Directory does not exist on disk (path added anyway)" -ForegroundColor Yellow
     }
 
-    $current    = [System.Environment]::GetEnvironmentVariable('Path', $scope)
-    $entries    = $current -split ';' | Where-Object { $_ -ne '' }
-    $normalized = $newPath.TrimEnd('\')
-
-    if (($entries | ForEach-Object { $_.TrimEnd('\') }) -contains $normalized) {
+    if (Test-PersistentPathEntry -Directory $newPath -Scope $scope) {
         Write-Host "ℹ️  Already in $label PATH — nothing to do." -ForegroundColor Cyan
         return
     }
 
-    $updated = $current.TrimEnd(';') + ";$newPath"
-    [System.Environment]::SetEnvironmentVariable('Path', $updated, $scope)
-
-    $verified = ([System.Environment]::GetEnvironmentVariable('Path', $scope) -split ';' |
-                 ForEach-Object { $_.TrimEnd('\') }) -contains $normalized
-
-    if ($verified) {
+    # The adapter owns the elevation check for System scope and returns $false if denied.
+    if (Add-PersistentPathEntry -Directory $newPath -Scope $scope) {
         Write-Host "✅ Added to $label PATH: $newPath" -ForegroundColor Green
-        $env:Path += ";$newPath"
         Write-Host "💡 Active in this session immediately" -ForegroundColor Cyan
     } else {
         Write-Host "❌ Failed to add to $label PATH — please try again." -ForegroundColor Red

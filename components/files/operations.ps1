@@ -20,31 +20,36 @@ function rm {
         [switch]$f
     )
 
-    # If you gave an explicit path, behave like Remove-Item with safety
-    if ($Name -and $Name.Count -gt 0) {
-        $target = $Name -join ' '
-        $resolved = Get-Item -LiteralPath $target -ErrorAction SilentlyContinue
+    $targets = @()
 
-        if (-not $resolved) {
-            Write-Warning "⚠️ File or directory not found: $target"
+    if ($Name -and $Name.Count -gt 0) {
+        # Each argument is its own path pattern, so wildcards (rm *.log) and
+        # multiple targets (rm a.txt b.txt) both work.
+        foreach ($pattern in $Name) {
+            $found = @(Get-Item -Path $pattern -Force -ErrorAction SilentlyContinue)
+            if ($found.Count -gt 0) { $targets += $found }
+        }
+
+        # Nothing matched as a pattern. Retry the whole argument list as one
+        # literal name — covers an unquoted filename with spaces ("rm my report.txt")
+        # and names containing wildcard characters ("rm build[1].log").
+        if ($targets.Count -eq 0) {
+            $literal = $Name -join ' '
+            $targets = @(Get-Item -LiteralPath $literal -Force -ErrorAction SilentlyContinue)
+        }
+
+        if ($targets.Count -eq 0) {
+            Write-Warning "⚠️ File or directory not found: $($Name -join ' ')"
+            return
+        }
+    }
+    else {
+        # No name given → use fzf to pick a file (if available)
+        if (-not (Get-Command fzf -ErrorAction SilentlyContinue)) {
+            Write-Warning "fzf is not installed or not in PATH. Install it or call 'Remove-Item' directly."
             return
         }
 
-        if (-not $f) {
-            $confirm = Read-Host "⚠️ Delete '$($resolved.FullName)'? [y/N]"
-            if ($confirm -notin @('y','Y')) {
-                Write-Host "❌ Deletion cancelled." -ForegroundColor Yellow
-                return
-            }
-        }
-
-        Remove-Item -LiteralPath $resolved.FullName -Recurse -Force
-        Write-Host "✅ Deleted: $($resolved.FullName)" -ForegroundColor Green
-        return
-    }
-
-    # No name given → use fzf to pick a file (if available)
-    if (Get-Command fzf -ErrorAction SilentlyContinue) {
         $selection = Get-ChildItem -Force | fzf --ansi --prompt "Select file/dir to delete: " | ForEach-Object {
             ($_ -split '\s+', 2)[-1]
         }
@@ -54,25 +59,49 @@ function rm {
             return
         }
 
-        $resolved = Get-Item -LiteralPath $selection -ErrorAction SilentlyContinue
-        if (-not $resolved) {
+        $targets = @(Get-Item -LiteralPath $selection -ErrorAction SilentlyContinue)
+        if ($targets.Count -eq 0) {
             Write-Warning "⚠️ File or directory not found: $selection"
             return
         }
+    }
 
-        if (-not $f) {
-            $confirm = Read-Host "⚠️ Delete '$($resolved.FullName)'? [y/N]"
-            if ($confirm -notin @('y','Y')) {
-                Write-Host "❌ Deletion cancelled." -ForegroundColor Yellow
-                return
+    # Overlapping patterns (rm *.log *.txt a.log) can match the same item twice
+    $targets = @($targets | Sort-Object -Property FullName -Unique)
+
+    if (-not $f) {
+        if ($targets.Count -eq 1) {
+            $confirm = Read-Host "⚠️ Delete '$($targets[0].FullName)'? [y/N]"
+        }
+        else {
+            Write-Host "⚠️ About to delete $($targets.Count) items:" -ForegroundColor Yellow
+            foreach ($t in $targets) {
+                $icon = if ($t.PSIsContainer) { "📁" } else { "📄" }
+                Write-Host "   $icon $($t.FullName)" -ForegroundColor DarkGray
             }
+            $confirm = Read-Host "⚠️ Delete all $($targets.Count) items? [y/N]"
         }
 
-        Remove-Item -LiteralPath $resolved.FullName -Recurse -Force
-        Write-Host "✅ Deleted: $($resolved.FullName)" -ForegroundColor Green
+        if ($confirm -notin @('y','Y')) {
+            Write-Host "❌ Deletion cancelled." -ForegroundColor Yellow
+            return
+        }
     }
-    else {
-        Write-Warning "fzf is not installed or not in PATH. Install it or call 'Remove-Item' directly."
+
+    $deleted = 0
+    foreach ($t in $targets) {
+        try {
+            Remove-Item -LiteralPath $t.FullName -Recurse -Force -ErrorAction Stop
+            Write-Host "✅ Deleted: $($t.FullName)" -ForegroundColor Green
+            $deleted++
+        }
+        catch {
+            Write-Host "❌ Failed to delete '$($t.FullName)': $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+
+    if ($targets.Count -gt 1) {
+        Write-Host "🗑️  Deleted $deleted of $($targets.Count) items" -ForegroundColor Cyan
     }
 }
 

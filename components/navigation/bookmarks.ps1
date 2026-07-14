@@ -8,7 +8,7 @@
 # Depends  : none
 # ==============================================================================
 
-$script:BookmarkFile = "$env:USERPROFILE\.nav_bookmarks.json"
+$script:BookmarkFile = Join-Path (Get-HomePath) '.nav_bookmarks.json'
 
 function Initialize-DefaultBookmarks {
     $defaultBookmarks = @{

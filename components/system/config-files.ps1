@@ -3,14 +3,15 @@
 # ==============================================================================
 # Domain   : System
 # File     : components/system/config-files.ps1
-# Purpose  : Open PowerShell profile, Starship config, and Windows Terminal settings in VS Code
+# Purpose  : Open the PowerShell profile, Starship config, and terminal settings
 # Functions: pwsh-profile, pwsh-starship, pwsh-settings
-# Depends  : none
+# Depends  : Open-Editor, Get-StarshipConfigPath, Get-TerminalSettingsPath
+#            (platform/<os>/adapters/)
 # ==============================================================================
 
 function pwsh-profile {
     if (Test-Path $PROFILE) {
-        code $PROFILE
+        Open-Editor $PROFILE
         Write-Host "📄 Opened PowerShell profile: $PROFILE" -ForegroundColor Cyan
     } else {
         Write-Host "⚠️ Profile does not exist at: $PROFILE" -ForegroundColor Yellow
@@ -18,10 +19,10 @@ function pwsh-profile {
 }
 
 function pwsh-starship {
-    $starshipPath = "$HOME\\.config\\starship.toml"
+    $starshipPath = Get-StarshipConfigPath
 
     if (Test-Path $starshipPath) {
-        code $starshipPath
+        Open-Editor $starshipPath
         Write-Host "🚀 Opened Starship config: $starshipPath" -ForegroundColor Cyan
     } else {
         Write-Host "❌ Could not find starship.toml at: $starshipPath" -ForegroundColor Red
@@ -29,10 +30,17 @@ function pwsh-starship {
 }
 
 function pwsh-settings {
-    $wtSettings = "$env:LOCALAPPDATA\\Packages\\Microsoft.WindowsTerminal_8wekyb3d8bbwe\\LocalState\\settings.json"
+    $settingsPath = Get-TerminalSettingsPath
 
-    if (Test-Path $wtSettings) {
-        code $wtSettings
+    # Linux has no Windows Terminal — the adapter returns $null.
+    if (-not $settingsPath) {
+        Write-Host "ℹ️  Windows Terminal settings are not available on this platform." -ForegroundColor Cyan
+        Write-Host "💡 Configure your terminal emulator directly." -ForegroundColor DarkGray
+        return
+    }
+
+    if (Test-Path $settingsPath) {
+        Open-Editor $settingsPath
         Write-Host "⚙️  Opened Windows Terminal settings.json" -ForegroundColor Cyan
     } else {
         Write-Host "❌ Could not find Windows Terminal settings.json" -ForegroundColor Red

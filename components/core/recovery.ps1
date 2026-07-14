@@ -24,7 +24,7 @@ function pwsh-recovery {
     Write-Host "🔄 Quick Fixes:" -ForegroundColor Cyan
     Write-Host "  1. Reload profile: . `$PROFILE" -ForegroundColor DarkGray
     Write-Host "  2. Check dependencies: Get-Command starship,fzf,zoxide,lsd,git" -ForegroundColor DarkGray
-    Write-Host "  3. Reinstall tools: scoop install starship fzf zoxide lsd git" -ForegroundColor DarkGray
+    Write-Host "  3. Reinstall tools: $(Get-DependencyInstallHint 'starship fzf zoxide lsd git')" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "🔧 Recovery Actions:" -ForegroundColor Cyan
     Write-Host "  4. Reinstall PowerFlow: irm https://raw.githubusercontent.com/$script:POWERFLOW_REPO/main/install.ps1 | iex" -ForegroundColor DarkGray
@@ -54,7 +54,13 @@ function pwsh-recovery {
         }
         "3" {
             Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
-            scoop install starship fzf zoxide lsd git
+            foreach ($tool in (Get-RequiredTools)) {
+                if (Install-Dependency $tool.Name) {
+                    Write-Host "  ✅ $($tool.Name)" -ForegroundColor Green
+                } else {
+                    Write-Host "  ❌ $($tool.Name) — try: $(Get-DependencyInstallHint $tool.Name)" -ForegroundColor Red
+                }
+            }
         }
         "4" {
             Write-Host "🔄 Reinstalling PowerFlow..." -ForegroundColor Yellow
@@ -68,7 +74,7 @@ function pwsh-recovery {
             }
         }
         "6" {
-            code $PROFILE
+            Open-Editor $PROFILE
         }
         "7" {
             Get-PowerFlowVersion
@@ -133,15 +139,19 @@ function powerflow-uninstall {
         }
     }
 
-    # ── Optional: remove Scoop dependencies ───────────────────────────────────
+    # ── Optional: remove dependencies ─────────────────────────────────────────
     Write-Host ""
-    $removeDeps = Read-Host "  Remove Scoop dependencies (starship, fzf, zoxide, lsd)? (y/n)"
+    $mgr = Get-PackageManagerName
+    $removeDeps = Read-Host "  Remove dependencies via $mgr (starship, fzf, zoxide, lsd)? (y/n)"
     if ($removeDeps -eq 'y') {
-        if (Get-Command scoop -ErrorAction SilentlyContinue) {
-            scoop uninstall starship fzf zoxide lsd 2>$null
-            Write-Host "✅ Scoop dependencies removed" -ForegroundColor Green
+        if (Test-PackageManager) {
+            if (Uninstall-Dependency @('starship', 'fzf', 'zoxide', 'lsd')) {
+                Write-Host "✅ Dependencies removed" -ForegroundColor Green
+            } else {
+                Write-Host "⚠️  Some dependencies could not be removed" -ForegroundColor Yellow
+            }
         } else {
-            Write-Host "⚠️  Scoop not found — remove dependencies manually" -ForegroundColor Yellow
+            Write-Host "⚠️  No package manager found — remove dependencies manually" -ForegroundColor Yellow
         }
     }
 

@@ -3,9 +3,9 @@
 # ==============================================================================
 # Domain   : System
 # File     : components/system/shutdown.ps1
-# Purpose  : Schedule or cancel Windows shutdown with time-based syntax (e.g. "shutdown 1h 30m")
+# Purpose  : Schedule or cancel a system shutdown with time-based syntax (e.g. "shutdown 1h 30m")
 # Functions: shutdown, s
-# Depends  : none
+# Depends  : Invoke-Shutdown, Stop-Shutdown (platform/<os>/adapters/power.ps1)
 # ==============================================================================
 
 function shutdown {
@@ -23,8 +23,11 @@ function shutdown {
 
         # Cancel: ONLY "shutdown cancel"
         if ($Args.Count -eq 1 -and $Args[0] -eq 'cancel') {
-            shutdown.exe /a | Out-Null
-            Write-Host "✅ Shutdown cancelled" -ForegroundColor Green
+            if (Stop-Shutdown) {
+                Write-Host "✅ Shutdown cancelled" -ForegroundColor Green
+            } else {
+                Write-Host "❌ Failed to cancel shutdown (is one scheduled?)" -ForegroundColor Red
+            }
             return
         }
 
@@ -48,13 +51,15 @@ function shutdown {
             Write-Host "❌ Minimum shutdown delay is 10 minutes" -ForegroundColor Red
             return
         }
-        if ($totalMinutes -gt 180) {
-            Write-Host "❌ Maximum shutdown delay is 3 hours" -ForegroundColor Red
+        if ($totalMinutes -gt 360) {
+            Write-Host "❌ Maximum shutdown delay is 6 hours" -ForegroundColor Red
             return
         }
 
-        $seconds = $totalMinutes * 60
-        shutdown.exe /s /t $seconds | Out-Null
+        if (-not (Invoke-Shutdown -Minutes $totalMinutes)) {
+            Write-Host "❌ Failed to schedule shutdown" -ForegroundColor Red
+            return
+        }
 
         Write-Host "🕒 Shutdown scheduled in $totalMinutes minutes" -ForegroundColor Green
         Write-Host "💡 Cancel with: shutdown cancel  OR  s c" -ForegroundColor Yellow
@@ -73,8 +78,11 @@ function s {
 
     # Cancel: ONLY "s c"
     if ($Args.Count -eq 1 -and $Args[0] -eq 'c') {
-        shutdown.exe /a | Out-Null
-        Write-Host "✅ Shutdown cancelled" -ForegroundColor Green
+        if (Stop-Shutdown) {
+            Write-Host "✅ Shutdown cancelled" -ForegroundColor Green
+        } else {
+            Write-Host "❌ Failed to cancel shutdown (is one scheduled?)" -ForegroundColor Red
+        }
         return
     }
 

@@ -24,7 +24,7 @@ function ls {
 
     # Check if lsd is available
     if (-not (Get-Command lsd -ErrorAction SilentlyContinue)) {
-        Write-Host "⚠️ lsd not found. Install with: scoop install lsd" -ForegroundColor Yellow
+        Write-Host "⚠️ lsd not found. Install with: $(Get-DependencyInstallHint 'lsd')" -ForegroundColor Yellow
         Get-ChildItem $path
         return
     }

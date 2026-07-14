@@ -1,52 +1,162 @@
+#Requires -Version 5.1
+
 <#
 .SYNOPSIS
-    PowerFlow Uninstallation Script
+    PowerFlow uninstaller — shared by Windows and Linux.
 .DESCRIPTION
-    Removes PowerFlow profile and optionally cleans up dependencies
+    Reads the manifest written at install time and removes EXACTLY what PowerFlow
+    placed — nothing else.
+
+    The rule that makes this safe:
+
+        A dependency with installedByPowerFlow = false is NEVER touched.
+
+    If you already had fzf before installing PowerFlow, uninstalling PowerFlow does
+    not remove fzf. The old Ubuntu port's uninstaller deleted ~/.bashrc outright,
+    and the old Windows one ripped out shared Scoop tools regardless of who
+    installed them. A manifest is precisely what prevents that class of mistake.
+.PARAMETER Yes
+    Assume yes; no prompts (CI-safe).
+.PARAMETER Purge
+    Also remove user data (bookmarks).
+.PARAMETER KeepDeps
+    Do not remove any dependencies, even ones PowerFlow installed.
 #>
 
-Write-Host "🗑️  PowerFlow Uninstall Script" -ForegroundColor Yellow
-Write-Host "==============================" -ForegroundColor Yellow
+param(
+    [switch]$Yes,
+    [switch]$Purge,
+    [switch]$KeepDeps
+)
 
-$profilePath = $PROFILE
+$ErrorActionPreference = "Stop"
 
-if (-not (Test-Path $profilePath)) {
-    Write-Host "ℹ️  No PowerShell profile found" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "🗑️  PowerFlow Uninstall" -ForegroundColor Cyan
+Write-Host "======================" -ForegroundColor Cyan
+Write-Host ""
+
+$profileDir   = Split-Path $PROFILE -Parent
+$manifestPath = Join-Path $profileDir '.powerflow-manifest.json'
+
+# ── No manifest: fall back to a conservative removal ──────────────────────────
+if (-not (Test-Path $manifestPath)) {
+    Write-Host "⚠️  No manifest found at $manifestPath" -ForegroundColor Yellow
+    Write-Host "   PowerFlow was installed before v3.0.0, or by hand." -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "   Falling back to a conservative removal: the profile and component" -ForegroundColor DarkGray
+    Write-Host "   directories only. NO dependencies will be touched, because without" -ForegroundColor DarkGray
+    Write-Host "   a manifest there is no way to know which ones you already had." -ForegroundColor DarkGray
+    Write-Host ""
+
+    if (-not $Yes -and (Read-Host "Continue? (y/n)") -ne 'y') {
+        Write-Host "❌ Cancelled" -ForegroundColor Yellow; exit 0
+    }
+
+    foreach ($d in @('config', 'components', 'platform', 'windows-only')) {
+        $p = Join-Path $profileDir $d
+        if (Test-Path $p) { Remove-Item $p -Recurse -Force; Write-Host "  ✅ removed $d/" -ForegroundColor Green }
+    }
+    if (Test-Path $PROFILE) { Remove-Item $PROFILE -Force; Write-Host "  ✅ removed profile" -ForegroundColor Green }
+
+    Write-Host ""
+    Write-Host "✅ PowerFlow removed. Restart your shell." -ForegroundColor Green
     exit 0
 }
 
-# Check if it's PowerFlow profile
-$content = Get-Content $profilePath -Raw
-if ($content -notmatch "PowerFlow") {
-    Write-Host "ℹ️  Profile doesn't appear to be PowerFlow" -ForegroundColor Yellow
-    $continue = Read-Host "Remove anyway? (y/n)"
-    if ($continue -ne 'y') {
-        exit 0
+$manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+
+$removableDeps = @()
+$keptDeps      = @()
+if ($manifest.dependencies) {
+    if (-not $KeepDeps) {
+        $removableDeps = @($manifest.dependencies | Where-Object { $_.installedByPowerFlow })
+    }
+    $keptDeps = @($manifest.dependencies | Where-Object { -not $_.installedByPowerFlow })
+}
+
+# ── Show exactly what will happen BEFORE doing any of it ──────────────────────
+Write-Host "PowerFlow v$($manifest.version) ($($manifest.platform))" -ForegroundColor White
+Write-Host "Installed: $($manifest.installedAt)" -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "Will REMOVE:" -ForegroundColor Yellow
+Write-Host "  • $($manifest.files.Count) tracked files (profile + config/ + components/ + platform/)" -ForegroundColor DarkGray
+if ($removableDeps.Count -gt 0) {
+    Write-Host "  • dependencies PowerFlow installed: $(($removableDeps.name) -join ', ')" -ForegroundColor DarkGray
+}
+if ($Purge) { Write-Host "  • user data: bookmarks (-Purge)" -ForegroundColor DarkGray }
+
+if ($keptDeps.Count -gt 0) {
+    Write-Host ""
+    Write-Host "Will KEEP — you already had these before PowerFlow:" -ForegroundColor Green
+    Write-Host "  • $(($keptDeps.name) -join ', ')" -ForegroundColor DarkGray
+}
+
+if ($manifest.backup) {
+    Write-Host ""
+    Write-Host "Will RESTORE your previous profile from:" -ForegroundColor Cyan
+    Write-Host "  • $($manifest.backup)" -ForegroundColor DarkGray
+}
+
+Write-Host ""
+if (-not $Yes -and (Read-Host "Proceed? (y/n)") -ne 'y') {
+    Write-Host "❌ Cancelled — nothing was removed." -ForegroundColor Yellow
+    exit 0
+}
+
+# ── 1. Remove dependencies FIRST (the adapter lives in files we're about to delete)
+if ($removableDeps.Count -gt 0) {
+    Write-Host ""
+    Write-Host "📦 Removing dependencies PowerFlow installed..." -ForegroundColor Yellow
+
+    $adapter = Join-Path $manifest.installRoot "platform/$($manifest.platform)/adapters/packages.ps1"
+    if (Test-Path $adapter) {
+        . $adapter
+        if (Uninstall-Dependency @($removableDeps.name)) {
+            Write-Host "✅ Removed: $(($removableDeps.name) -join ', ')" -ForegroundColor Green
+        } else {
+            Write-Host "⚠️  Some could not be removed — remove manually: $(($removableDeps.name) -join ', ')" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "⚠️  Packages adapter missing — remove manually: $(($removableDeps.name) -join ', ')" -ForegroundColor Yellow
     }
 }
 
-# Backup before removal
-$backupPath = "$profilePath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-Write-Host "💾 Creating backup: $backupPath" -ForegroundColor Cyan
-Copy-Item $profilePath $backupPath
+# ── 2. Remove installed files ─────────────────────────────────────────────────
+Write-Host ""
+$removed = 0
+foreach ($f in $manifest.files) {
+    if (Test-Path $f) { Remove-Item $f -Force -ErrorAction SilentlyContinue; $removed++ }
+}
+Write-Host "✅ Removed $removed of $($manifest.files.Count) tracked files" -ForegroundColor Green
 
-# Remove profile
-Remove-Item $profilePath -Force
-Write-Host "✅ PowerFlow profile removed" -ForegroundColor Green
-Write-Host "💾 Backup saved to: $backupPath" -ForegroundColor Cyan
-
-# Ask about dependencies
-Write-Host "`n🔧 Remove installed dependencies?" -ForegroundColor Yellow
-Write-Host "  • Starship prompt" -ForegroundColor DarkGray
-Write-Host "  • fzf, zoxide, lsd" -ForegroundColor DarkGray
-Write-Host "  • FiraCode Nerd Font" -ForegroundColor DarkGray
-
-$removeDeps = Read-Host "Remove dependencies? (y/n)"
-if ($removeDeps -eq 'y') {
-    if (Get-Command scoop -ErrorAction SilentlyContinue) {
-        Write-Host "🧹 Removing Scoop packages..." -ForegroundColor Yellow
-        scoop uninstall starship fzf zoxide lsd FiraCode-NF
-    }
+foreach ($d in @('config', 'components', 'platform', 'windows-only')) {
+    $p = Join-Path $manifest.installRoot $d
+    if (Test-Path $p) { Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
-Write-Host "`n✅ Uninstall complete" -ForegroundColor Green
+# ── 3. Restore the backed-up profile ──────────────────────────────────────────
+if ($manifest.backup -and (Test-Path $manifest.backup)) {
+    Copy-Item $manifest.backup $manifest.profilePath -Force
+    Write-Host "♻️  Restored your previous profile" -ForegroundColor Green
+}
+
+# ── 4. Optional purge of user data ────────────────────────────────────────────
+if ($Purge) {
+    Write-Host ""
+    Write-Host "🧹 Purging user data..." -ForegroundColor Yellow
+    $bookmarks = Join-Path $HOME '.nav_bookmarks.json'
+    if (Test-Path $bookmarks) { Remove-Item $bookmarks -Force; Write-Host "  ✅ bookmarks" -ForegroundColor Green }
+}
+else {
+    Write-Host ""
+    Write-Host "💾 Kept your bookmarks (~/.nav_bookmarks.json). Use -Purge to remove them." -ForegroundColor DarkGray
+}
+
+Remove-Item $manifestPath -Force -ErrorAction SilentlyContinue
+
+Write-Host ""
+Write-Host "✅ PowerFlow uninstalled" -ForegroundColor Green
+Write-Host "🔄 Restart your shell to apply" -ForegroundColor Cyan
+Write-Host "🙏 Thanks for using PowerFlow!" -ForegroundColor DarkGray
+Write-Host ""

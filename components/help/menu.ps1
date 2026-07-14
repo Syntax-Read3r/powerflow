@@ -63,13 +63,14 @@ $verLine
 │  create-n            → shorthand for create-next                             │
 └──────────────────────────────────────────────────────────────────────────────┘
 
-┌─ 🐧 WSL / TERMINAL LAUNCHERS ────────────────────────────────────────────────┐
+┌─ 🐧 WSL / TERMINAL LAUNCHERS  (Windows only) ────────────────────────────────┐
 │  open-nt             → open new PowerShell tab                               │
 │  open-nt ubuntu      → open Ubuntu/WSL tab                                   │
 │  open-nt cmd         → open Command Prompt tab                               │
 │  open-ubuntu         → direct Ubuntu launcher using configured profile GUID  │
 │  open-wsl-simple     → simple WSL profile launcher                           │
 │  Get-WindowsTerminalProfiles → inspect Windows Terminal profiles             │
+│  (on Linux, tab commands drive tmux windows instead)                         │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌─ ⏻ SHUTDOWN TIMER ───────────────────────────────────────────────────────────┐
@@ -107,10 +108,18 @@ $verLine
 │  🏷️ ENHANCED RENAME:                                                         │
 │  rn [filename]       → 🎨 beautiful interactive rename with fuzzy search     │
 │                                                                              │
-│  🗑️ SMART FILE REMOVAL:                                                      │
-│  rm <filename>       → 🎯 smart remove with fuzzy search                     │
-│  rm <filename> -f    → force remove (hidden files, .git, etc.)               │
+│  🗑️ SMART FILE REMOVAL:   (🐧 on Linux this is 'del', not 'rm' — see below)  │
+│  rm                  → 🎯 fzf picker, then confirm before deleting           │
+│  rm <filename>       → remove a single file or directory (recursive)         │
+│  rm <file1> <file2>  → remove multiple targets in one command                │
+│  rm *.log            → wildcard removal — lists every match, one confirm     │
+│  rm <filename> -f    → force remove (skip the confirmation prompt)           │
 │  rmdir <path>        → enhanced directory removal with confirmations         │
+│                                                                              │
+│  🐧 ON LINUX — GNU coreutils are NOT shadowed:                               │
+│  del [...]           → PowerFlow's smart removal (what 'rm' is on Windows)   │
+│  mvf <filename>      → PowerFlow's cut-and-paste move (Windows calls it 'mv')│
+│  rm / mv / cp / cat  → the real GNU tools, untouched                         │
 │                                                                              │
 │  📋 FILE CLIPBOARD OPERATIONS:                                               │
 │  copy-file <file>    → copy file to clipboard for pasting                    │

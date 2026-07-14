@@ -56,9 +56,8 @@ jobs:
           files: |
             ./release-files/install.ps1
             ./release-files/uninstall.ps1
-            ./release-files/ubuntu-install.sh
-            ./release-files/ubuntu-uninstall.sh
+            ./release-files/install.sh
+            ./release-files/install-gui.sh
             ./release-files/powerflow-v${{ inputs.version }}.zip
-            ./release-files/.bashrc
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

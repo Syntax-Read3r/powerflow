@@ -260,7 +260,7 @@ function gh-l {
                     $repoUrl = $selectedRepo.html_url
                     $repoFullName = $selectedRepo.full_name
 
-                    Set-Clipboard $repoUrl
+                    Copy-ToClipboard $repoUrl
                     Write-Host "📋 Copied URL: $repoUrl" -ForegroundColor Green
                     Write-Host "`n🔧 What would you like to do with '$selectedRepoName'?" -ForegroundColor Cyan
                     Write-Host "  1. Clone repository" -ForegroundColor DarkGray
@@ -283,11 +283,11 @@ function gh-l {
                         }
                         "2" {
                             Write-Host "🌐 Opening in browser..." -ForegroundColor Cyan
-                            Start-Process $repoUrl
+                            Open-Url $repoUrl
                         }
                         "3" {
                             $sshUrl = $repoUrl -replace "https://github.com/", "git@github.com:" -replace "\.git$", "" + ".git"
-                            Set-Clipboard $sshUrl
+                            Copy-ToClipboard $sshUrl
                             Write-Host "📋 Copied SSH URL: $sshUrl" -ForegroundColor Green
                         }
                         "4" {
@@ -572,7 +572,7 @@ function gh-l-org {
 
     $repoUrl = $selectedRepo.html_url
     $sshUrl  = "git@github.com:$($selectedRepo.full_name).git"
-    Set-Clipboard $repoUrl
+    Copy-ToClipboard $repoUrl
     Write-Host "📋 Copied URL: $repoUrl" -ForegroundColor Green
 
     # ── Action menu ───────────────────────────────────────────────────────────
@@ -621,15 +621,15 @@ function gh-l-org {
             Write-Host "✅ Done — $cloned cloned, $failed failed  →  .\$selectedOrg\" -ForegroundColor Green
         }
         "3" {
-            Start-Process $repoUrl
+            Open-Url $repoUrl
             Write-Host "🌐 Opened in browser." -ForegroundColor Cyan
         }
         "4" {
-            Set-Clipboard $repoUrl
+            Copy-ToClipboard $repoUrl
             Write-Host "📋 Copied HTTPS URL: $repoUrl" -ForegroundColor Green
         }
         "5" {
-            Set-Clipboard $sshUrl
+            Copy-ToClipboard $sshUrl
             Write-Host "📋 Copied SSH URL: $sshUrl" -ForegroundColor Green
         }
         default {

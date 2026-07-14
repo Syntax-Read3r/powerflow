@@ -1,6 +1,6 @@
 ## Features
 
-> 🐧 **Cross-Platform Excellence**: PowerFlow delivers complete feature parity between Windows (PowerShell) and Ubuntu/WSL (Bash) environments with bidirectional integration and seamless workflow transitions.
+> 🪟 **Windows-first**: PowerFlow is a PowerShell profile for Windows Terminal. It can launch and hand off to a WSL tab, but it does not ship a Linux shell profile — a dedicated Linux module is planned.
 
 ### 🧭 Smart Navigation System
 
@@ -25,7 +25,6 @@
 - **Interactive commit workflow** - Beautiful fuzzy-search interface for staging, committing, and pushing changes
 - **Smart rollback system** - Create rollback branches from any commit with automatic naming and branch management
 - **Branch management** - Interactive branch switching, creation, and deletion with safety checks
-- **Cross-platform Git tools** - Identical Git workflow available in both PowerShell and Bash environments
 
 ### 🔗 GitHub Integration
 
@@ -48,7 +47,6 @@
 - **History-based prediction** - Command history search with real-time filtering and completion
 - **Multi-modal search** - File finder (Ctrl+T), command history (Ctrl+R), and directory navigation (Alt+C)
 - **Smart file type detection** - Automatic syntax highlighting and appropriate preview generation
-- **Cross-platform file access** - Seamless navigation between Windows and WSL file systems
 
 ### 🛡️ Safety & Reliability
 
@@ -65,17 +63,15 @@
 - **PowerShell profile enhancement** - Extends native PowerShell with productivity-focused aliases and functions
 - **Cross-session persistence** - Bookmarks, settings, and preferences maintained across sessions
 - **Auto-update system** - Built-in version checking and update mechanisms with conflict resolution
-- **Ubuntu/WSL full parity** - Complete feature compatibility with Linux environments via enhanced .bashrc
-- **Intelligent path translation** - Automatic Windows ↔ WSL path conversion for seamless cross-platform workflows
 
-### 🖥️ Cross-Platform Terminal Management
+### 🖥️ Terminal Tab Management
 
-- **Bidirectional terminal launching** - Open PowerShell tabs from Ubuntu and Ubuntu tabs from PowerShell
-- **Smart path preservation** - Automatically translates and preserves current directory across shell switches
-- **Universal shell shortcuts** - `open-nt p` (PowerShell), `open-nt u` (Ubuntu), `open-nt cmd` (Command Prompt)
+- **WSL tab launching** - Open an Ubuntu/WSL tab from PowerShell with `open-nt u` or `open-ubuntu`
+- **WSL path bridging** - Translates the current Windows path to its `/mnt/…` WSL equivalent and copies the `cd` command to your clipboard
+- **Shell shortcuts** - `open-nt p` (PowerShell), `open-nt u` (Ubuntu/WSL), `open-nt cmd` (Command Prompt)
 - **Advanced tab control** - Navigate between tabs with `next-t`, `prev-t`, and numbered tab switching
 - **Profile-aware launching** - Automatically detects and uses correct Windows Terminal profiles
-- **Keyboard automation** - Uses xdotool (Linux) or SendKeys (Windows) for seamless tab management
+- **Keyboard automation** - Uses SendKeys for seamless tab management
 
 ### 🎯 Productivity Features
 
@@ -90,6 +86,5 @@
 
 - **Modern toolchain integration** - Works seamlessly with VS Code, Git, Node.js, and other development tools
 - **Extensible architecture** - Easy to customize and extend with additional functionality
-- **Cross-platform consistency** - Identical command syntax and behavior across Windows and Linux
 - **Professional workflows** - Supports enterprise development patterns and team collaboration
 - **Version management** - Built-in update mechanisms and version tracking for easy maintenance

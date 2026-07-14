@@ -23,7 +23,7 @@ function git-l {
             # Extract commit hash more reliably
             if ($_ -match '\b([a-f0-9]{7,40})\b') {
                 $hash = $matches[1]
-                Set-Clipboard $hash
+                Copy-ToClipboard $hash
                 Write-Host "📋 Copied commit hash: $hash" -ForegroundColor Green
 
                 # Show the selected line for context
@@ -149,7 +149,7 @@ function git-pick {
         ForEach-Object {
             # Extract commit hash using regex pattern matching
             if ($_ -match '^\*? ?([a-f0-9]{7,40})') {
-                Set-Clipboard $matches[1]
+                Copy-ToClipboard $matches[1]
                 Write-Host "📋 Copied commit: $($matches[1])" -ForegroundColor Green
             }
         }

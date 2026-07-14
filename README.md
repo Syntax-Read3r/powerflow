@@ -353,13 +353,26 @@ PowerFlow includes automated release workflows:
 
 ### File Operations
 
-| Command     | Description                          |
-| ----------- | ------------------------------------ |
-| `mv <file>` | Smart cut file for moving            |
-| `mv-t`      | Paste cut file                       |
-| `rn [file]` | Interactive file rename              |
-| `rm <file>` | Smart file removal with fuzzy search |
-| `ls -t`     | Tree view with smart depth           |
+| Command             | Description                                        |
+| ------------------- | -------------------------------------------------- |
+| `mv <file>`         | Smart cut file for moving                          |
+| `mv-t`              | Paste cut file                                     |
+| `rn [file]`         | Interactive file rename                            |
+| `rm`                | fzf picker, then confirm before deleting           |
+| `rm <file>`         | Remove a file or directory (recursive)             |
+| `rm <f1> <f2>`      | Remove multiple targets in one command             |
+| `rm *.log`          | Wildcard removal — lists every match, one confirm  |
+| `rm <file> -f`      | Force remove (skip the confirmation prompt)        |
+| `ls -t`             | Tree view with smart depth                         |
+
+### System
+
+| Command                  | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `shutdown 1h 30m`        | Schedule a shutdown (10 min – 6 hr range)        |
+| `shutdown cancel` / `s c`| Cancel a scheduled shutdown                     |
+| `set-path <dir>`         | Add a directory to the User PATH (no quotes)     |
+| `set-path -system <dir>` | Add to the System PATH (requires Administrator)  |
 
 ### Version Management
 

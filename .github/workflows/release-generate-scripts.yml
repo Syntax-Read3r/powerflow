@@ -1,15 +1,22 @@
 # ==============================================================================
-# PowerFlow — Generate Release Scripts (reusable workflow)
+# PowerFlow — Stage Release Scripts (reusable workflow)
 # ==============================================================================
 # Called by  : .github/workflows/release.yml
-# Responsibility: Generate install.ps1, uninstall.ps1, ubuntu-install.sh,
-#                 ubuntu-uninstall.sh, and RELEASE_NOTES.md. Uploads them as
-#                 the 'release-scripts' artifact for release-publish.yml to use.
+# Responsibility: Stage the installers as release assets and generate
+#                 RELEASE_NOTES.md from the CHANGELOG.
 # Inputs     : version, tag_name
 # Artifact   : release-scripts
 # ==============================================================================
+#
+# NOTE (v3.0.0): this workflow used to GENERATE install.ps1 / uninstall.ps1 from
+# here-strings baked into the YAML. That was a duplication trap — the generated
+# installer could silently drift from the real install.ps1 in the repo, and did.
+#
+# The installers are now first-class source files, so we simply ship them. One
+# installer, one source of truth. Same lesson as the Linux port itself.
+# ==============================================================================
 
-name: Generate Release Scripts
+name: Stage Release Scripts
 
 on:
   workflow_call:
@@ -17,264 +24,39 @@ on:
       version:
         required: true
         type: string
-        description: Version string (e.g. 2.0.0)
+        description: Version string (e.g. 3.0.0)
       tag_name:
         required: true
         type: string
-        description: Full tag name (e.g. v2.0.0)
+        description: Full tag name (e.g. v3.0.0)
 
 jobs:
   generate:
-    name: 📝 Generate Release Scripts
-    runs-on: windows-latest
+    name: 📝 Stage Release Scripts
+    runs-on: ubuntu-latest
 
     steps:
       - name: 📥 Checkout Code
         uses: actions/checkout@v4
 
-      - name: 📝 Generate Windows install.ps1
-        shell: pwsh
+      - name: ✅ Verify the installers exist
+        shell: bash
         run: |
-          $version = "${{ inputs.version }}"
-          $tagName = "${{ inputs.tag_name }}"
+          missing=0
+          for f in install.ps1 uninstall.ps1 install.sh install-gui.sh; do
+            if [ -f "$f" ]; then echo "  ✅ $f"
+            else echo "::error::required installer missing: $f"; missing=1; fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
 
-          $script = @"
-          #Requires -Version 5.1
-          <#
-          .SYNOPSIS
-              PowerFlow Installation Script v$version
-          .DESCRIPTION
-              Downloads and installs the full PowerFlow component archive.
-          .PARAMETER Force
-              Overwrite existing profile without confirmation.
-          .EXAMPLE
-              .\install.ps1
-              .\install.ps1 -Force
-          #>
-          param([switch]`$Force)
-
-          `$ErrorActionPreference = "Stop"
-          Write-Host "🚀 PowerFlow v$version Installation" -ForegroundColor Cyan
-          Write-Host "=================================================" -ForegroundColor Cyan
-
-          if (`$PSVersionTable.PSVersion.Major -lt 5) {
-              Write-Host "❌ PowerShell 5.1 or higher required" -ForegroundColor Red
-              Write-Host "💡 Download PowerShell 7: https://aka.ms/powershell" -ForegroundColor Yellow
-              exit 1
-          }
-
-          `$profilePath = `$PROFILE
-          `$profileDir  = Split-Path `$profilePath -Parent
-          Write-Host "📁 Profile location: `$profilePath" -ForegroundColor White
-
-          if ((Test-Path `$profilePath) -and -not `$Force) {
-              Write-Host "⚠️  Profile already exists!" -ForegroundColor Yellow
-              if ((Read-Host "Overwrite? (y/n)") -ne 'y') {
-                  Write-Host "❌ Installation cancelled" -ForegroundColor Red; exit 1
-              }
-              `$backup = "`$profilePath.backup.`$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-              Copy-Item `$profilePath `$backup
-              Write-Host "💾 Backup: `$backup" -ForegroundColor Cyan
-          }
-
-          if (-not (Test-Path `$profileDir)) {
-              New-Item -ItemType Directory -Path `$profileDir -Force | Out-Null
-          }
-
-          try {
-              Write-Host "⬇️  Downloading PowerFlow v$version..." -ForegroundColor Yellow
-              `$zipUrl     = "https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/powerflow-v$version.zip"
-              `$zipPath    = Join-Path `$env:TEMP "powerflow-v$version.zip"
-              `$extractDir = Join-Path `$env:TEMP "powerflow-v$version"
-
-              Invoke-RestMethod -Uri `$zipUrl -OutFile `$zipPath -ErrorAction Stop
-              Write-Host "✅ Downloaded archive" -ForegroundColor Green
-
-              if (Test-Path `$extractDir) { Remove-Item `$extractDir -Recurse -Force }
-              Expand-Archive -Path `$zipPath -DestinationPath `$extractDir -Force
-
-              Copy-Item (Join-Path `$extractDir "Microsoft.PowerShell_profile.ps1") `$profilePath -Force
-              foreach (`$folder in @("config", "components", "docs")) {
-                  `$src = Join-Path `$extractDir `$folder
-                  if (Test-Path `$src) {
-                      Copy-Item `$src (Join-Path `$profileDir `$folder) -Recurse -Force
-                  }
-              }
-
-              foreach (`$doc in @("COMPONENTS.md", "IMPORT_ORDER.md", "CHANGELOG.md", "README.md")) {
-                  `$src = Join-Path `$extractDir `$doc
-                  if (Test-Path `$src) { Copy-Item `$src (Join-Path `$profileDir `$doc) -Force }
-              }
-
-              Remove-Item `$zipPath    -Force -ErrorAction SilentlyContinue
-              Remove-Item `$extractDir -Recurse -Force -ErrorAction SilentlyContinue
-
-              Write-Host "✅ PowerFlow installed successfully" -ForegroundColor Green
-          } catch {
-              Write-Host "❌ Download failed: `$(`$_.Exception.Message)" -ForegroundColor Red
-              Write-Host "💡 Manual download: https://github.com/Syntax-Read3r/powerflow/releases" -ForegroundColor Yellow
-              exit 1
-          }
-
-          Write-Host ""
-          Write-Host "🎉 PowerFlow v$version installed!" -ForegroundColor Green
-          Write-Host "🔄 Restart PowerShell or run: . ```$PROFILE" -ForegroundColor Cyan
-          Write-Host "💡 Type 'pwsh-h' for help" -ForegroundColor Yellow
-          Write-Host "🌟 https://github.com/Syntax-Read3r/powerflow" -ForegroundColor DarkGray
-          "@
-
-          # Strip leading spaces from each line (artifact of YAML indentation)
-          $lines = $script -split "`n" | ForEach-Object { $_ -replace '^\s{10}', '' }
-          $script = $lines -join "`n"
-          Set-Content "install.ps1" $script -Encoding UTF8
-          Write-Host "✅ Generated install.ps1"
-
-      - name: 📝 Generate Windows uninstall.ps1
-        shell: pwsh
+      - name: 🔍 Shellcheck the bash installers
+        shell: bash
         run: |
-          $version = "${{ inputs.version }}"
-
-          $script = @"
-          <#
-          .SYNOPSIS
-              PowerFlow Uninstallation Script v$version
-          .DESCRIPTION
-              Removes the PowerFlow profile and optionally cleans up dependencies.
-          #>
-          Write-Host "🗑️  PowerFlow v$version Uninstall" -ForegroundColor Yellow
-          Write-Host "=============================================" -ForegroundColor Yellow
-
-          `$profilePath = `$PROFILE
-          `$profileDir  = Split-Path `$profilePath -Parent
-
-          if (-not (Test-Path `$profilePath)) {
-              Write-Host "ℹ️  No profile found at: `$profilePath" -ForegroundColor Yellow; exit 0
-          }
-
-          `$content = Get-Content `$profilePath -Raw -ErrorAction SilentlyContinue
-          if (`$content -and `$content -notmatch "PowerFlow") {
-              if ((Read-Host "Profile doesn't appear to be PowerFlow — remove anyway? (y/n)") -ne 'y') {
-                  Write-Host "❌ Uninstall cancelled" -ForegroundColor Yellow; exit 0
-              }
-          }
-
-          `$backup = "`$profilePath.backup.`$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-          Write-Host "💾 Backup: `$backup" -ForegroundColor Cyan
-          Copy-Item `$profilePath `$backup -ErrorAction SilentlyContinue
-
-          Remove-Item `$profilePath -Force
-          foreach (`$folder in @("config", "components", "docs")) {
-              `$path = Join-Path `$profileDir `$folder
-              if (Test-Path `$path) { Remove-Item `$path -Recurse -Force }
-          }
-          Write-Host "✅ PowerFlow profile removed" -ForegroundColor Green
-
-          Write-Host "`n🔧 Remove Scoop dependencies?" -ForegroundColor Yellow
-          Write-Host "   Starship, fzf, zoxide, lsd, FiraCode-NF" -ForegroundColor DarkGray
-          if ((Read-Host "(y/n)") -eq 'y') {
-              if (Get-Command scoop -ErrorAction SilentlyContinue) {
-                  scoop uninstall starship fzf zoxide lsd FiraCode-NF 2>`$null
-                  Write-Host "✅ Dependencies removed" -ForegroundColor Green
-              } else {
-                  Write-Host "⚠️  Scoop not found — remove dependencies manually" -ForegroundColor Yellow
-              }
-          }
-
-          Write-Host "`n✅ Uninstall complete" -ForegroundColor Green
-          Write-Host "🙏 Thanks for using PowerFlow!" -ForegroundColor Cyan
-          "@
-
-          $lines = $script -split "`n" | ForEach-Object { $_ -replace '^\s{10}', '' }
-          $script = $lines -join "`n"
-          Set-Content "uninstall.ps1" $script -Encoding UTF8
-          Write-Host "✅ Generated uninstall.ps1"
-
-      - name: 📝 Generate Ubuntu Scripts
-        shell: pwsh
-        run: |
-          $version = "${{ inputs.version }}"
-          $tagName = "${{ inputs.tag_name }}"
-
-          # ── ubuntu-install.sh ──────────────────────────────────────────────
-          $install = @"
-          #!/bin/bash
-          # PowerFlow v$version Ubuntu Installation Script
-          set -e
-
-          RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-          CYAN='\033[0;36m'; NC='\033[0m'
-
-          echo -e "`${CYAN}🚀 PowerFlow v$version Ubuntu Installation`${NC}"
-          echo -e "`${CYAN}=============================================`${NC}"
-
-          if ! command -v apt >/dev/null 2>&1; then
-              echo -e "`${RED}❌ This script requires an apt-based system`${NC}"; exit 1
-          fi
-
-          if [ -f "`$HOME/.bashrc" ]; then
-              backup="`$HOME/.bashrc.backup.`$(date +%Y%m%d_%H%M%S)"
-              echo -e "`${YELLOW}💾 Backing up .bashrc to `$backup`${NC}"
-              cp "`$HOME/.bashrc" "`$backup"
-          fi
-
-          echo -e "`${YELLOW}⬇️  Downloading .bashrc...`${NC}"
-          url="https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/.bashrc"
-          fallback="https://raw.githubusercontent.com/Syntax-Read3r/powerflow/$tagName/ubuntu/.bashrc"
-
-          if command -v curl >/dev/null 2>&1; then
-              curl -fsSL "`$url" -o "`$HOME/.bashrc" 2>/dev/null || curl -fsSL "`$fallback" -o "`$HOME/.bashrc"
-          elif command -v wget >/dev/null 2>&1; then
-              wget -q "`$url" -O "`$HOME/.bashrc" 2>/dev/null || wget -q "`$fallback" -O "`$HOME/.bashrc"
-          else
-              echo -e "`${RED}❌ curl or wget required`${NC}"; exit 1
-          fi
-
-          echo -e "`${GREEN}✅ PowerFlow v$version for Ubuntu installed!`${NC}"
-          echo -e "`${CYAN}🔄 Run: source ~/.bashrc`${NC}"
-          echo -e "`${YELLOW}💡 Type 'wsl_help' for help`${NC}"
-          "@
-
-          $lines = $install -split "`n" | ForEach-Object { $_ -replace '^\s{10}', '' }
-          $install = $lines -join "`n"
-          Set-Content "ubuntu-install.sh" $install -Encoding UTF8
-          Write-Host "✅ Generated ubuntu-install.sh"
-
-          # ── ubuntu-uninstall.sh ────────────────────────────────────────────
-          $uninstall = @"
-          #!/bin/bash
-          # PowerFlow v$version Ubuntu Uninstallation Script
-          set -e
-
-          RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-          CYAN='\033[0;36m'; NC='\033[0m'
-
-          echo -e "`${CYAN}🗑️  PowerFlow v$version Ubuntu Uninstall`${NC}"
-
-          if [ ! -f "`$HOME/.bashrc" ]; then
-              echo -e "`${YELLOW}ℹ️  No .bashrc found`${NC}"; exit 0
-          fi
-
-          if ! grep -q "PowerFlow\|WSL.*Profile" "`$HOME/.bashrc" 2>/dev/null; then
-              echo -e "`${YELLOW}ℹ️  .bashrc doesn't appear to be PowerFlow`${NC}"
-              read -p "Remove anyway? (y/n): " yn
-              [[ "`$yn" == "y" ]] || { echo -e "`${RED}❌ Cancelled`${NC}"; exit 0; }
-          fi
-
-          backup="`$HOME/.bashrc.backup.`$(date +%Y%m%d_%H%M%S)"
-          cp "`$HOME/.bashrc" "`$backup"
-          rm -f "`$HOME/.bashrc"
-          rm -f "`$HOME/.wsl_bookmarks.json" "`$HOME/.wsl_init_check" \
-                "`$HOME/.wsl_profile_update_check" "`$HOME/.nav_history"
-          rm -f /tmp/.powerflow_* 2>/dev/null || true
-
-          echo -e "`${GREEN}✅ Uninstall complete — backup at `$backup`${NC}"
-          echo -e "`${CYAN}🙏 Thanks for using PowerFlow!`${NC}"
-          "@
-
-          $lines = $uninstall -split "`n" | ForEach-Object { $_ -replace '^\s{10}', '' }
-          $uninstall = $lines -join "`n"
-          Set-Content "ubuntu-uninstall.sh" $uninstall -Encoding UTF8
-          Write-Host "✅ Generated ubuntu-uninstall.sh"
+          sudo apt-get update -qq && sudo apt-get install -y shellcheck
+          # SC1090/SC1091: shellcheck cannot follow dynamically-sourced files
+          # (we source /etc/os-release, which only exists at runtime).
+          shellcheck -e SC1090,SC1091 install.sh install-gui.sh
+          echo "✅ shellcheck passed"
 
       - name: 📝 Generate Release Notes
         shell: pwsh
@@ -297,29 +79,17 @@ jobs:
               "",
               "🚀 Enhanced terminal profile — smart navigation, Git workflows, and productivity tools.",
               "",
-              "### 📦 Installation",
-              "",
-              "**Windows (PowerShell):**",
-              '```powershell',
-              "irm https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/install.ps1 | iex",
-              '```',
-              "",
-              "**Ubuntu/WSL:**",
-              '```bash',
-              "curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/ubuntu-install.sh | bash",
-              '```',
-              "",
               "### 📚 Documentation",
               "- [Installation Guide](https://github.com/Syntax-Read3r/powerflow/blob/main/docs/installation.md)",
               "- [Features](https://github.com/Syntax-Read3r/powerflow/blob/main/docs/features.md)",
               "- [Troubleshooting](https://github.com/Syntax-Read3r/powerflow/blob/main/docs/troubleshooting.md)",
               "",
-              "> Windows: type ``pwsh-h`` after install for help. Ubuntu: type ``wsl_help``."
+              "> Type ``pwsh-h`` after install for help."
             ) -join "`n"
           }
 
-          # Always append install commands so the GitHub release page always has a
-          # copy-pasteable one-liner regardless of what CHANGELOG contains.
+          # Always append the install commands so the release page has a
+          # copy-pasteable one-liner regardless of what the CHANGELOG contains.
           $installBlock = @(
             "",
             "---",
@@ -331,9 +101,23 @@ jobs:
             "irm https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/install.ps1 | iex",
             '```',
             "",
-            "**Ubuntu/WSL:**",
+            "**Linux (terminal):**",
             '```bash',
-            "curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/ubuntu-install.sh | bash",
+            "curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/install.sh | bash",
+            '```',
+            "",
+            "**Linux (graphical installer):**",
+            '```bash',
+            "curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/download/$tagName/install-gui.sh -o install-gui.sh && bash install-gui.sh",
+            '```',
+            "",
+            "> Linux keeps the GNU coreutils intact — ``rm``/``mv``/``cp``/``cat`` are untouched.",
+            "> PowerFlow's own versions are ``del`` and ``mvf``.",
+            "",
+            "**Uninstall (either platform):**",
+            '```',
+            "powerflow-uninstall          # from inside PowerFlow",
+            "bash install.sh --uninstall  # from a Linux terminal",
             '```'
           ) -join "`n"
           $notes = $notes.TrimEnd() + $installBlock
@@ -348,6 +132,6 @@ jobs:
           path: |
             install.ps1
             uninstall.ps1
-            ubuntu-install.sh
-            ubuntu-uninstall.sh
+            install.sh
+            install-gui.sh
             RELEASE_NOTES.md

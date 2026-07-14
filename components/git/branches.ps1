@@ -72,7 +72,7 @@ function git-branch {
 
     # Copy branch name to clipboard (clean name without remote prefix for local operations)
     $cleanBranchName = $branchName -replace '^origin/', ''
-    Set-Clipboard $cleanBranchName
+    Copy-ToClipboard $cleanBranchName
     Write-Host "📋 Copied branch: $cleanBranchName" -ForegroundColor Green
 
     # Don't allow operations on current branch

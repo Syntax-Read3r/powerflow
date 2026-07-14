@@ -229,6 +229,6 @@ Set-Alias cd- back              # Traditional cd- syntax
 
 function copy-pwd {
     $path = (Get-Location).Path
-    Set-Clipboard -Value $path
+    Copy-ToClipboard $path
     Write-Host "📋 Copied path: $path" -ForegroundColor Green
 }

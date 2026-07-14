@@ -3,9 +3,8 @@
 # ==============================================================================
 # Called by  : .github/workflows/release.yml
 # Responsibility: Package the full modular layout (bootloader + config/ +
-#                 components/ + docs) into powerflow-v{version}.zip, plus
-#                 include ubuntu/.bashrc as a standalone release asset.
-#                 Uploads both as the 'component-archive' artifact.
+#                 components/ + docs) into powerflow-v{version}.zip and upload
+#                 it as the 'component-archive' artifact.
 # Inputs     : version
 # Artifact   : component-archive
 # ==============================================================================
@@ -35,10 +34,18 @@ jobs:
           $version = "${{ inputs.version }}"
           $zipName = "powerflow-v$version.zip"
 
+          # platform/ and windows-only/ are REQUIRED as of v3.0.0 — without the
+          # adapter layer no components resolve and the profile fails to load.
           $paths = @(
             "Microsoft.PowerShell_profile.ps1",
             "config",
             "components",
+            "platform",
+            "windows-only",
+            "install.ps1",
+            "uninstall.ps1",
+            "install.sh",
+            "install-gui.sh",
             "COMPONENTS.md",
             "IMPORT_ORDER.md",
             "CHANGELOG.md",
@@ -46,14 +53,14 @@ jobs:
           )
           if (Test-Path "docs") { $paths += "docs" }
 
+          foreach ($p in @("platform", "windows-only", "components", "config")) {
+            if (-not (Test-Path $p)) { Write-Error "❌ Required path missing from the bundle: $p"; exit 1 }
+          }
+
           Compress-Archive -Path $paths -DestinationPath $zipName -Force
 
           $size = (Get-Item $zipName).Length / 1KB
           Write-Host "✅ Created $zipName ($([math]::Round($size, 1)) KB)"
-
-      - name: 📋 Stage .bashrc for upload
-        shell: pwsh
-        run: Copy-Item "ubuntu/.bashrc" ".bashrc"
 
       - name: 📤 Upload component-archive Artifact
         uses: actions/upload-artifact@v4
@@ -62,4 +69,3 @@ jobs:
           include-hidden-files: true
           path: |
             powerflow-v${{ inputs.version }}.zip
-            .bashrc

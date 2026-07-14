@@ -362,8 +362,7 @@ re-investigating.
 docs/
 ├── features.md           — full feature catalogue (one section per domain)
 ├── installation.md       — install / uninstall instructions
-├── troubleshooting.md    — common issues and fixes
-└── claude.integration.md — Claude Code–specific conventions for this repo
+└── troubleshooting.md    — common issues and fixes
 ```
 
 Component registry lives in `COMPONENTS.md` at the repo root.
@@ -377,7 +376,7 @@ Update the relevant doc **on the same response** as the code change that trigger
 | New function in any `components/` domain     | `COMPONENTS.md`, `components/help/menu.ps1` |
 | Install/uninstall steps change               | `docs/installation.md`        |
 | New known issue or workaround                | `docs/troubleshooting.md`     |
-| New Claude Code convention for this repo     | `docs/claude.integration.md`  |
+| New Claude Code convention for this repo     | `CLAUDE.md`                   |
 | New major feature or domain                  | `docs/features.md`            |
 
 ### PowerFlow Component Structure

@@ -13,8 +13,8 @@ function Check-PowerFlowUpdates {
     if (-not $script:CHECK_PROFILE_UPDATES) { return }
 
     # Check if we've already prompted for this version today OR if we're in a rate limit cooldown
-    $updateCheckFile = "$env:TEMP\.powerflow_update_check"
-    $rateLimitFile = "$env:TEMP\.powerflow_rate_limit"
+    $updateCheckFile = Join-Path (Get-TempPath) '.powerflow_update_check'
+    $rateLimitFile = Join-Path (Get-TempPath) '.powerflow_rate_limit'
     $today = Get-Date -Format "yyyy-MM-dd"
 
     # Check for existing rate limit cooldown
@@ -286,7 +286,7 @@ function pwsh-reminders {
             }
             $script:CHECK_PROFILE_UPDATES = $true
             # Delete daily-check marker so the update check fires on next profile load
-            Remove-Item "$env:TEMP\.powerflow_update_check" -ErrorAction SilentlyContinue
+            Remove-Item (Join-Path (Get-TempPath) '.powerflow_update_check') -ErrorAction SilentlyContinue
             Write-Host "🔔 Update reminders enabled. You'll be notified on the next profile load." -ForegroundColor Green
         } else {
             Write-Host "No change." -ForegroundColor DarkGray

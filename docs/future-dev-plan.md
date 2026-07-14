@@ -220,5 +220,31 @@ new-script deploy     # creates deploy.ps1 with boilerplate, opens in VS Code
 
 - Each Tier 1 item should get its own plan doc in `docs/plan/` before implementation.
 - `ports.ps1` and `env.ps1` are the most self-contained starting points.
-- `hosts.ps1`, `elevation.ps1`, and `symlink` all require admin — consider a shared `Assert-Admin` helper in `components/shared/`.
+- ✅ **Done (v3.0.0)** — `hosts.ps1`, `elevation.ps1` and `symlink` all require admin, so the shared
+  `Assert-Admin` / `Test-Admin` helper now lives in `components/shared/admin.ps1`. `set-path -System`
+  already uses it. Build the admin-dependent commands on top of it rather than re-checking inline.
 - `watch` needs to be interruptible via `Ctrl+C` — use a `try/finally` loop with `[Console]::TreatControlCAsInput = $false`.
+
+## Docker 
+
+docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}"
+
+docker-list
+
+## System Variables
+
+$adbPath = "C:\Users\munya\AppData\Local\Android\Sdk\platform-tools"
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+
+if ($userPath -notlike "*$adbPath*") {
+    [Environment]::SetEnvironmentVariable("Path", "$userPath;$adbPath", "User")
+}
+
+$env:Path += ";$adbPath"
+adb version
+
+# Confirm
+
+[Environment]::GetEnvironmentVariable("Path", "User") -split ";" | Select-String "Android\\Sdk\\platform-tools"
+
+set-SV or set-systemvariable path||"path"... this must auth verify that the path is legit before setting and if not, is to throw an error and inform the user

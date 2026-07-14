@@ -9,7 +9,143 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [2.2.1] - Unreleased
+## [3.0.0] - Unreleased
+
+> 🐧 **Linux is back — rebuilt from scratch on a shared codebase.**
+>
+> The old Ubuntu port was a 4,160-line parallel re-implementation in bash/zsh/fish.
+> Every feature existed twice and the two halves drifted until the Linux one rotted.
+> It has been **deleted and replaced** by a Linux platform layer that shares one
+> codebase with Windows, so it cannot drift again.
+>
+> - **Windows users — nothing to do.** Every command behaves exactly as before.
+> - **Linux users — a real port, for the first time.** `curl … install.sh | bash`,
+>   or a graphical installer. Your GNU coreutils are left alone.
+> - **WSL users — unaffected.** `open-ubuntu` / `open-nt u` still open a WSL tab.
+>
+> ⚠️ **Breaking:** the old bash `.bashrc` port and its `ubuntu-install.sh` are gone.
+> 📖 **[Upgrade guide → docs/migration/v3-upgrade.md](https://github.com/Syntax-Read3r/powerflow/blob/main/docs/migration/v3-upgrade.md)**
+
+### Added
+
+- 🐧 **Linux support (PowerShell 7).** PowerFlow now runs natively on Linux from the
+  same codebase as Windows — not a second implementation. `nav`, the whole `git-*`
+  suite, `gh-l`, bookmarks, fuzzy pickers, `set-path`, `shutdown` and `pwsh-h` all work.
+- 🧩 **Platform adapter layer (`platform/<os>/adapters/`).** `components/` is now
+  entirely OS-agnostic and calls adapters (`Copy-ToClipboard`, never `Set-Clipboard`).
+  Nine adapters implement the same 32-function contract on each OS:
+
+  | Adapter | Windows | Linux |
+  |---|---|---|
+  | clipboard | `Set-Clipboard` | `wl-copy` → `xclip` → `xsel` |
+  | packages | Scoop | apt / dnf / pacman / zypper / apk |
+  | elevation | `WindowsPrincipal` | `id -u` / sudo |
+  | openers | `explorer.exe` | `xdg-open` |
+  | terminal | Windows Terminal + SendKeys | tmux windows |
+  | power | `shutdown.exe` | `shutdown -h +N` |
+  | env | registry PATH | managed rc fragment |
+  | locations | `%LOCALAPPDATA%` / `%TEMP%` | XDG dirs / `$TMPDIR` |
+  | pwsh-update | winget / MSI / Store | apt / snap |
+
+- 📦 **Two Linux installers, one installer.** `install.sh` (terminal) and
+  `install-gui.sh` (zenity → kdialog → yad → terminal fallback) are thin front-ends;
+  both delegate to the same `install.ps1` that Windows uses. Writing a second bash
+  installer is the exact duplication that killed the old port.
+- 🗑️ **Manifest-based uninstall.** The installer records what it placed and which tools
+  it installed. **A dependency you already had is never removed** — the old uninstaller
+  ripped out shared Scoop tools regardless, and the old bash one deleted `~/.bashrc`
+  outright. Reachable three ways: `powerflow-uninstall`, `install.sh --uninstall`, or
+  the GUI.
+- 🚧 **CI enforces the architecture.** `release-validate.yml` fails the release if any
+  file under `components/` calls an OS API directly, or if an adapter exists on only one
+  platform. A new `release-validate-linux.yml` job proves **install → load → use →
+  uninstall** on a real `ubuntu-latest` box and **blocks publish** if Linux is broken.
+  The old port had no such check, which is why it rotted silently.
+- 🛡️ **Shared elevation helpers (`Test-Admin`, `Assert-Admin`)** — one consistent
+  Administrator/root check for every admin-gated command.
+
+### Changed
+
+- ⏰ **`shutdown` maximum delay raised to 6 hours** (was 3). `shutdown 6h` now works.
+  The 10-minute minimum and `shutdown cancel` / `s c` are unchanged.
+- 🐧 **Linux keeps its GNU coreutils.** PowerShell resolves
+  `Alias → Function → Cmdlet → native binary`, so PowerFlow's `rm`/`mv` functions and
+  `cat`/`cp` aliases would have **shadowed the real tools**. They no longer do:
+
+  | On Linux | Behaviour |
+  |---|---|
+  | `rm` `mv` `cp` `cat` `mkdir` `touch` `rmdir` `which` `grep` | the **real GNU tools**, untouched |
+  | **`del`** | PowerFlow's smart removal (what `rm` is on Windows) |
+  | **`mvf`** | PowerFlow's cut-and-paste move (what `mv` is on Windows) |
+  | `ls` `la` `ll` | PowerFlow's pretty listing (deliberately overridden) |
+
+  This matters: PowerFlow's `rm somedir` recursively deletes a tree after one prompt,
+  while GNU `rm somedir` **refuses** without `-r`. Shadowing it would have silently
+  removed a seatbelt Linux users rely on. **Windows behaviour is unchanged.**
+- 📦 **`install.ps1` now installs the whole component tree.** It previously downloaded
+  only the bootloader, leaving `config/` and `components/` missing — the profile could
+  not actually load from a fresh install.
+- ⚙️ **Release scripts are shipped, not generated.** The CI used to rebuild `install.ps1`
+  from a here-string embedded in YAML, which could silently drift from the real file.
+
+### Fixed
+
+- 🗑️ **`rm` now supports wildcards and multiple targets**: `rm *.log` and
+  `rm a.txt b.txt` previously matched nothing and silently deleted nothing —
+  every argument was joined into a single literal path (`"a.txt b.txt"`), which
+  never resolved. Each argument is now resolved as its own path pattern.
+  Multi-target deletes list every match and take one confirmation; `-f` still
+  skips it. Unquoted filenames with spaces (`rm my report.txt`) still work, and
+  names with wildcard characters (`rm build[1].log`) now resolve too.
+- 🖥️ **`$IsWindows` does not exist on PowerShell 5.1** — it is `$null`, which is falsy.
+  Platform detection checks `PSEdition -eq 'Desktop'` first, so a 5.1 box is correctly
+  identified as Windows. A naive check would have failed to load the profile entirely
+  for every 5.1 user.
+- 🐧 **`$env:TEMP` / `$env:USERPROFILE` are unset on Linux** — state files (update
+  markers, bookmarks) would have been written to bogus paths. Components now go through
+  `Get-TempPath` / `Get-HomePath` adapters.
+- 📦 **Dependency install failed for *every* tool on a clean Linux box** — `apt-get install`
+  was called without ever running `apt-get update`, so on a fresh machine (or container)
+  the package lists are empty and even `git` fails with "Unable to locate package".
+  The index is now refreshed once per session.
+- 📦 **`starship` and `lsd` are not in Ubuntu's repos at all** — apt could never install
+  them, so `ls` had no `lsd` and the prompt had no `starship`. They are now fetched from
+  their GitHub releases, using PowerShell's own web cmdlets rather than `curl` (a slim
+  image often has neither `curl` nor `wget`, which made the old fallback fail silently).
+- 🗑️ **Uninstall claimed to remove tools it did not remove** — removals were batched
+  (`apt-get remove starship zoxide lsd`), and apt aborts the *entire* command if one name
+  is not an apt package. A single unpackaged tool silently left every other tool installed.
+  Removal is now one package at a time, and binaries installed to `/usr/local/bin` are
+  deleted directly since the package manager cannot see them.
+- ⛔ **The startup update check could block a non-interactive shell** — it ran during
+  profile load and called `Read-Host`, so in CI, a script, or `curl … | bash` it would wait
+  for input that never comes. It now skips prompting when stdin is redirected.
+- 🧪 **`install.sh` ignored a local checkout and always downloaded `main`** — which meant
+  the Linux CI job checked out the tag being released and then validated *different* code.
+  It now installs from the checkout when run inside one.
+- 💥 **Dependency install crashed for every non-root user** — `"The term 's' is not
+  recognized"`. PowerShell **unrolls a single-element array into a scalar**, so
+  `$sudo = if (root) { @() } else { @('sudo') }` produced the *string* `'sudo'`, making
+  `$sudo + $cmd` a string concatenation rather than an array one. `$full[0]` then indexed
+  the first **character** — `s`. It only broke when *not* root (as root the empty array
+  concatenates correctly), so it passed in a root container and failed on every real user.
+  All elevated calls now go through a single `Invoke-Elevated` builder.
+
+### Removed
+
+- 🐧 **The old Ubuntu/bash port is gone** — `ubuntu/` deleted (`.bashrc`, a 2,105-line
+  `.zshrc`, `install.sh`, `uninstall.sh`, `install-essentials.sh`, `nav.fish` and its
+  READMEs — 4,160 lines), along with `ubuntu-install.sh` / `ubuntu-uninstall.sh` from
+  the release pipeline.
+
+  It was a parallel re-implementation, which is why it rotted. **Linux is not gone —
+  it is rebuilt** on the shared codebase above. If you installed the old port, see the
+  [upgrade guide](https://github.com/Syntax-Read3r/powerflow/blob/main/docs/migration/v3-upgrade.md)
+  to restore your `.bashrc` backup.
+- ℹ️ Windows-side WSL support is **unaffected**: `open-ubuntu`, `open-wsl-simple` and
+  `open-nt u` still launch a WSL tab from Windows Terminal with path bridging.
+
+## [2.2.1] - 2026-05-25
 
 ### Fixed
 - 🏢 **`gh-l-org` organisation selection parsing**: fixed a bug where selecting
@@ -43,7 +179,7 @@ All notable changes to PowerFlow will be documented in this file.
 - 📋 **`docs/instructions.md`**: added mandatory post-release verification rule to §9
   and a CHANGELOG ordering convention so release drift cannot recur silently.
 
-## [2.1.0] - Unreleased
+## [2.1.0] - 2026-05-24
 
 ### Added
 - 🏢 **GitHub Organisation Browser** (`gh-l-org`): Browse and bulk-clone GitHub

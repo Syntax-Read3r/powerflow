@@ -1,77 +1,119 @@
 # PowerFlow Import Order
 
-The bootloader (`Microsoft.PowerShell_profile.ps1`) sources component files in a specific order. This document explains why each group loads when it does.
+The bootloader (`Microsoft.PowerShell_profile.ps1`) sources files in a specific order.
+This document explains why each stage loads when it does.
 
-## Load Order Rationale
+As of v3.0.0 the profile is **platform-aware**: the same file is `$PROFILE` on Windows
+and Linux, and it loads a different platform layer on each.
 
-### Stage 1 — Config (`config/`)
+---
 
-**`PowerFlow.settings.ps1`** loads first because it defines script-scoped variables (`$script:POWERFLOW_VERSION`, `$script:DB_USERNAME`, `$script:DB_PASSWORD`, `$script:CHECK_*` flags, `$ProgressPreference`) that every subsequent file may reference. Nothing works correctly without these values being set.
+## Platform detection (before anything is sourced)
 
-**`PowerFlow.paths.ps1`** loads second because it configures the shell environment: it adds Scoop to `$env:PATH`, initialises Starship (which changes the prompt), initialises Zoxide and removes its default `z` alias, and navigates to `$HOME\Code`. This must happen before any interactive function needs those tools, but after the settings are available.
+```powershell
+$script:PowerFlowOS =
+    if     ($PSVersionTable.PSEdition -eq 'Desktop') { 'windows' }   # Windows PowerShell 5.1
+    elseif ($IsWindows)                              { 'windows' }   # pwsh 6+ on Windows
+    elseif ($IsLinux)                                { 'linux' }
+    ...
+```
 
-### Stage 2 — Core (`components/core/`)
+### ⚠️ Why the `PSEdition` check comes FIRST
 
-Core functions (`Check-PowerFlowUpdates`, `Initialize-Dependencies`, `Check-PowerShellUpdates`, `pwsh-recovery`) are loaded early because the startup checks at the bottom of the bootloader call them immediately after all components are sourced. They have no dependencies on domain-specific components.
+**`$IsWindows` does not exist in Windows PowerShell 5.1.** It evaluates to `$null`,
+which is *falsy*. A naive `if ($IsWindows) {...} elseif ($IsLinux) {...}` would classify
+a 5.1 Windows box as **neither** — the platform layer would never load, no adapters
+would exist, and every component call would fail.
 
-### Stage 3 — Shared (`components/shared/`)
+PowerFlow supports 5.1+ (`install.ps1` declares `#Requires -Version 5.1`, and the README
+advertises it). 5.1 is always `Desktop` edition and always Windows, so that check is
+**mandatory**, not defensive.
 
-**`strings.ps1`** must load before `components/git/remote.ps1`, which calls `Convert-ToKebabCase`, `Convert-ToSnakeCase`, `Convert-ToPascalCase`, and `Convert-ToCamelCase` to generate repository name suggestions.
+---
 
-**`aliases.ps1`** provides simple shell aliases (`grep`, `less`, `which`, `pwd`) that any interactive session may use immediately.
+## Stage 1 — Settings (`config/PowerFlow.settings.ps1`)
 
-### Stage 4 — Navigation (`components/navigation/`)
+Loads first because it defines the script-scoped variables (`$script:POWERFLOW_VERSION`,
+`$script:CHECK_*` flags, DB credentials, `$ProgressPreference`) that every later file may
+read. Nothing behaves correctly without these.
 
-The navigation components load in dependency order:
+## Stage 2 — Platform adapters (`platform/<os>/adapters/*.ps1`)
 
-1. **`bookmarks.ps1`** — defines the bookmark data model and persistence helpers that `nav.ps1` reads.
-2. **`projects.ps1`** — defines `Search-NestedProjects`, called inside `nav` when no bookmark matches.
-3. **`nav.ps1`** — the main `nav`/`z` function; depends on both of the above being defined.
-4. **`directory.ps1`** — standalone dot-navigation shortcuts and `copy-pwd`; no dependencies on the other nav files.
+**Must load before `components/`.** This is the central rule of the architecture.
 
-### Stage 5 — Files (`components/files/`)
+Components are platform-agnostic: they call `Copy-ToClipboard`, never `Set-Clipboard`.
+Those adapter functions must already be defined by the time a component runs. Loading
+adapters after components would leave every OS call unresolved.
 
-File components are independent of each other but load before Git because the Git commit workflow (`git-a`) uses the current working directory, not file functions. The ordering within the group is conventional:
+Adapters are sourced alphabetically; they do not depend on each other, with two
+exceptions that resolve naturally in that order:
 
-1. `listing.ps1` — replaces the built-in `ls` alias first, so later files can safely call `ls`.
-2. `operations.ps1` — replaces `rm`, `rmdir`, `mv`.
-3. `rename.ps1` — standalone `rn` function.
-4. `clipboard.ps1` — standalone `cf`/`pf` functions.
+- `env.ps1` calls `Assert-Admin` (from `elevation.ps1`) to gate System-scope PATH writes.
+- `terminal.ps1` calls `Copy-ToClipboard` (from `clipboard.ps1`) for WSL path bridging.
 
-### Stage 6 — Git (`components/git/`)
+Both callers only invoke those functions at *runtime*, not at load time, so alphabetical
+ordering is safe.
 
-Git components load in call-dependency order:
+## Stage 3 — Platform paths (`config/paths.<os>.ps1`)
 
-1. **`remote.ps1`** — `Create-RemoteRepository` is called by `git-a` in `commit.ps1`; must be defined first.
-2. **`commit.ps1`** — `git-a` and `git-a-plus` depend on `Create-RemoteRepository`.
-3. **`branches.ps1`** — `git-branch`, `git-c.sb`; no dependency on commit.
-4. **`rollback.ps1`** — `git-rba`, `git-rb`; no dependency on other git files.
-5. **`interactive.ps1`** — `git-l`, `git-s`, `git-stash`, `git-remote`, `git-pick`; standalone.
-6. **`reset.ps1`** — `git-f`, `git-next`; standalone.
+Configures the shell environment: PATH, the Starship prompt, and Zoxide. Must run after
+the adapters (Linux's `paths.linux.ps1` calls `Get-PowerFlowConfigPath` to locate its
+PATH fragment) and before any interactive function needs those tools.
 
-### Stage 7 — GitHub (`components/github/`)
+Also removes Zoxide's default `z` alias so `components/navigation/nav.ps1` can define its
+own `z`.
 
-`browser.ps1` loads after all Git components because `gh-l` may call `git clone` internally after the user selects a repository.
+## Stage 4 — Components (`components/**`)
 
-### Stage 8 — Terminal (`components/terminal/`)
+Shared domain logic, loaded in dependency order:
 
-Terminal management loads after navigation and files so that `open-nt` can correctly report the current directory, which may have been changed by the navigation functions. `tabs.ps1` loads before `wsl.ps1` because `wsl.ps1` functions are companions to `open-nt` and do not depend on `send-keys` directly.
+1. **core** — `version`, `dependencies`, `recovery`. Loaded early because the startup
+   checks at the bottom of the bootloader call them.
+2. **shared** — `strings.ps1`; `git/remote.ps1` calls its case converters.
+3. **navigation** — `bookmarks` → `projects` → `nav` → `directory`. `nav` depends on the
+   first two.
+4. **files** — `listing` first (it replaces `ls`, so later files may safely call `ls`),
+   then `operations`, `rename`, `clipboard`.
+5. **git** — `remote.ps1` **before** `commit.ps1`, because `git-a` calls
+   `Create-RemoteRepository`. The rest are standalone.
+6. **github** — after git; `gh-l` may `git clone` after a selection.
+7. **terminal** — after navigation, so `open-nt` reports the correct current directory.
+8. **projects** — `create-next.ps1` reads DB settings from Stage 1.
+9. **system** — standalone; nothing depends on them.
 
-### Stage 9 — Projects (`components/projects/`)
+## Stage 5 — Windows-only (`windows-only/*.ps1`)
 
-`create-next.ps1` reads `$script:DB_USERNAME` and `$script:DB_PASSWORD` from the settings loaded in Stage 1. It loads late because it has no functions that other components depend on.
+Loaded **only** when `$script:PowerFlowOS -eq 'windows'`.
 
-### Stage 10 — System (`components/system/`)
+`wsl.ps1` (`open-ubuntu`, `open-wsl-simple`) launches a WSL tab *from* Windows Terminal.
+WSL is a Windows concept and these functions must never exist on Linux — the Linux CI job
+explicitly asserts they are absent.
 
-System utilities (`pwsh-profile`, `pwsh-starship`, `pwsh-settings`, `shutdown`, `s`) are standalone. They load late because nothing else depends on them.
+## Stage 6 — Platform bindings (`platform/<os>/bindings.ps1`)
 
-### Stage 11 — Help (`components/help/`)
+**Must load after `components/`,** because it rebinds names the components have just
+defined. This is the mirror image of Stage 2.
 
-`menu.ps1` loads last because it references function names in its static help text. Loading it last guarantees all functions it documents are already defined, making `Get-Help pwsh-h` accurate.
+- **Windows** — adds `grep`, `less`, `pwd`, `which`, which Windows lacks. PowerFlow's
+  `rm`/`mv`/`ls` keep their natural names; there are no GNU tools to shadow.
+- **Linux** — **stops PowerFlow from shadowing the GNU coreutils.** PowerShell resolves
+  `Alias → Function → Cmdlet → native binary`, so PowerFlow's `rm` *function* would beat
+  `/usr/bin/rm`, and its `cat`/`cp` *aliases* would beat GNU `cat`/`cp`. The bindings file
+  clears both, preserving the features under new names: `rm` → **`del`**, `mv` → **`mvf`**.
 
-### Startup Checks
+  This matters concretely: PowerFlow's `rm somedir` recursively deletes a tree after one
+  prompt, while GNU `rm somedir` *refuses* without `-r`. Shadowing it would silently
+  remove a seatbelt Linux users rely on.
 
-After all components are sourced, the bootloader conditionally runs:
+## Stage 7 — Help (`components/help/menu.ps1`)
+
+Loads last because its static text references every command defined above.
+
+---
+
+## Startup checks
+
+After everything is sourced:
 
 ```powershell
 if ($script:CHECK_PROFILE_UPDATES) { Check-PowerFlowUpdates }
@@ -79,4 +121,19 @@ if ($script:CHECK_DEPENDENCIES)    { Initialize-Dependencies }
 if ($script:CHECK_UPDATES)         { Check-PowerShellUpdates }
 ```
 
-These flags are set in `config/PowerFlow.settings.ps1`. Toggle any of them to `$false` to skip the corresponding startup check and speed up profile load time.
+Toggle these flags in `config/PowerFlow.settings.ps1` to speed up profile load.
+
+---
+
+## The invariant CI enforces
+
+> **No file under `components/` may call an OS API directly.**
+
+`release-validate.yml` greps for `Set-Clipboard`, `scoop`, `wt`, `WindowsPrincipal`,
+`shutdown.exe`, `$env:TEMP`, `winget`, … under `components/` and **fails the release** on
+any hit. It also verifies that every adapter function called by a component exists on
+**both** platforms.
+
+That check is the machine-checkable definition of the architecture. Without it, Windows
+could keep working while Linux silently broke — which is exactly how the previous Ubuntu
+port rotted.

@@ -32,4 +32,4 @@ jobs:
           echo "🎉 PowerFlow ${{ inputs.tag_name }} released successfully!"
           echo "📦 Release URL : https://github.com/Syntax-Read3r/powerflow/releases/tag/${{ inputs.tag_name }}"
           echo "📥 Windows     : irm https://github.com/Syntax-Read3r/powerflow/releases/download/${{ inputs.tag_name }}/install.ps1 | iex"
-          echo "📥 Ubuntu      : curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/download/${{ inputs.tag_name }}/ubuntu-install.sh | bash"
+          echo "📥 Linux       : curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/download/${{ inputs.tag_name }}/install.sh | bash"
