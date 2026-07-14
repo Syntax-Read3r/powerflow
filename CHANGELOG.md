@@ -9,7 +9,57 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [3.3.1] - Unreleased
+## [3.3.2] - Unreleased
+
+> 🚨 **Upgrading via `curl … | bash` was impossible.** If you already had PowerFlow, the
+> installer asked a question nobody could answer, then cancelled.
+
+### Fixed
+
+- 💥 **`curl … | bash` could not upgrade an existing install.**
+
+  ```
+  ⚠️  A PowerShell profile already exists.
+  Overwrite it? (y/n):
+  ❌ Installation cancelled
+  ```
+
+  Two bugs, stacked:
+
+  1. **It was asking about its own profile.** The check was `Test-Path $profilePath` — any
+     profile at all. But if PowerFlow is already installed, that profile *is PowerFlow's*.
+     This is an **upgrade**, and asking "overwrite it?" is asking whether you would like to
+     install the thing you just asked to install. It now recognises its own manifest and
+     simply says `🔄 PowerFlow v3.3.1 is already installed — upgrading it.`
+
+  2. **`Read-Host` cannot be answered through a pipe.** In `curl … | bash`, stdin is the
+     pipe curl already drained, so `Read-Host` reads EOF and returns `""`. `"" -ne 'y'`, so
+     the install cancelled — **it could never have succeeded that way**, and it never said
+     why. When there is no terminal, it no longer pretends to ask: it explains, and gives
+     you the exact command (`| bash -s -- --yes`).
+
+- 💥 **The installer exited 1 after succeeding.** With no `--yes`, `install.sh` prompted for
+  the login-shell choice. Piped, `read` hits EOF and returns non-zero — and under
+  `set -euo pipefail` that killed the installer **after** it had already printed
+  `🎉 PowerFlow installed!`. A successful install that reports failure is a good way to make
+  someone distrust an installer that worked. It now skips the question when there is no
+  terminal (`[[ ! -t 0 ]]`), leaves your login shell untouched, and tells you how to enable
+  it (`--login-shell auto`).
+
+- 📖 **The uninstall instructions were wrong.** They were Windows-only, told you to
+  `Remove-Item $PROFILE` by hand — which bypasses the manifest, orphans the component tree
+  and the dependencies, and destroys the only record of which tools were *yours* — and had
+  no Linux section at all. Rewritten. The installer now also prints the uninstall command
+  when it finishes.
+
+  Note that **`bash install.sh --uninstall` only works if `install.sh` is on disk**, and the
+  documented install (`curl … | bash`) leaves no file behind, so it fails with
+  `No such file or directory`. Use `powerflow-uninstall`, or
+  `pwsh -NoProfile -File ~/.config/powershell/uninstall.ps1`.
+
+---
+
+## [3.3.1] - 2026-07-14
 
 > The last member of the family that produced 3.3.0's `touch` / `rm -rf` / `mkdir` bugs.
 

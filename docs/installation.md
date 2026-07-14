@@ -303,37 +303,49 @@ $VerbosePreference = "Continue"
 
 ## 🗑️ Uninstallation
 
-### Quick Uninstall
+**The uninstaller is already on your machine.** It was installed alongside PowerFlow, and it
+reads the manifest written at install time — so it removes exactly what PowerFlow placed and
+**never removes a tool you already had**.
+
+### From inside PowerFlow
+
 ```powershell
-# Download and run uninstall script
-Invoke-RestMethod -Uri "https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/uninstall.ps1" -OutFile "uninstall.ps1"
-.\uninstall.ps1
+powerflow-uninstall
 ```
 
-### Manual Uninstall
-```powershell
-# Backup current profile
-Copy-Item $PROFILE "$PROFILE.backup"
+### From any shell
 
-# Remove profile
-Remove-Item $PROFILE
-
-# Optionally remove dependencies
-scoop uninstall starship fzf zoxide lsd FiraCode-NF
+```bash
+# Linux
+pwsh -NoProfile -File ~/.config/powershell/uninstall.ps1
 ```
 
-### Clean Uninstall (Remove Everything)
 ```powershell
-# Remove profile
-Remove-Item $PROFILE -Force
-
-# Remove Scoop and all packages (optional)
-scoop uninstall *
-# Follow Scoop uninstall instructions to remove Scoop itself
-
-# Reset Windows Terminal font to default
-# (manually in Terminal settings)
+# Windows
+pwsh -NoProfile -File "$HOME\Documents\PowerShell\uninstall.ps1"
 ```
+
+Add `-Yes` to skip the confirmation, `-Purge` to also delete your bookmarks
+(`~/.nav_bookmarks.json`), which are kept by default.
+
+### What it does
+
+- Removes only the files listed in `.powerflow-manifest.json`
+- Removes the dependencies **PowerFlow installed** (`starship`, `fzf`, `zoxide`, `lsd`) — and
+  **keeps** any that were already on your machine before PowerFlow, `git` included
+- Restores your original pre-PowerFlow profile if you had one
+- On Linux, removes the `~/.bashrc` login hook, and reverts your login shell to bash **before**
+  removing pwsh, so you cannot be locked out
+
+### ⚠️ Do not uninstall by hand
+
+Deleting `$PROFILE` yourself leaves the component tree, the dependencies and the login hook
+behind, and loses the manifest that records which tools were yours. If the manifest is gone,
+nothing can tell your `fzf` from PowerFlow's.
+
+> **`bash install.sh --uninstall` only works if `install.sh` is on disk.** The documented
+> install is `curl … | bash`, which leaves no file behind — so that command gives you
+> `No such file or directory`. Use one of the commands above instead.
 
 ---
 

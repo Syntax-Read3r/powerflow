@@ -66,11 +66,54 @@ $profilePath = $PROFILE
 $profileDir  = Split-Path $profilePath -Parent
 Write-Host "📁 Install location: $profileDir" -ForegroundColor White
 
-if ((Test-Path $profilePath) -and -not $Yes) {
-    Write-Host "⚠️  A PowerShell profile already exists." -ForegroundColor Yellow
-    if ((Read-Host "Overwrite it? (y/n)") -ne 'y') {
-        Write-Host "❌ Installation cancelled" -ForegroundColor Red
-        exit 1
+# A PowerFlow install writes this. Its presence means the profile on disk is OURS.
+$manifestPath     = Join-Path $profileDir '.powerflow-manifest.json'
+$alreadyInstalled = Test-Path $manifestPath
+
+# ── Is there a profile in the way, and may we replace it? ─────────────────────
+#
+# Three genuinely different situations, which the old code collapsed into one prompt:
+#
+#   1. PowerFlow is already installed. The profile is OURS. This is an UPGRADE — asking
+#      "overwrite it?" is asking whether you'd like to install the thing you just asked to
+#      install. It now says what it is doing and gets on with it.
+#
+#   2. Someone else's profile, and we can actually ask. Prompt, as before.
+#
+#   3. Someone else's profile, and stdin is a PIPE — i.e. `curl … | bash`. Read-Host reads
+#      EOF, returns "", "" -ne 'y', and the install cancels. It could NEVER have succeeded
+#      that way, and it did not say why. Now it explains and gives the exact command.
+if (Test-Path $profilePath) {
+    if ($alreadyInstalled) {
+        # The version being INSTALLED is not known yet — it is read from the settings file
+        # after the tree is copied. Only report what is actually true here.
+        $installedVersion = try { (Get-Content $manifestPath -Raw | ConvertFrom-Json).version } catch { $null }
+        if ($installedVersion) {
+            Write-Host "🔄 PowerFlow v$installedVersion is already installed — upgrading it." -ForegroundColor Cyan
+        } else {
+            Write-Host "🔄 PowerFlow is already installed — reinstalling it." -ForegroundColor Cyan
+        }
+    }
+    elseif (-not $Yes) {
+        Write-Host "⚠️  A PowerShell profile already exists, and it is not PowerFlow's." -ForegroundColor Yellow
+        Write-Host "   It will be backed up, and uninstall restores it." -ForegroundColor DarkGray
+
+        # [Console]::IsInputRedirected is true when stdin is a pipe — there is no one to
+        # answer, so do not pretend to ask.
+        if ([Console]::IsInputRedirected) {
+            Write-Host ""
+            Write-Host "❌ Cannot ask for confirmation: this installer is being piped, so it has no terminal to read from." -ForegroundColor Red
+            Write-Host "   Re-run it with --yes to accept the backup-and-replace:" -ForegroundColor DarkGray
+            Write-Host ""
+            Write-Host "   curl -fsSL <install.sh url> | bash -s -- --yes" -ForegroundColor Cyan
+            Write-Host ""
+            exit 1
+        }
+
+        if ((Read-Host "Overwrite it? (y/n)") -ne 'y') {
+            Write-Host "❌ Installation cancelled" -ForegroundColor Red
+            exit 1
+        }
     }
 }
 
@@ -88,8 +131,6 @@ if (-not (Test-Path $profileDir)) {
 # So: back up only what we did not write. If PowerFlow is already installed, keep
 # pointing at the ORIGINAL pre-PowerFlow backup recorded in the existing manifest —
 # which may legitimately be $null, meaning the user had no profile to begin with.
-$manifestPath = Join-Path $profileDir '.powerflow-manifest.json'
-$alreadyInstalled = Test-Path $manifestPath
 
 $backup = $null
 if (Test-Path $profilePath) {
@@ -310,4 +351,14 @@ else {
     Write-Host "🔄 Restart your shell to activate PowerFlow" -ForegroundColor Cyan
     Write-Host "💡 Then type 'pwsh-h' for the full command reference" -ForegroundColor Yellow
 }
+
+# `bash install.sh --uninstall` only works if install.sh is ON DISK — and the documented
+# install is `curl … | bash`, which leaves no file behind. Telling people to run a script
+# they do not have sends them straight to "No such file or directory". uninstall.ps1 IS
+# installed, so point at that.
+Write-Host ""
+Write-Host "🗑️  To uninstall:  " -NoNewline -ForegroundColor DarkGray
+Write-Host "pwsh -NoProfile -File `"$profileDir/uninstall.ps1`"" -ForegroundColor DarkGray
+Write-Host "   or from inside PowerFlow:  " -NoNewline -ForegroundColor DarkGray
+Write-Host "powerflow-uninstall" -ForegroundColor DarkGray
 Write-Host ""

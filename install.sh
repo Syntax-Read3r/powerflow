@@ -418,6 +418,20 @@ configure_login_shell() {
         LOGIN_SHELL_MODE="none"
     fi
 
+    # NO TERMINAL, NO QUESTION.
+    #
+    # In `curl … | bash`, stdin is the pipe curl already drained. `read` therefore gets EOF
+    # immediately and returns non-zero — and under `set -euo pipefail` that killed the
+    # installer with exit 1 AFTER it had already installed everything successfully. The
+    # user saw "🎉 PowerFlow installed!" followed by a failure, which is a great way to make
+    # someone distrust an installer that actually worked.
+    if [[ "$LOGIN_SHELL_MODE" == "ask" && ! -t 0 ]]; then
+        LOGIN_SHELL_MODE="none"
+        info "🐚 No terminal to ask on (the installer is being piped), so your login shell is untouched."
+        info "   To have PowerFlow start automatically on login, re-run with:"
+        info "     curl -fsSL <url>/install.sh | bash -s -- --login-shell auto"
+    fi
+
     if [[ "$LOGIN_SHELL_MODE" == "ask" ]]; then
         echo ""
         info "🐚 How should PowerFlow start?"
