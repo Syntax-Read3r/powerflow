@@ -91,41 +91,57 @@ powerflow-update   # Built-in update system
 
 ## ⚡ Quick Installation
 
-### One-Line Install (Recommended)
+PowerFlow runs on **Windows and Linux** from one codebase.
+
+### 🪟 Windows
 
 ```powershell
-irm https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/install.ps1 | iex
+irm https://github.com/Syntax-Read3r/powerflow/releases/latest/download/install.ps1 | iex
 ```
 
-That's it! PowerFlow will:
-- ✅ Install all dependencies automatically
-- ✅ Configure FiraCode Nerd Font
-- ✅ Set up bookmarks and navigation
-- ✅ Enable auto-updates
-- ✅ Provide helpful setup guidance
+### 🐧 Linux
 
-### Alternative Installation
+```bash
+# terminal
+curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/latest/download/install.sh | bash
 
-```powershell
-# Download and run install script
-Invoke-RestMethod -Uri "https://github.com/Syntax-Read3r/powerflow/releases/latest/download/install.ps1" -OutFile "install.ps1"
-.\install.ps1
+# ...or a graphical installer (zenity / kdialog / yad)
+curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/latest/download/install-gui.sh -o install-gui.sh
+bash install-gui.sh
 ```
 
-### Specific Version
+The Linux installer installs PowerShell if you don't have it (Debian, Ubuntu, Fedora,
+Arch, openSUSE, Alpine), then PowerFlow and its dependencies.
 
-```powershell
-# Replace v2.0.0 with the version you want
-irm https://github.com/Syntax-Read3r/powerflow/releases/download/v2.0.0/install.ps1 | iex
-```
+> #### ⚠️ On Linux, PowerFlow only loads when `pwsh` runs
+>
+> It is a PowerShell *profile*. Your login shell is normally bash, so after a reboot you
+> land in bash and PowerFlow is **not there** — nothing is broken, you're just in a
+> different shell. To start it automatically:
+>
+> ```bash
+> bash install.sh --login-shell auto     # recommended — cannot lock you out
+> bash install.sh --login-shell login    # chsh: make pwsh your login shell
+> ```
+>
+> `auto` adds a guarded block to `~/.bashrc`: if pwsh is ever removed or broken you still
+> get bash, so you can't be locked out of your own server. Test it without logging out
+> with `bash -l`.
+
+### 🐧 Linux keeps its GNU coreutils
+
+`rm`, `mv`, `cp`, `cat`, `grep` and friends stay the **real GNU tools** — PowerFlow never
+shadows them. Its own versions are **`del`** and **`mvf`**.
 
 ### Prerequisites
 
-- **PowerShell 5.1+** (PowerShell 7+ recommended)
-- **Windows 10/11** or Windows Server 2016+
-- **Internet connection** (for automatic dependency installation)
+| | |
+|---|---|
+| **Windows** | PowerShell 5.1+ (7+ recommended) · Windows 10/11 or Server 2016+ |
+| **Linux** | Any distro with apt / dnf / pacman / zypper / apk (PowerShell 7 is installed for you) |
+| **Both** | Internet connection, for dependency installation |
 
-**📖 [Complete Installation Guide](docs/installation.md)** - Detailed instructions, troubleshooting, and advanced options
+**📖 [Complete Installation Guide](docs/installation.md)** · **[Upgrading from v2.x](docs/migration/v3-upgrade.md)**
 
 ## 🚀 What Happens After Installation?
 
@@ -343,7 +359,7 @@ PowerFlow includes automated release workflows:
 | Command           | Description                                          |
 | ----------------- | ---------------------------------------------------- |
 | `git-a`           | Beautiful add → commit → push workflow               |
-| `git-rl`          | Interactive release: bump version, commit, tag, push |
+| `git-rl`          | Interactive release: bump version, commit, tag, push. Works in **any** project — reads `package.json`, `pyproject.toml`, `Cargo.toml`, `*.csproj`, `build.gradle`, `VERSION`, and keeps multiple version files in sync |
 | `git-rl -h`       | Set up `git-rl` in **another** project — writes a guide into it and copies an AI setup prompt to your clipboard |
 | `git-rb <commit>` | Create rollback branch from commit                   |
 | `git-rba`         | Rollback branch add-commit-push                      |

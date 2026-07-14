@@ -30,22 +30,20 @@ version file, the CHANGELOG, and the CI pipeline, then verify them.
 ```
 git-rl
   │
-  ├─ 1. resolve the CURRENT version
-  │      a) config/PowerFlow.settings.ps1  →  $script:POWERFLOW_VERSION = "X.Y.Z"
-  │      b) else: latest git tag (vX.Y.Z)
-  │      c) else: 0.0.0
-  │
-  ├─ 2. fzf picker → patch / minor / major / custom
-  ├─ 3. prompt for a one-line description
-  ├─ 4. rewrite the version line (only if it used source (a))
-  ├─ 5. git add .
-  ├─ 6. git commit -m "vr-commit (vX.Y.Z) - <description>"
-  ├─ 7. git push
-  ├─ 8. git tag vX.Y.Z
-  └─ 9. git push origin vX.Y.Z    ← THIS triggers CI
+  ├─ 1. detect the project's version file(s) and read the current version
+  │      (falls back to the latest git tag, then 0.0.0)
+  ├─ 2. warn if several version files DISAGREE, and offer to sync them
+  ├─ 3. fzf picker → patch / minor / major / custom
+  ├─ 4. prompt for a one-line description
+  ├─ 5. rewrite EVERY version file to the new version
+  ├─ 6. git add .
+  ├─ 7. git commit -m "vr-commit (vX.Y.Z) - <description>"
+  ├─ 8. git push
+  ├─ 9. git tag vX.Y.Z
+  └─ 10. git push origin vX.Y.Z    ← THIS triggers CI
 ```
 
-Everything downstream hangs off step 9. The tag is the trigger; nothing else is.
+Everything downstream hangs off the last step. The tag is the trigger; nothing else is.
 
 ---
 
@@ -53,20 +51,32 @@ Everything downstream hangs off step 9. The tag is the trigger; nothing else is.
 
 ### 1. A version source
 
-`git-rl` reads a **hardcoded** path and variable name:
+`git-rl` reads **your project's own version file**. It detects and rewrites any of these:
 
-```
-config/PowerFlow.settings.ps1
-$script:POWERFLOW_VERSION = "1.0.0"
-```
+| Project | File | Pattern |
+|---|---|---|
+| Node | `package.json` | `"version": "X.Y.Z"` |
+| Python | `pyproject.toml` | `version = "X.Y.Z"` (`[project]` / `[tool.poetry]`) |
+| Rust | `Cargo.toml` | `version = "X.Y.Z"` (`[package]` only) |
+| .NET | `*.csproj` | `<Version>X.Y.Z</Version>` |
+| Gradle | `build.gradle(.kts)` | `version = "X.Y.Z"` |
+| Any | `VERSION` | plain text |
+| PowerShell | `config/PowerFlow.settings.ps1` | `$script:POWERFLOW_VERSION` |
 
-It does **not** read `package.json`, `pyproject.toml`, or `Cargo.toml`. If that file is
-absent it falls back to the latest git tag and rewrites nothing.
+If none exists, it falls back to the latest **git tag** and rewrites nothing.
 
-> ⚠️ **The classic failure.** If the project has its *own* version file, you now have two
-> numbers that will drift apart. Add a check in `release-validate.yml` that fails the
-> release when the tag, the settings file, and `package.json` disagree. Do not rely on
-> remembering to bump both.
+**Formatting is preserved.** The rewrite is a targeted regex, never a parse-and-
+reserialise — round-tripping `package.json` through a JSON serialiser would reorder keys
+and reindent the whole file, which is an unacceptable diff for a version bump.
+
+**Nested versions are safe.** A `version` under `[dependencies]`, or a nested `"version"`
+key inside `package.json`, is never touched — only the project's own version.
+
+> ✅ **Version drift is handled at the source.** If a project has *several* version files
+> (say `package.json` **and** a `VERSION` file), `git-rl` updates **all of them together**
+> and warns you before bumping if they currently disagree. You do not need a CI check to
+> police it — though `release-validate.yml` still asserts the tag matches, which catches a
+> hand-edited tag or a bad merge.
 
 ### 2. A parseable CHANGELOG
 
@@ -100,9 +110,9 @@ on:
 If `git-rl` is unavailable, this is the whole thing:
 
 ```bash
-# 1. Bump the version file(s)
-#    config/PowerFlow.settings.ps1  →  $script:POWERFLOW_VERSION = "1.2.0"
-#    ...and package.json etc. if the project has one
+# 1. Bump EVERY version file the project has — package.json, pyproject.toml,
+#    Cargo.toml, *.csproj, build.gradle, VERSION, config/PowerFlow.settings.ps1.
+#    If you miss one, they drift. (git-rl does all of them for you.)
 
 # 2. Add the CHANGELOG section
 #    ## [1.2.0] - Unreleased

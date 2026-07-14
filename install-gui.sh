@@ -92,6 +92,24 @@ if ! gui_confirm "$DEPS_TEXT"; then
     NO_DEPS_FLAG="--no-deps"
 fi
 
+# ── 2b. Start on login? ───────────────────────────────────────────────────────
+# PowerFlow only loads when pwsh runs. Without this the install "succeeds" and the
+# user reboots into bash wondering where PowerFlow went.
+LOGIN_FLAG="--login-shell none"
+LOGIN_TEXT="Start PowerFlow automatically when you log in?
+
+PowerFlow is a PowerShell profile — it only loads when <b>pwsh</b> runs. Your login
+shell is bash, so otherwise you must type <tt>pwsh</tt> every time.
+
+Choosing <b>Yes</b> adds a guarded block to <tt>~/.bashrc</tt> that launches pwsh on
+interactive login.
+
+<i>It cannot lock you out: if pwsh is ever removed or broken, you still get bash.</i>"
+
+if gui_confirm "$LOGIN_TEXT"; then
+    LOGIN_FLAG="--login-shell auto"
+fi
+
 # ── 3. Run the real installer, streaming progress into a dialog ───────────────
 # install.sh needs sudo for the package manager. pkexec gives a graphical prompt
 # when available; otherwise the terminal sudo prompt still works.
@@ -99,7 +117,7 @@ LOG="$(mktemp)"
 trap 'rm -f "$LOG"' EXIT
 
 run_install() {
-    bash "$INSTALL_SH" --yes $NO_DEPS_FLAG 2>&1 | tee "$LOG"
+    bash "$INSTALL_SH" --yes $NO_DEPS_FLAG $LOGIN_FLAG 2>&1 | tee "$LOG"
 }
 
 case "$GUI" in

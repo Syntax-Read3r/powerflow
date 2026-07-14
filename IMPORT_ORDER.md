@@ -75,7 +75,9 @@ Shared domain logic, loaded in dependency order:
 4. **files** — `listing` first (it replaces `ls`, so later files may safely call `ls`),
    then `operations`, `rename`, `clipboard`.
 5. **git** — `remote.ps1` **before** `commit.ps1`, because `git-a` calls
-   `Create-RemoteRepository`. The rest are standalone.
+   `Create-RemoteRepository`. And `version-files.ps1` **before** `release.ps1`, because
+   `git-rl` calls `Get-ProjectVersion` to find the project's version file. The rest are
+   standalone.
 6. **github** — after git; `gh-l` may `git clone` after a selection.
 7. **terminal** — after navigation, so `open-nt` reports the correct current directory.
 8. **projects** — `create-next.ps1` reads DB settings from Stage 1.

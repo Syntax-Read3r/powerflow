@@ -239,9 +239,16 @@ Write-Host "   Platform : $Platform" -ForegroundColor DarkGray
 Write-Host "   Profile  : $profilePath" -ForegroundColor DarkGray
 if ($backup) { Write-Host "   Backup   : $backup" -ForegroundColor DarkGray }
 Write-Host ""
-Write-Host "🔄 Restart your shell to activate PowerFlow" -ForegroundColor Cyan
-Write-Host "💡 Then type 'pwsh-h' for the full command reference" -ForegroundColor Yellow
 if ($Platform -eq 'linux') {
+    # "Restart your shell" is WRONG on Linux and used to send people in circles:
+    # PowerFlow is a PowerShell profile, so restarting bash does nothing at all. The
+    # caller (install.sh) then offers to wire pwsh into login.
+    Write-Host "🐚 PowerFlow is a PowerShell profile — start it with:  pwsh" -ForegroundColor Cyan
+    Write-Host "💡 Then type 'pwsh-h' for the full command reference" -ForegroundColor Yellow
     Write-Host "🐧 Note: rm/mv/cp/cat stay as the GNU tools. PowerFlow's versions are 'del' and 'mvf'." -ForegroundColor DarkGray
+}
+else {
+    Write-Host "🔄 Restart your shell to activate PowerFlow" -ForegroundColor Cyan
+    Write-Host "💡 Then type 'pwsh-h' for the full command reference" -ForegroundColor Yellow
 }
 Write-Host ""

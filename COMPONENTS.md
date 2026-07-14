@@ -70,6 +70,7 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `components/git/branches.ps1` | Git | `git-branch`, `Invoke-DeleteBranch`, `git-b`, `git-cm`, `git-bd`, `git-bD`, `git-c.sb` |
 | `components/git/rollback.ps1` | Git | `git-rba`, `grba` (alias), `git-rb` |
 | `components/git/interactive.ps1` | Git | `git-l`, `git-log`, `git-s`, `git-st`, `git-pick`, `git-p`, `git-stash`, `git-remote`, `git-sh`, `git-r` |
+| `components/git/version-files.ps1` | Git | `Get-ProjectVersionSource`, `Get-ProjectVersion`, `Set-ProjectVersion`, `Update-ProjectVersion`, `Test-VersionDrift`, `Get-VersionFileDefinition`, `Read-TomlSectionVersion` — detects and rewrites `package.json` / `pyproject.toml` / `Cargo.toml` / `*.csproj` / `build.gradle` / `VERSION` / PowerFlow settings |
 | `components/git/release.ps1` | Git | `git-release`, `git-rl`, `git-rl -h` (setup a new project), `Show-GitReleaseSetupPrompt`, `Write-GitReleaseGuide`, `Get-GitReleaseDocs` |
 | `components/git/reset.ps1` | Git | `git-f`, `git-next` |
 | `components/github/browser.ps1` | GitHub | `gh-l`, `gh-l-reset`, `gh-l-status`, `gh-l-org` |

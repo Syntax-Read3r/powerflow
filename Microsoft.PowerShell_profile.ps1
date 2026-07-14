@@ -112,6 +112,7 @@ $_pf_components = @(
     "components\git\branches.ps1"
     "components\git\rollback.ps1"
     "components\git\interactive.ps1"
+    "components\git\version-files.ps1" # Get-ProjectVersion — MUST precede release.ps1
     "components\git\release.ps1"
     "components\git\reset.ps1"
 

@@ -25,61 +25,57 @@ PART 0 — WHAT git-rl DOES (so you understand what you are wiring up)
 When I run `git-rl` in this repo, it will:
 
   1. Verify it is inside a git repository.
-  2. Resolve the CURRENT version, in this priority order:
-       a. Read `config/PowerFlow.settings.ps1` and match the regex:
-              \$script:POWERFLOW_VERSION = "([^"]+)"
-       b. If that file or line is missing, fall back to the LATEST GIT TAG (vX.Y.Z).
-       c. If there are no tags, fall back to 0.0.0.
-  3. Show an fzf picker: patch / minor / major / custom.
-  4. Prompt me for a one-line release description.
-  5. If it used source (a), REWRITE that version line to the new version.
-  6. `git add .`
-  7. `git commit -m "vr-commit (vX.Y.Z) - <description>"`
-  8. `git push`
-  9. `git tag vX.Y.Z`
- 10. `git push origin vX.Y.Z`   <-- THIS is what triggers CI.
+  2. Detect the project's version file(s) — package.json, pyproject.toml, Cargo.toml,
+     *.csproj, build.gradle, VERSION, or config/PowerFlow.settings.ps1 — and read the
+     current version from them. If none exists, fall back to the latest git tag, then
+     to 0.0.0.
+  3. Warn if several version files DISAGREE, and offer to bring them into sync.
+  4. Show an fzf picker: patch / minor / major / custom.
+  5. Prompt me for a one-line release description.
+  6. REWRITE every detected version file to the new version (formatting preserved).
+  7. `git add .`
+  8. `git commit -m "vr-commit (vX.Y.Z) - <description>"`
+  9. `git push`
+ 10. `git tag vX.Y.Z`
+ 11. `git push origin vX.Y.Z`   <-- THIS is what triggers CI.
 
 So: pushing a tag matching `v*` MUST trigger the release pipeline. Everything else in CI
 hangs off that.
 
 ================================================================================
-PART 1 — THE VERSION FILE (read this carefully; it is the #1 thing people get wrong)
+PART 1 — THE VERSION FILE
 ================================================================================
 
-`git-rl` has a HARDCODED path and variable name. It does not read package.json,
-pyproject.toml, Cargo.toml, or anything else. It looks for EXACTLY:
+GOOD NEWS: you almost certainly do not need to do anything here.
 
-    config/PowerFlow.settings.ps1
+`git-rl` reads the project's OWN version file. It detects and rewrites any of these,
+automatically:
 
-containing a line matching EXACTLY:
+    package.json                  "version": "X.Y.Z"          (Node)
+    pyproject.toml                version = "X.Y.Z"           (Python, [project] or [tool.poetry])
+    Cargo.toml                    version = "X.Y.Z"           (Rust, [package] only)
+    *.csproj                      <Version>X.Y.Z</Version>    (.NET)
+    build.gradle / .gradle.kts    version = "X.Y.Z"           (Gradle)
+    VERSION                       X.Y.Z                       (plain text)
+    config/PowerFlow.settings.ps1 $script:POWERFLOW_VERSION   (PowerShell)
 
-    $script:POWERFLOW_VERSION = "1.0.0"
+Notes:
+  * It rewrites the file with a targeted regex, so FORMATTING AND KEY ORDER ARE
+    PRESERVED. It does not reserialise your package.json.
+  * A `version` under [dependencies] or a nested "version" key is NOT touched — only the
+    project's own version.
+  * If SEVERAL of these exist (e.g. package.json AND a VERSION file), git-rl updates
+    ALL of them together and warns you if they currently disagree. Version drift is
+    handled at the source; you do NOT need a CI check to police it.
+  * If NONE exists, git-rl falls back to the latest git tag and rewrites nothing. That
+    works, but the version then lives nowhere in the source tree.
 
-Choose ONE of these two strategies and tell me which you picked and why:
+SO: if this project already has one of the files above, YOU ARE DONE with this part.
+Just confirm the version in it is correct and tell me what you found.
 
---- STRATEGY A: create the settings file (RECOMMENDED) -------------------------
-Create `config/PowerFlow.settings.ps1` at the repo root with:
-
-    # Version marker read and rewritten by `git-rl`.
-    # This file exists ONLY so the release tool has a single source of truth for the
-    # version. It is not executed by the application.
-    $script:POWERFLOW_VERSION = "0.1.0"
-
-Set the initial value to the project's CURRENT version (from package.json / pyproject.toml
-/ the latest git tag — whichever is authoritative today). Yes, a .ps1 file in a Node or
-Python repo looks odd. It is inert, it is 3 lines, and it buys you a version that is
-committed atomically with the release. That is the trade.
-
-If this project ALREADY has a version file (package.json, pyproject.toml, Cargo.toml,
-build.gradle, *.csproj ...), those two numbers WILL drift apart. You must prevent that.
-Add a CI step in `release-validate.yml` that fails the release if they disagree — see
-Part 3. Do not skip this; a silent version mismatch is the classic failure of this setup.
-
---- STRATEGY B: tag-only (no version file) ------------------------------------
-Do not create the settings file. `git-rl` will read the latest git tag instead and will
-not rewrite any file. Simpler, but the version lives nowhere in the source tree, so
-anything that needs to know its own version at runtime must read it from the tag at build
-time. If the project already prints a version to users, prefer Strategy A.
+If the project has NO version file at all and you think it should have one, create the
+idiomatic one for its language (e.g. add a "version" to package.json), NOT a PowerShell
+file. Do not create config/PowerFlow.settings.ps1 in a non-PowerShell project.
 
 ================================================================================
 PART 2 — CHANGELOG.md
@@ -146,10 +142,9 @@ Required behaviour of each:
   * runs-on: ubuntu-latest (or windows-latest if the project needs it)
   * Parses the version out of the tag:  $version = $tagName -replace '^v',''
   * Outputs `version` and `tag_name` for the downstream jobs.
-  * MUST FAIL the release if the tag disagrees with the version file:
-      - Strategy A: assert config/PowerFlow.settings.ps1 == the tag.
-      - If the project has ANOTHER version file (package.json etc.), assert it matches TOO.
-        This is the guard against the two numbers drifting.
+  * MUST FAIL the release if the tag disagrees with the project's version file.
+    git-rl writes both, so they should always agree — this catches a hand-edited tag or
+    a bad merge, which is exactly when you want the release to stop.
   * Add whatever project-specific gates make sense here (lint, typecheck, unit tests).
     Anything that must not ship broken belongs in this job.
 
@@ -193,8 +188,9 @@ PART 5 — VERIFY BEFORE YOU TELL ME IT IS DONE
 Do not report success until you have actually checked these. Run the commands.
 
   [ ] `git remote get-url origin` resolves to a GitHub URL.
-  [ ] The version file exists and matches the chosen strategy.
-  [ ] If a second version file exists (package.json etc.), the numbers AGREE right now.
+  [ ] The project has a version file git-rl understands (see Part 1), OR you have told me
+      plainly that it does not and the tag will carry the version.
+  [ ] If SEVERAL version files exist, their numbers AGREE right now.
   [ ] CHANGELOG.md has a `## [X.Y.Z]` section for the current version.
   [ ] Every workflow YAML parses. Actually validate it — e.g.:
           python -c "import yaml,glob; [yaml.safe_load(open(f)) for f in glob.glob('.github/workflows/*.yml')]"

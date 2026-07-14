@@ -59,8 +59,36 @@ curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/latest/download/i
 bash install-gui.sh
 ```
 
-The installer installs `pwsh` if you don't have it, then PowerFlow. Your login shell is
-**not** changed — run `pwsh` when you want PowerFlow.
+The installer installs `pwsh` if you don't have it, then PowerFlow.
+
+### ⚠️ PowerFlow only loads when `pwsh` runs
+
+This is the single most common confusion, especially on a server.
+
+**PowerFlow is a PowerShell profile.** Your login shell is almost certainly bash, so after
+a reboot you land in bash and PowerFlow is simply **not there**. Nothing is broken — you
+are in a different shell. Type `pwsh` and it appears.
+
+To have it start automatically:
+
+```bash
+# recommended — cannot lock you out
+bash install.sh --login-shell auto
+
+# or make pwsh your actual login shell
+bash install.sh --login-shell login
+```
+
+`auto` appends a guarded block to `~/.bashrc`. If `pwsh` is ever removed or broken you
+still get bash, so you can never be locked out of your own server. `login` (`chsh`) is
+cleaner but leaves you with **no shell** if pwsh fails to start — avoid it on a headless
+box unless you have console access.
+
+Test either one **without logging out**, from a session you already have open:
+
+```bash
+bash -l
+```
 
 ### ⚠️ Your GNU coreutils are safe — read this
 

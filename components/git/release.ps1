@@ -225,35 +225,39 @@ function git-release {
     $repoRoot = git rev-parse --show-toplevel 2>$null
 
     # ── Resolve current version ───────────────────────────────────────────────
-    # Priority: config/PowerFlow.settings.ps1 → latest git tag → 0.0.0
-    $settingsPath   = Join-Path $repoRoot "config\PowerFlow.settings.ps1"
-    $currentVersion = $null
-    $versionSource  = $null
+    # Reads the project's NATIVE version file — package.json, pyproject.toml,
+    # Cargo.toml, *.csproj, build.gradle, VERSION, or PowerFlow's settings file —
+    # and falls back to the latest git tag. See components/git/version-files.ps1.
+    $resolved       = Get-ProjectVersion -RepoRoot $repoRoot
+    $currentVersion = $resolved.Version
+    $versionSources = @($resolved.Sources)
+    $versionSource  = $resolved.From
 
-    if (Test-Path $settingsPath) {
-        $raw = Get-Content $settingsPath -Raw
-        if ($raw -match '\$script:POWERFLOW_VERSION = "([^"]+)"') {
-            $currentVersion = $matches[1]
-            $versionSource  = "settings"
-        }
+    if ($versionSource -eq 'default') {
+        Write-Host "⚠️  No version file or tag found — starting from v0.0.0" -ForegroundColor Yellow
     }
 
-    if (-not $currentVersion) {
-        $latestTag = git describe --tags --abbrev=0 2>$null
-        if ($latestTag -match '^v?(\d+\.\d+\.\d+)$') {
-            $currentVersion = $matches[1]
-            $versionSource  = "tag"
+    # ── Version drift: several version files that disagree ────────────────────
+    # e.g. package.json says 1.2.0 while VERSION says 1.1.0. Bumping from an
+    # arbitrary one of them silently entrenches the mistake, so stop and ask.
+    if (Test-VersionDrift -Sources $versionSources) {
+        Write-Host ""
+        Write-Host "⚠️  VERSION DRIFT — these files disagree:" -ForegroundColor Yellow
+        foreach ($s in $versionSources) {
+            Write-Host ("     {0,-32} {1}" -f $s.Label, $s.Version) -ForegroundColor White
         }
-    }
-
-    if (-not $currentVersion) {
-        $currentVersion = "0.0.0"
-        $versionSource  = "default"
-        Write-Host "⚠️  No existing version found — starting from v0.0.0" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "   Bumping will set ALL of them to the same new version," -ForegroundColor DarkGray
+        Write-Host "   computed from '$currentVersion' ($($versionSources[0].Label))." -ForegroundColor DarkGray
+        Write-Host ""
+        if ((Read-Host "Continue and bring them into sync? (y/n)") -ne 'y') {
+            Write-Host "❌ Cancelled — fix the versions by hand, then re-run." -ForegroundColor Yellow
+            return
+        }
     }
 
     # ── Parse version parts ───────────────────────────────────────────────────
-    if ($currentVersion -notmatch '^(\d+)\.(\d+)\.(\d+)$') {
+    if ($currentVersion -notmatch '^(\d+)\.(\d+)\.(\d+)') {
         Write-Host "❌ Cannot parse version '$currentVersion' — expected X.Y.Z" -ForegroundColor Red
         return
     }
@@ -268,9 +272,9 @@ function git-release {
     }
 
     # ── Stage 1: fzf bump-type selector ──────────────────────────────────────
-    $sourceLabel = if ($versionSource -eq "settings") { "config/PowerFlow.settings.ps1" }
-                   elseif ($versionSource -eq "tag")   { "latest git tag" }
-                   else                                { "default (no version found)" }
+    $sourceLabel = if ($versionSource -eq 'files') { ($versionSources.Label -join ' + ') }
+                   elseif ($versionSource -eq 'tag') { 'latest git tag (no version file)' }
+                   else { 'default (no version found)' }
 
     $choices = @(
         "patch    v$currentVersion  →  v$($candidates.patch)    bug fixes, dependency updates",
@@ -344,16 +348,20 @@ function git-release {
         for ($i = 0; $i -lt $arr.Count; $i++) { "   $($i+1). $($arr[$i])" }
     } else { @("   (no commits yet)") }
 
-    $settingsNote = if ($versionSource -eq "settings") {
-        "   📄 config/PowerFlow.settings.ps1 will be updated to $newVersion"
-    } else { "" }
+    # Show EVERY version file that will be rewritten, not just PowerFlow's.
+    $settingsNote = if ($versionSources.Count -gt 0) {
+        @($versionSources | ForEach-Object { "   📄 $($_.Label) → $newVersion" })
+    } else {
+        @("   ℹ️  No version file — the tag alone carries the version")
+    }
 
     $formLines = @(
         "",
         "   🏷️  Tag      :  $newTag",
         "   📦 Version  :  v$currentVersion  →  v$newVersion",
         "   🌿 Branch   :  $branch",
-        $settingsNote,
+        ""
+    ) + $settingsNote + @(
         "",
         "   📋 Files to commit:"
     ) + $fileLines + @(
@@ -387,14 +395,24 @@ function git-release {
 
     $commitMsg = "vr-commit ($newTag) - $description"
 
-    # ── Update settings.ps1 ───────────────────────────────────────────────────
-    if ($versionSource -eq "settings" -and (Test-Path $settingsPath)) {
-        Write-Host "📄 Updating POWERFLOW_VERSION to $newVersion..." -ForegroundColor Yellow
-        $raw     = Get-Content $settingsPath -Raw
-        $updated = $raw -replace '\$script:POWERFLOW_VERSION = "[^"]+"',
-                                 "`$script:POWERFLOW_VERSION = `"$newVersion`""
-        Set-Content $settingsPath $updated -Encoding UTF8
-        Write-Host "✅ v$currentVersion → v$newVersion" -ForegroundColor Green
+    # ── Update EVERY version file ─────────────────────────────────────────────
+    # All of them, together — that is what stops package.json and VERSION drifting
+    # apart. Formatting is preserved (regex rewrite, never a JSON reserialise).
+    if ($versionSources.Count -gt 0) {
+        Write-Host "📄 Updating version file(s) to $newVersion..." -ForegroundColor Yellow
+
+        $written = @(Update-ProjectVersion -Sources $versionSources -NewVersion $newVersion)
+
+        if ($written.Count -ne $versionSources.Count) {
+            Write-Host ""
+            Write-Host "❌ Not every version file could be updated — release cancelled." -ForegroundColor Red
+            Write-Host "   Nothing has been committed, tagged or pushed." -ForegroundColor DarkGray
+            Write-Host "💡 Fix the file(s) above, then re-run git-rl." -ForegroundColor DarkGray
+            return
+        }
+    }
+    else {
+        Write-Host "ℹ️  No version file — the tag will carry the version." -ForegroundColor DarkGray
     }
 
     # ── git add ───────────────────────────────────────────────────────────────

@@ -237,6 +237,36 @@ jobs:
           }
           Write-Host "✅ coreutils intact; PowerFlow features preserved as del/mvf"
 
+      # PowerFlow only loads when pwsh runs. --login-shell auto wires it into ~/.bashrc.
+      # It MUST be idempotent, MUST NOT fire for non-interactive shells (scp/cron would
+      # break), and MUST NOT be able to lock a user out if pwsh disappears.
+      - name: 🐚 --login-shell auto is safe and idempotent
+        shell: bash
+        run: |
+          bash ./install.sh --yes --login-shell auto >/dev/null 2>&1
+
+          grep -q "PowerFlow: launch pwsh" "$HOME/.bashrc" \
+            || { echo "::error::--login-shell auto did not install the ~/.bashrc hook"; exit 1; }
+
+          # Idempotent: running it again must not duplicate the block.
+          bash ./install.sh --yes --login-shell auto >/dev/null 2>&1
+          n=$(grep -c "PowerFlow: launch pwsh" "$HOME/.bashrc")
+          [ "$n" -eq 1 ] || { echo "::error::hook duplicated ($n copies) — not idempotent"; exit 1; }
+
+          # A non-interactive shell must NEVER exec pwsh, or scp/rsync/cron break.
+          out=$(bash -c 'echo STILL_BASH')
+          [ "$out" = "STILL_BASH" ] \
+            || { echo "::error::non-interactive bash exec'd pwsh — this breaks scp/cron"; exit 1; }
+
+          # THE LOCKOUT GUARD: if pwsh vanishes, the user must still get a shell.
+          sudo mv "$(command -v pwsh)" /tmp/pwsh.bak
+          out=$(bash -ic 'echo SURVIVED' 2>/dev/null | tail -1)
+          sudo mv /tmp/pwsh.bak "$(dirname "$(command -v bash)")/pwsh" 2>/dev/null || sudo mv /tmp/pwsh.bak /usr/bin/pwsh
+          [ "$out" = "SURVIVED" ] \
+            || { echo "::error::pwsh removed and the user was LOCKED OUT of their shell"; exit 1; }
+
+          echo "✅ login hook: installed, idempotent, non-interactive-safe, no lockout"
+
       - name: 🗑️ Uninstall cleanly — and DO NOT remove tools the user already had
         shell: bash
         run: |

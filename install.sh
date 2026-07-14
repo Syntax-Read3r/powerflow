@@ -26,6 +26,16 @@ NO_DEPS=0
 DO_UNINSTALL=0
 PREFIX="${HOME}/.local/share/powerflow"
 
+# How should PowerFlow start on login?
+#   ask   — prompt (default when interactive)
+#   auto  — exec pwsh from ~/.bashrc, guarded  (RECOMMENDED)
+#   login — chsh: make pwsh the actual login shell
+#   none  — do nothing; run `pwsh` by hand
+LOGIN_SHELL_MODE="ask"
+
+# The marker that makes the ~/.bashrc block findable and idempotent.
+PF_BASHRC_MARKER="PowerFlow: launch pwsh on interactive login"
+
 # Where is this script? Empty when piped (`curl … | bash`), because BASH_SOURCE is
 # then not a real file. A non-empty $HERE containing components/ means we are in a
 # checkout and must install from IT, not from a download.
@@ -45,11 +55,26 @@ usage() {
     cat <<'EOF'
 PowerFlow installer (Linux)
 
-  --yes         Assume yes; no prompts (CI-safe)
-  --no-deps     Install PowerFlow only; skip fzf/zoxide/starship/lsd
-  --prefix DIR  Install root (default: ~/.local/share/powerflow)
-  --uninstall   Remove PowerFlow
-  -h, --help    Show this help
+  --yes                 Assume yes; no prompts (CI-safe)
+  --no-deps             Install PowerFlow only; skip fzf/zoxide/starship/lsd
+  --prefix DIR          Install root (default: ~/.local/share/powerflow)
+  --uninstall           Remove PowerFlow
+  -h, --help            Show this help
+
+  PowerFlow is a PowerShell profile — it only loads when `pwsh` runs. On a server
+  your login shell is normally bash, so after a reboot you land in bash and
+  PowerFlow is simply not there. Choose how it should start:
+
+  --login-shell auto    Launch pwsh from ~/.bashrc on interactive login.
+                        RECOMMENDED. Guarded, so a broken pwsh still leaves you
+                        with bash — no lockout.
+  --login-shell login   chsh: make pwsh your actual login shell. Cleaner, but if
+                        pwsh fails to start you have NO shell. Risky on a headless
+                        box.
+  --login-shell none    Do nothing. Run `pwsh` by hand.
+
+  With no --login-shell and no --yes, the installer asks.
+  With --yes and no --login-shell, it does nothing (CI-safe default).
 EOF
 }
 
@@ -59,6 +84,13 @@ while [[ $# -gt 0 ]]; do
         --no-deps)    NO_DEPS=1; shift ;;
         --prefix)     PREFIX="$2"; shift 2 ;;
         --uninstall)  DO_UNINSTALL=1; shift ;;
+        --login-shell)
+            LOGIN_SHELL_MODE="$2"
+            case "$LOGIN_SHELL_MODE" in
+                auto|login|none) ;;
+                *) err "--login-shell must be: auto | login | none"; exit 1 ;;
+            esac
+            shift 2 ;;
         -h|--help)    usage; exit 0 ;;
         *)            err "Unknown option: $1"; usage; exit 1 ;;
     esac
@@ -278,6 +310,122 @@ install_pwsh() {
     ok "PowerShell installed ($(pwsh --version))"
 }
 
+# ── 2b. How should PowerFlow start on login? ──────────────────────────────────
+#
+# PowerFlow is a PowerShell PROFILE — it only loads when pwsh runs. On a server the
+# login shell is normally bash, so after a reboot the user lands in bash and PowerFlow
+# is simply absent. The installer never used to mention this and told people to
+# "restart your shell", which on Linux does nothing at all.
+
+# Is the ~/.bashrc launcher already installed?
+bashrc_hook_present() {
+    [[ -f "$HOME/.bashrc" ]] && grep -q "$PF_BASHRC_MARKER" "$HOME/.bashrc"
+}
+
+# Option A: exec pwsh from ~/.bashrc, guarded so it can never lock you out.
+install_bashrc_hook() {
+    if bashrc_hook_present; then
+        ok "Login hook already present in ~/.bashrc — nothing to do"
+        return 0
+    fi
+
+    cat >> "$HOME/.bashrc" <<EOF
+
+# ── ${PF_BASHRC_MARKER} ──
+# Guards, in order:
+#   \$- == *i*     only interactive shells — never scp/rsync/cron/scripts
+#   PWSH_STARTED  prevents a login loop
+#   command -v    if pwsh is ever removed you still get bash — no lockout
+if [[ \$- == *i* ]] && [[ -z "\$PWSH_STARTED" ]] && command -v pwsh >/dev/null 2>&1; then
+    export PWSH_STARTED=1
+    exec pwsh
+fi
+EOF
+
+    ok "PowerFlow will now start on login (via ~/.bashrc)"
+    info "   Test it WITHOUT logging out — from this session run:  bash -l"
+    info "   Undo:  sed -i '/${PF_BASHRC_MARKER}/,/^fi$/d' ~/.bashrc"
+    return 0
+}
+
+# Option B: make pwsh the actual login shell.
+install_login_shell() {
+    local pwsh_path me
+    pwsh_path="$(command -v pwsh)"
+    me="$(id -un)"
+
+    # A shell must be listed in /etc/shells before chsh will accept it.
+    if ! grep -qx "$pwsh_path" /etc/shells 2>/dev/null; then
+        info "Registering $pwsh_path in /etc/shells..."
+        echo "$pwsh_path" | $SUDO tee -a /etc/shells >/dev/null
+    fi
+
+    # Plain `chsh` PROMPTS FOR A PASSWORD, so it fails silently when piped or run
+    # non-interactively — the shell stays unchanged and the user is told nothing.
+    # Go through sudo (no prompt) and only fall back to plain chsh.
+    if $SUDO chsh -s "$pwsh_path" "$me" 2>/dev/null || chsh -s "$pwsh_path" 2>/dev/null; then
+        # Verify: never claim success on chsh's exit code alone.
+        local now
+        now="$(getent passwd "$me" | cut -d: -f7)"
+        if [[ "$now" == "$pwsh_path" ]]; then
+            ok "pwsh is now your login shell"
+            warn "If pwsh ever fails to start you will have NO shell on login."
+            info "   Undo:  chsh -s /bin/bash"
+            return 0
+        fi
+    fi
+
+    err "Could not change your login shell (chsh needs a password, or PAM refused)."
+    info "   Run it yourself:  chsh -s $pwsh_path"
+    info "   Or use the safer option:  bash install.sh --login-shell auto"
+    return 1
+}
+
+configure_login_shell() {
+    # Already launching pwsh? Say so and stop.
+    if bashrc_hook_present; then
+        ok "PowerFlow already starts on login (~/.bashrc hook present)"
+        return 0
+    fi
+
+    # Non-interactive with no explicit choice: do nothing. Never surprise CI or a
+    # `curl … | bash --yes` by rewriting someone's shell config.
+    if [[ "$LOGIN_SHELL_MODE" == "ask" && "$ASSUME_YES" -eq 1 ]]; then
+        LOGIN_SHELL_MODE="none"
+    fi
+
+    if [[ "$LOGIN_SHELL_MODE" == "ask" ]]; then
+        echo ""
+        info "🐚 How should PowerFlow start?"
+        echo ""
+        echo "   PowerFlow is a PowerShell profile — it only loads when 'pwsh' runs."
+        echo "   Your login shell is ${SHELL:-bash}, so after a reboot you will land in"
+        echo "   bash and PowerFlow will NOT be there unless you set this up."
+        echo ""
+        echo "   1) Launch pwsh automatically on login   (recommended — adds a guarded"
+        echo "      block to ~/.bashrc; a broken pwsh still leaves you with bash)"
+        echo "   2) Make pwsh my login shell             (chsh — cleaner, but if pwsh"
+        echo "      fails to start you have NO shell. Risky on a headless server.)"
+        echo "   3) Do nothing                           (run 'pwsh' by hand)"
+        echo ""
+        read -r -p "Choose [1/2/3] (default 1): " choice
+        case "${choice:-1}" in
+            1) LOGIN_SHELL_MODE="auto"  ;;
+            2) LOGIN_SHELL_MODE="login" ;;
+            *) LOGIN_SHELL_MODE="none"  ;;
+        esac
+    fi
+
+    case "$LOGIN_SHELL_MODE" in
+        auto)  install_bashrc_hook ;;
+        login) install_login_shell ;;
+        none)
+            info "ℹ️  PowerFlow will not start automatically."
+            info "   Run 'pwsh' to use it, or re-run with:  --login-shell auto"
+            ;;
+    esac
+}
+
 # ── 3. Fetch PowerFlow and hand off to the shared installer ───────────────────
 main() {
     echo ""
@@ -291,6 +439,38 @@ main() {
         fi
         [[ -f "${PREFIX}/uninstall.ps1" ]] \
             || { err "PowerFlow is not installed at ${PREFIX}"; exit 1; }
+
+        # Strip the ~/.bashrc launcher FIRST. Leaving it behind after removing pwsh
+        # would leave a dead `exec pwsh` in the login path — the `command -v pwsh`
+        # guard saves the user from a lockout, but the block is still dead weight.
+        if bashrc_hook_present; then
+            sed -i "/${PF_BASHRC_MARKER}/,/^fi$/d" "$HOME/.bashrc"
+            ok "Removed the PowerFlow launcher from ~/.bashrc"
+        fi
+
+        # If pwsh was made the login shell, hand the user back a working one BEFORE
+        # removing pwsh — otherwise the next login has no shell at all.
+        #
+        # Read the real shell from passwd, not $SHELL: $SHELL is inherited from the
+        # parent process and still says /bin/bash inside a bash subshell even after
+        # chsh has changed it.
+        local me current
+        me="$(id -un)"
+        current="$(getent passwd "$me" | cut -d: -f7)"
+
+        if [[ "$current" == *pwsh* ]]; then
+            warn "pwsh is your login shell — reverting to bash so you are not left without one."
+            # sudo, because plain chsh prompts for a password and fails silently.
+            $SUDO chsh -s /bin/bash "$me" 2>/dev/null || chsh -s /bin/bash 2>/dev/null || true
+
+            current="$(getent passwd "$me" | cut -d: -f7)"
+            if [[ "$current" == *pwsh* ]]; then
+                err "Could not revert your login shell. Do it NOW, before you log out:"
+                err "   chsh -s /bin/bash"
+                exit 1
+            fi
+            ok "Login shell reverted to $current"
+        fi
 
         # Build the arg list explicitly — an unquoted $(...) here would word-split.
         uninstall_args=()
@@ -336,7 +516,22 @@ main() {
     [[ "$ASSUME_YES" -eq 1 ]] && args+=("-Yes")
     [[ "$NO_DEPS"    -eq 1 ]] && args+=("-NoDeps")
 
-    pwsh -NoProfile -File "${PREFIX}/install.ps1" "${args[@]}"
+    pwsh -NoProfile -File "${PREFIX}/install.ps1" "${args[@]}" || exit 1
+
+    # ── Finally: make sure PowerFlow actually STARTS ──────────────────────────
+    # Without this the install "succeeds" and then the user reboots into bash and
+    # sees no PowerFlow at all — which is exactly what happened.
+    configure_login_shell
+
+    echo ""
+    if bashrc_hook_present || [[ "$LOGIN_SHELL_MODE" == "login" ]]; then
+        ok "Done. Log out and back in — PowerFlow will load automatically."
+        info "   Or test right now, without logging out:  bash -l"
+    else
+        ok "Done. Start PowerFlow with:  pwsh"
+        info "   Then type 'pwsh-h' for the command reference."
+    fi
+    echo ""
 }
 
 main "$@"

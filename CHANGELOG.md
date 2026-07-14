@@ -9,6 +9,95 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.2.0] - Unreleased
+
+> 🌍 **`git-rl` now works in any project — not just PowerFlow's.**
+>
+> It reads *your* project's version file (`package.json`, `pyproject.toml`, `Cargo.toml`,
+> `*.csproj`, `build.gradle`, `VERSION`), bumps it, and keeps multiple version files in
+> sync. No more asking a Node developer to keep a PowerShell file in their repo.
+
+### Added
+
+- 🌍 **Project version-file detection (`components/git/version-files.ps1`).**
+  `git-rl` previously read **one hardcoded location** — `config/PowerFlow.settings.ps1`,
+  matching `$script:POWERFLOW_VERSION`. In any other project it silently fell back to the
+  latest git tag and **rewrote nothing**, so a Node project's `package.json` was never
+  bumped. It now detects and rewrites the project's own version file:
+
+  | Project | File | Pattern |
+  |---|---|---|
+  | Node | `package.json` | `"version": "X.Y.Z"` |
+  | Python | `pyproject.toml` | `version = "X.Y.Z"` (`[project]` / `[tool.poetry]`) |
+  | Rust | `Cargo.toml` | `version = "X.Y.Z"` (`[package]` only) |
+  | .NET | `*.csproj` | `<Version>X.Y.Z</Version>` |
+  | Gradle | `build.gradle(.kts)` | `version = "X.Y.Z"` |
+  | Any | `VERSION` | plain text |
+  | PowerShell | `config/PowerFlow.settings.ps1` | `$script:POWERFLOW_VERSION` |
+
+  Falls back to the latest git tag when a project has none.
+
+- 🔗 **Multiple version files are updated together, and drift is caught before the bump.**
+  If a project has both `package.json` and a `VERSION` file, `git-rl` shows both, warns if
+  they currently **disagree**, and — on confirmation — brings all of them to the same new
+  version. Version drift is now handled at the source rather than policed by a CI check
+  after the fact. If any file fails to update, the release **aborts before** anything is
+  committed, tagged or pushed.
+
+- 🛡️ **Formatting is preserved, and nested versions are never touched.**
+  The rewrite is a targeted regex anchored to the *current* version, not a
+  parse-and-reserialise — round-tripping `package.json` through a JSON serialiser would
+  reorder keys and reindent the file, an unacceptable diff for a version bump. Verified
+  against fixtures for all seven project types: a `version` under `[dependencies]` in
+  `Cargo.toml`, a nested `"version"` key in `package.json`, and a `[tool.other]` version
+  in `pyproject.toml` are all left alone, while only the project's own version moves.
+
+- 🐚 **`install.sh --login-shell` — PowerFlow can now start on login.**
+
+  PowerFlow is a PowerShell *profile*: it only loads when `pwsh` runs. On a server the
+  login shell is bash, so users installed it successfully, rebooted, landed in bash, and
+  found no PowerFlow — while the installer cheerfully told them to *"restart your shell"*,
+  which on Linux does **nothing**. Reported from a real headless Proxmox box.
+
+  ```bash
+  install.sh --login-shell auto    # launch pwsh from ~/.bashrc  (recommended)
+  install.sh --login-shell login   # chsh — make pwsh the login shell
+  install.sh --login-shell none    # do nothing; run `pwsh` by hand
+  ```
+
+  With no flag it **asks**. With `--yes` and no flag it does **nothing** — CI and
+  `curl … | bash` must never rewrite someone's shell config unasked.
+
+  `auto` is recommended because it **cannot lock you out**. The `~/.bashrc` block is
+  guarded three ways: `$- == *i*` (interactive only — never scp/rsync/cron), a
+  `PWSH_STARTED` flag (no login loop), and `command -v pwsh` (if pwsh disappears you still
+  get bash). Verified by deleting `pwsh` and confirming the shell still comes up. It is
+  idempotent, and `--uninstall` strips it back out.
+
+### Changed
+
+- 📖 **`git-rl -h` setup docs rewritten for real projects.** The prompt previously told
+  Node and Python developers to create a PowerShell file (`config/PowerFlow.settings.ps1`)
+  in their repo, and then add a CI step to stop it drifting from `package.json`. That was
+  a workaround for a limitation, not a design. The prompt now says: *if your project
+  already has a version file, you are done* — and explicitly warns against creating a
+  PowerShell file in a non-PowerShell project.
+
+- 🐧 **The post-install message no longer misleads on Linux.** It said "Restart your shell
+  to activate PowerFlow". Restarting bash does nothing — it now says
+  *"PowerFlow is a PowerShell profile — start it with: `pwsh`"*.
+
+### Fixed
+
+- 🔐 **`chsh` failed silently, and could have left you with no shell.** Plain `chsh`
+  prompts for a password, so it fails when piped or non-interactive — the login shell was
+  never changed and **nothing was reported**. It now elevates via `sudo`, and verifies the
+  result in `/etc/passwd` rather than trusting the exit code. The same bug hit *uninstall*:
+  it printed "reverting to bash" while leaving `pwsh` as the login shell — meaning it would
+  remove pwsh and leave the user's next login pointing at a shell that no longer exists.
+  Uninstall now reverts the shell **before** removing pwsh, verifies it, and **aborts
+  loudly** if it cannot.
+
 ## [3.1.0] - Unreleased
 
 > 🗄️ **New: find what is actually eating your disk** — `installed-apps` and `disk-big`.
