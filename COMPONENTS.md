@@ -69,6 +69,14 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 > thing anyone does with an alias in bash — is impossible with it. PowerFlow compiles
 > bash-style aliases into functions instead, which can.
 >
+> ⁶ **`mv` is overloaded by argument count, deliberately.** One argument **cuts** (the
+> PowerFlow cut/paste workflow: `mv <file>` … `mv-t`). Two or more is a **real move**, because
+> `mv a.txt b.txt` used to join its arguments into the filename `"a.txt b.txt"`, find nothing,
+> and silently do nothing at all. The one ambiguous case — `mv my report.txt`, an unquoted name
+> containing a space — still cuts, but only when that reading is unambiguous (the joined name
+> exists *and* the first word does not). Overwriting prompts unless `-f`, matching PowerFlow's
+> `rm` rather than GNU, which clobbers silently.
+>
 > ⁵ **`Split-GnuArgs` is why `rm -rf` works on Windows.** These functions take **no
 > `param()` block**, deliberately. A `param()` block makes PowerShell try to bind `-r`,
 > `-p` and `-f` as *parameter names* — it then either throws (*"the parameter name 'p' is
@@ -111,7 +119,7 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `components/navigation/nav.ps1` | Navigation | `nav`, `nav roots`, `Test-NavFunction`, `z` (alias) |
 | `components/navigation/directory.ps1` | Navigation | `here`, `..`, `...`, `....`, `.....`, `~`, `back`, `cd-` (alias), `copy-pwd` |
 | `components/files/listing.ps1` | Files | `ls`, `la`, `ll`, `clr` (alias), `cat` (alias)¹, `cp` (alias)¹ |
-| `components/files/operations.ps1` | Files | `rm`¹, `mv`¹, `mv-t`, `mv-c`, `rmdir`¹, `touch`¹, `mkdir`¹, `Split-GnuArgs`⁵ |
+| `components/files/operations.ps1` | Files | `rm`¹, `mv`¹ ⁶, `Invoke-GnuMove`, `mv-t`, `mv-c`, `rmdir`¹, `touch`¹, `mkdir`¹, `Split-GnuArgs`⁵ |
 | `components/files/rename.ps1` | Files | `rn` |
 | `components/files/clipboard.ps1` | Files | `open-pwd`, `op`, `paste-file`, `copy-file`, `cf`, `pf` |
 | `components/git/remote.ps1` | Git | `Create-RemoteRepository` |

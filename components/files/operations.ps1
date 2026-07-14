@@ -195,28 +195,144 @@ if (Test-Path Alias:\mv) { Remove-Item Alias:\mv -Force }
 # Global variable to store the file being moved
 $script:MoveInHand = $null
 
+# ── GNU mv: the two-or-more-argument form ─────────────────────────────────────
 <#
 .SYNOPSIS
-    Enhanced file moving with cut-and-paste workflow
+    The real `mv src dst` — move/rename, as bash means it.
 .DESCRIPTION
-    Two-stage move operation: mv <file> cuts the file, mv-t pastes it in current directory.
-    Provides beautiful feedback and handles edge cases gracefully.
-.PARAMETER fileName
-    Name of file to cut for moving (first stage)
-.EXAMPLE
-    mv belief-index     # Cuts 'belief-index' for moving
-    # Navigate to desired directory
-    mv-t               # Pastes 'belief-index' in current directory
+    PowerFlow's own mv is a CUT/PASTE workflow (mv <file> holds it, mv-t pastes). That is a
+    genuinely useful thing and it stays. But it meant `mv a.txt b.txt` — the most basic
+    operation in any shell — joined its arguments into the single filename "a.txt b.txt",
+    found nothing, and silently did nothing at all.
+
+    So: ONE argument still cuts. TWO OR MORE is a real move.
+
+    Overwriting prompts unless -f, which matches PowerFlow's `rm` rather than GNU (GNU
+    clobbers silently). Consistency inside PowerFlow beats strict parity, and the safe
+    direction is the right one to differ in.
 #>
-function mv {
+function Invoke-GnuMove {
     param(
-        [Parameter(ValueFromRemainingArguments)]
-        [string[]]$fileNameParts,
-        [switch]$detailed
+        [string[]]$Paths,
+        [switch]$Force,        # -f  overwrite without asking
+        [switch]$NoClobber,    # -n  never overwrite
+        [switch]$ShowVerbose   # -v
     )
 
-    # Join all arguments to handle filenames with spaces
-    $fileName = if ($fileNameParts) { $fileNameParts -join ' ' } else { $null }
+    $dest    = $Paths[-1]
+    $sources = @($Paths[0..($Paths.Count - 2)])
+
+    $destIsDir = Test-Path -LiteralPath $dest -PathType Container
+
+    # A trailing separator means "this must be a directory" — `mv f nope/` should fail
+    # rather than quietly create a FILE called "nope".
+    if (($dest -match '[\\/]$') -and -not $destIsDir) {
+        Write-Host "mv: target '$dest' is not a directory" -ForegroundColor Red
+        return
+    }
+    if ($sources.Count -gt 1 -and -not $destIsDir) {
+        Write-Host "mv: target '$dest' is not a directory" -ForegroundColor Red
+        Write-Host "   (moving several files needs a directory to move them INTO)" -ForegroundColor DarkGray
+        return
+    }
+
+    foreach ($s in $sources) {
+        $item = Get-Item -LiteralPath $s -Force -ErrorAction SilentlyContinue
+        if (-not $item) {
+            Write-Host "mv: cannot stat '$s': No such file or directory" -ForegroundColor Red
+            continue
+        }
+
+        $target = if ($destIsDir) { Join-Path $dest $item.Name } else { $dest }
+
+        # mv a.txt a.txt — do nothing rather than delete-then-move it into oblivion.
+        $targetFull = [IO.Path]::GetFullPath((Join-Path $PWD.Path $target))
+        if ($targetFull -eq $item.FullName) {
+            Write-Host "mv: '$s' and '$target' are the same file" -ForegroundColor Yellow
+            continue
+        }
+
+        if (Test-Path -LiteralPath $target) {
+            if ($NoClobber) {
+                if ($ShowVerbose) { Write-Host "   skipped (exists): $target" -ForegroundColor DarkGray }
+                continue
+            }
+            if (-not $Force) {
+                $confirm = Read-Host "⚠️  Overwrite '$target'? [y/N]"
+                if ($confirm -notin @('y','Y')) {
+                    Write-Host "❌ Skipped: $target" -ForegroundColor Yellow
+                    continue
+                }
+            }
+            Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        try {
+            Move-Item -LiteralPath $item.FullName -Destination $target -Force -ErrorAction Stop
+            Write-Host "✅ $($item.Name) " -NoNewline -ForegroundColor Green
+            Write-Host "→ $target" -ForegroundColor DarkGray
+        }
+        catch {
+            Write-Host "❌ mv: cannot move '$s' to '$target': $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+    mv — a real move with 2+ arguments; a cut/paste hold with 1.
+.DESCRIPTION
+    mv src dst          rename/move                     (GNU)
+    mv a b c dir/       move several into a directory   (GNU)
+    mv -f src dst       overwrite without asking
+    mv -n src dst       never overwrite
+
+    mv <file>           CUT it — PowerFlow's own workflow
+    mv-t                paste it in the current directory
+    mv-c                cancel
+.EXAMPLE
+    mv old.txt new.txt          # rename
+    mv report.pdf ~/Documents/  # move into a folder
+    mv belief-index             # cut, then navigate, then mv-t
+#>
+function mv {
+    # -detailed is PowerFlow's own and must be pulled out BEFORE flag parsing:
+    # Split-GnuArgs would otherwise read "-detailed" as the bundled short flags
+    # -d -e -t -a -i -l -e -d. (Per PowerFlow's rule the long form --detailed is the
+    # correct spelling, but the single-dash one is accepted so nobody's habit breaks.)
+    $argv     = @()
+    $detailed = $false
+    foreach ($a in $args) {
+        if ("$a" -in @('-detailed', '--detailed')) { $detailed = $true } else { $argv += "$a" }
+    }
+
+    $parsed = Split-GnuArgs -Argv $argv -LongMap @{
+        'force' = 'f'; 'no-clobber' = 'n'; 'verbose' = 'v'; 'interactive' = 'i'
+    }
+    $paths = @($parsed.Paths)
+
+    foreach ($u in $parsed.Unknown) { Write-Host "mv: unknown option '$u'" -ForegroundColor Yellow }
+
+    # ── 2+ paths: a real move ─────────────────────────────────────────────────
+    if ($paths.Count -ge 2) {
+        # ...unless this is an UNQUOTED filename with spaces. `mv my report.txt` used to
+        # cut "my report.txt", and it should still do so — but only when that reading is
+        # the unambiguous one: the joined name exists AND the first word does not.
+        # `mv a.txt b.txt` is unaffected, because a.txt exists.
+        $joined = $paths -join ' '
+        if ((Test-Path -LiteralPath $joined) -and -not (Test-Path -LiteralPath $paths[0])) {
+            $paths = @($joined)     # fall through to the cut path below
+        }
+        else {
+            Invoke-GnuMove -Paths $paths `
+                -Force:($parsed.Flags.ContainsKey('f')) `
+                -NoClobber:($parsed.Flags.ContainsKey('n')) `
+                -ShowVerbose:($parsed.Flags.ContainsKey('v'))
+            return
+        }
+    }
+
+    $fileName = if ($paths.Count -ge 1) { $paths[0] } else { $null }
 
     # If no filename provided, show current status and help
     if ([string]::IsNullOrWhiteSpace($fileName)) {
@@ -227,12 +343,16 @@ function mv {
             Write-Host "💡 Use 'mv <newfile>' to drop current and hold new file" -ForegroundColor DarkGray
             Write-Host "💡 Use 'mv-c' to cancel and drop current file" -ForegroundColor DarkGray
         } else {
-            Write-Host "💡 Enhanced Move Commands:" -ForegroundColor Cyan
-            Write-Host "═════════════════════════" -ForegroundColor Cyan
-            Write-Host "  mv <filename>        Cut file for moving (smart search)" -ForegroundColor DarkGray
-            Write-Host "  mv-t                 Paste held file in current directory" -ForegroundColor DarkGray
-            Write-Host "  mv-c                 Cancel move operation (drop held file)" -ForegroundColor DarkGray
-            Write-Host "  mv <filename> -detailed  Show detailed search process" -ForegroundColor DarkGray
+            Write-Host "💡 Move Commands:" -ForegroundColor Cyan
+            Write-Host "═════════════════" -ForegroundColor Cyan
+            Write-Host "  mv <src> <dst>       Move or rename it, right now  (like bash)" -ForegroundColor DarkGray
+            Write-Host "  mv <a> <b> <dir>/    Move several files into a directory" -ForegroundColor DarkGray
+            Write-Host "     -f  overwrite without asking      -n  never overwrite" -ForegroundColor DarkGray
+            Write-Host ""
+            Write-Host "  mv <filename>        ✂️  CUT it for moving (smart search)" -ForegroundColor DarkGray
+            Write-Host "  mv-t                 Paste the held file in the current directory" -ForegroundColor DarkGray
+            Write-Host "  mv-c                 Cancel — drop the held file" -ForegroundColor DarkGray
+            Write-Host "  mv <filename> --detailed   Show the search process" -ForegroundColor DarkGray
         }
         return
     }

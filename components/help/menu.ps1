@@ -171,7 +171,9 @@ $verLine
 │  mkdir <dir>         → create new directory (strict naming rules)            │
 │                                                                              │
 │  ✂️ CUT-AND-PASTE FILE WORKFLOW:                                             │
-│  mv <filename>       → 🎯 smart cut file for moving (supports fuzzy search)  │
+│  mv <src> <dst>      → move / rename it now, like bash  (-f force · -n keep) │
+│  mv <a> <b> <dir>/   → move several files into a directory                   │
+│  mv <filename>       → ✂️  cut file for moving (1 arg = cut, 2+ = move)      │
 │  mv-t                → paste cut file in current directory                   │
 │  mv-c                → cancel move operation (drop held file)                │
 │                                                                              │

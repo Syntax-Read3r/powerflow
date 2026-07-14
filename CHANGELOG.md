@@ -9,6 +9,44 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.3.1] - Unreleased
+
+> The last member of the family that produced 3.3.0's `touch` / `rm -rf` / `mkdir` bugs.
+
+### Fixed
+
+- 💥 **`mv a.txt b.txt` silently did nothing on Windows.** The most basic operation in any
+  shell. PowerFlow's `mv` is a cut/paste workflow (`mv <file>` holds it, `mv-t` pastes),
+  so with two arguments it joined them into the single filename `"a.txt b.txt"`, found no
+  such file, and gave up without a word. `mv report.pdf ~/Documents/` did nothing either.
+
+  **One argument still cuts. Two or more is now a real move.**
+
+  ```
+  mv old.txt new.txt          rename
+  mv report.pdf ~/Documents/  move into a folder
+  mv a.txt b.txt dest/        move several into a directory
+  mv -f src dst               overwrite without asking
+  mv -n src dst               never overwrite
+
+  mv belief-index             ✂️  still cuts — then navigate, then mv-t
+  ```
+
+  Overwriting **prompts unless `-f`**, which follows PowerFlow's `rm` rather than GNU
+  (GNU clobbers silently). Consistency inside PowerFlow beats strict parity, and safety is
+  the right direction in which to differ.
+
+  Guarded against the obvious ways this goes wrong: `mv same.txt same.txt` refuses instead
+  of deleting the file; `mv f.txt notadir/` refuses rather than creating a stray *file*
+  called `notadir`; and `mv my report.txt` — an unquoted name with a space — still **cuts**
+  `my report.txt`, because that reading is only chosen when it is the unambiguous one (the
+  joined name exists and the first word does not). `mv a.txt b.txt` is unaffected.
+
+  *(Windows only — on Linux `mv` has always been the GNU binary. PowerFlow's version, which
+  is exposed there as `mvf`, gains the same move form.)*
+
+---
+
 ## [3.3.0] - 2026-07-14
 
 > 🐧 **PowerFlow now behaves like a real shell on Linux — and teaches you Linux while you
