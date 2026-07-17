@@ -91,6 +91,9 @@ $_p = _pf_path "config\paths.$script:PowerFlowOS.ps1"; if ($_p) { . $_p }
 # 4. Components — shared domain logic (dependency order within each domain)
 # ------------------------------------------------------------------------------
 $_pf_components = @(
+    # registry.ps1 MUST be first — every component registers its commands into it.
+    "components\help\registry.ps1"
+
     "components\core\version.ps1"
     "components\core\dependencies.ps1"
     "components\core\recovery.ps1"

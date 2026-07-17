@@ -158,6 +158,7 @@ $verLine
 │  ls -t -d <N> [path] → tree view with custom depth                           │
 │  la                  → list all files including hidden                       │
 │  ll                  → long list format with details                         │
+│  clr                 → clear the screen                                      │
 │                                                                              │
 │  📄 FILE VIEWING & SEARCH:                                                   │
 │  cat <file>          → display file contents                                 │
@@ -205,7 +206,7 @@ $verLine
 │  🚀 ADD-COMMIT-PUSH WORKFLOW:                                                │
 │  git-a               → 🎨 beautiful add → commit → push workflow             │
 │  git-a-plus          → enhanced version with multiple modes:                 │
-│    git-aq            → ⚡ quick mode (minimal prompts)                        │
+│    git-aa / git-aq   → ⚡ quick mode (minimal prompts)                        │
 │    git-ad            → 🔍 dry run mode (preview changes)                     │
 │    git-am            → 🔄 amend last commit with new message                 │
 │                                                                              │
@@ -323,11 +324,12 @@ $verLine
 │  firstlines → head      lastlines   → tail      archive     → tar            │
 │  dirsize    → du        diskfree    → df        listdisks   → lsblk          │
 │  listports  → ss        listprocs   → ps        stopproc    → kill           │
-│  service    → systemctl systemlogs  → journalctl                             │
+│  service    → systemctl systemlogs  → journalctl removefile  → rm            │
 │                                                                              │
 │  🐚 BASH BUILTINS POWERSHELL LACKS:                                          │
 │  export VAR=value    → set an env var, bash-style                            │
 │  alias ll='ls -lh'   → an alias WITH ARGUMENTS (Set-Alias cannot)            │
+│  unalias ll          → remove it again                                       │
 │  unset VAR           → remove it       source .env → load KEY=value lines    │
 │  jobs · fg · bg      → job control     history     → numbered history        │
 │  !!  ·  !$           → last command · last argument  (sudo !!)               │
