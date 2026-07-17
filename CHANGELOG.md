@@ -9,7 +9,113 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [3.3.2] - Unreleased
+## [3.4.0] - Unreleased
+
+> 🖥️ **`pc-whoami` — the machine's vital signs on one screen.** Born from a real
+> diagnosis session (CPU throttling + WHEA crashes) that took seven hand-typed
+> incantations and an AI to decode. It is one command now.
+
+### Added
+
+- 🖥️ **`pc-whoami`** — power plan, CPU cap, hardware errors, crash dumps, BIOS age. One
+  screen, triage-first: **green stays silent, every ⚠️ names the flag that drills in.**
+  No hex (`0x55` renders as `85%`), no GUID aliases, no event-provider names.
+
+  ```
+  🔌 POWER
+     Plan     GameTurbo (High Performance)   ⚠️ custom/OEM plan — not a system default
+     CPU cap  85%                            ⚠️ full speed is being withheld
+  💥 STABILITY (last 7 days)
+     HW errors 4   ⚠️ the hardware itself reported faults
+  ```
+
+  - `pc-whoami -power` — every plan (custom/OEM ones flagged — stock plans are matched by
+    **GUID**, because names are localised), caps decoded, AC/DC split shown only on
+    machines that actually have a battery.
+  - `pc-whoami -crashes` — WHEA/hardware errors, bugchecks, dump inventory.
+    `-export` writes the raw evidence bundle (WHEA XML, bugcheck text, dump list) to a
+    folder you can hand to whoever is helping you. `-days N` widens the window.
+  - `pc-whoami -bios` — firmware version, **computed age**, board model, and the exact
+    search string for updates. Deliberately no vendor-site scraping: a diagnostic tool
+    should not depend on ASUS's HTML.
+  - Honest degradation everywhere: an unelevated session says the minidump folder
+    *"needs an elevated session to list — 0 here does not mean 0 exist"*; a container
+    with no cpufreq says so instead of inventing a governor; an unreadable journal is
+    *"unknown, not zero"*.
+
+- 🔒 **`pc-cap`** — cap the CPU's maximum speed, with **guaranteed restoration**:
+
+  ```
+  pc-cap 85          cap at 85% — records the prior state to disk FIRST
+  pc-cap restore     put back exactly what was recorded, verify, then forget
+  ```
+
+  Born from a real incident: a script capped a CPU at 85% "temporarily", its cleanup never
+  ran, and the machine stayed throttled with no record of the original values. So:
+
+  - The prior plan + values are written to `~/.powerflow-power-state.json` **before**
+    anything changes — if the process dies mid-way, the truth is already on disk.
+  - A second `pc-cap` **refuses** while a record exists: 100→85→70 must never make
+    "restore" mean 85.
+  - Restore **verifies by re-querying** (`powercfg` exit codes lie by omission) and only
+    then deletes the record. A failed restore keeps it.
+  - `pc-whoami` shows a banner for as long as the record exists — an abandoned cap
+    cannot go unnoticed.
+
+- 🐧 **Both platforms, per the architecture.** Windows: `powercfg` / WHEA / CIM /
+  minidumps. Linux: cpufreq governor + `scaling_max_freq`, kernel MCE via `journalctl`,
+  `/sys/class/dmi/id` for firmware (readable without root), `/var/crash`. Six new adapter
+  contract functions, parity-checked by CI.
+
+### Fixed
+
+- 🚨 **The startup updater's "Install now" would have BROKEN the install.** It was a
+  pre-2.0 relic: it downloaded **only** `Microsoft.PowerShell_profile.ps1` and overwrote
+  `$PROFILE` — on the component layout that means a *new bootloader loading old
+  components*, and since the version lives in `config/` (never touched), the "updated"
+  install still reported the old version and **re-prompted every day, forever**.
+  `powerflow-update` now runs the real installer in a child `pwsh` — full tree, manifest
+  respected, ownership preserved (`-NoDeps` no longer erases the dependency records).
+
+- 🔕 **The startup prompt can no longer hang or spam a piped shell.** With redirected
+  stdin (scripts, tooling that forgot `-NoProfile`) `Read-Host` read EOF, fell through,
+  and — because the fall-through branch never wrote the daily marker — the check re-ran
+  on *every* load. Non-interactive loads now get one quiet line and a one-day snooze.
+
+- 🌐 **Update checks no longer spend GitHub API quota.** The `releases/latest` redirect
+  on github.com resolves the newest tag without touching `api.github.com` — the same
+  anonymous API call that killed the v3.3.2 release. The API remains only as a fallback,
+  with the existing 3-day cooldown on 403.
+
+### Added (update flow)
+
+- 😴 **Defer options that actually defer.** The prompt now offers **Install now · Remind
+  me tomorrow · Snooze for a week · Turn off reminders** — the snooze marker holds a real
+  date instead of only ever meaning "until midnight".
+
+### Fixed (installer)
+
+- 🌐 **The installer no longer dies to GitHub API rate limits.** The tarball path asked
+  `api.github.com` for the latest PowerShell release; anonymous calls from shared CI
+  runner IPs get 403'd, and that exact 403 silently killed the v3.3.2 release for three
+  days. Three layers now: the `releases/latest` **redirect** on github.com (the website,
+  not the API — resolves the tag with no rate limit), then the API **authenticated** when
+  `GITHUB_TOKEN` is present (CI passes it), then a pinned known-good version, loudly, so
+  an outage degrades instead of aborting. Verified on Arch — the leg that failed.
+
+### Changed
+
+- 🚧 **The architecture gate got stricter.** `powercfg`, `Get-CimInstance`, `Get-WinEvent`
+  and `$env:SystemRoot` are now forbidden in `components/` alongside the existing list —
+  the health feature routes all of them through adapters, and CI now keeps it that way.
+
+---
+
+## [3.3.2] - 2026-07-14 · published 2026-07-17
+
+> Tagged Jul 14; its release run failed on a transient GitHub API rate-limit (the Arch
+> leg's anonymous `api.github.com` call got a 403) and sat unnoticed for three days.
+> Re-run and published Jul 17. The 3.4.0 installer no longer depends on that API call.
 
 > 🚨 **Upgrading via `curl … | bash` was impossible.** If you already had PowerFlow, the
 > installer asked a question nobody could answer, then cancelled.

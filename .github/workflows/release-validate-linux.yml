@@ -65,6 +65,12 @@ jobs:
 
       - name: 📦 Install PowerFlow (as root, from this checkout)
         shell: bash
+        # GITHUB_TOKEN: the tarball path asks api.github.com for the latest pwsh
+        # release, and ANONYMOUS calls from shared runner IPs get 403 rate-limited —
+        # that exact 403 killed the v3.3.2 release on this job's Arch leg. install.sh
+        # uses the token when present; interactive users never need one.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: bash ./install.sh --yes
 
       # `command -v pwsh` is NOT enough — the binary archive can place a pwsh that

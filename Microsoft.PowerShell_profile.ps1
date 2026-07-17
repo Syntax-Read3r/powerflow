@@ -136,6 +136,7 @@ $_pf_components = @(
     "components\system\shutdown.ps1"
     "components\system\path.ps1"
     "components\system\apps.ps1"
+    "components\system\health.ps1"
 )
 foreach ($_c in $_pf_components) {
     $_p = _pf_path $_c; if ($_p) { . $_p }

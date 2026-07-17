@@ -273,6 +273,14 @@ $verLine
 │  pwsh-h              → show this help menu                                   │
 │  pwsh-recovery       → PowerFlow recovery and diagnostics menu               │
 │                                                                              │
+│  🖥️  MACHINE HEALTH:                                                        │
+│  pc-whoami           → the machine's vital signs: plan · CPU cap · crashes   │
+│  pc-whoami -power    → power plans + caps, decoded (no hex, no GUIDs)        │
+│  pc-whoami -crashes  → hardware errors · bugchecks · dumps  (-export bundle) │
+│  pc-whoami -bios     → firmware version, age, board model                    │
+│  pc-cap 85           → cap CPU speed — records prior state for a safe undo   │
+│  pc-cap restore      → put back exactly what was recorded                    │
+│                                                                              │
 │  🔄 VERSION MANAGEMENT:                                                      │
 │  Get-PowerFlowVersion    → detailed PowerFlow version and status info        │
 │  powerflow-version       → quick version display                             │

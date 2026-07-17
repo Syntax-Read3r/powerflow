@@ -103,7 +103,7 @@ jobs:
       - name: 🚧 Enforce Platform Separation
         shell: pwsh
         run: |
-          $forbidden = 'Set-Clipboard|Get-Clipboard|explorer\.exe|\bscoop\b|Start-Process "wt"|WindowsPrincipal|shutdown\.exe|SetEnvironmentVariable|System\.Windows\.Forms|winget|\$env:(TEMP|USERPROFILE|LOCALAPPDATA|APPDATA)'
+          $forbidden = 'Set-Clipboard|Get-Clipboard|explorer\.exe|\bscoop\b|Start-Process "wt"|WindowsPrincipal|shutdown\.exe|SetEnvironmentVariable|System\.Windows\.Forms|winget|\bpowercfg\b|Get-CimInstance|Get-WinEvent|\$env:(TEMP|USERPROFILE|LOCALAPPDATA|APPDATA|SystemRoot)'
           $hits = Get-ChildItem components -Recurse -Filter *.ps1 |
                   Where-Object { $_.Name -ne 'create-next.ps1' } |   # generated-project template
                   Select-String -Pattern $forbidden |
@@ -132,7 +132,7 @@ jobs:
           # Internal helpers may be platform-specific; the SHARED contract is what
           # components/ actually call, so check that every component call resolves.
           $calls = Get-ChildItem components, config -Recurse -Filter *.ps1 |
-                   Select-String -Pattern '\b(Copy-ToClipboard|Get-FromClipboard|Open-Path|Open-Editor|Open-Url|Test-Admin|Assert-Admin|Test-Dependency|Install-Dependency|Uninstall-Dependency|Test-PackageManager|Install-PackageManager|Get-PackageManagerName|Get-DependencyInstallHint|New-TerminalTab|Switch-TerminalTab|Close-TerminalTabAt|Send-TerminalKeys|Invoke-Shutdown|Stop-Shutdown|Add-PersistentPathEntry|Test-PersistentPathEntry|Get-PathScopeLabel|Get-StarshipConfigPath|Get-TerminalSettingsPath|Get-TempPath|Get-HomePath|Get-PowerFlowConfigPath|Invoke-PowerShellUpdate|Get-InstalledApplication|Uninstall-Application|Get-DiskHotspot|Measure-FolderSize|Move-ToTrash|Remove-PathPermanently|Test-TrashSupport|Test-ProtectedPath|Get-FileMode|Test-PermsSupported)\b' |
+                   Select-String -Pattern '\b(Copy-ToClipboard|Get-FromClipboard|Open-Path|Open-Editor|Open-Url|Test-Admin|Assert-Admin|Test-Dependency|Install-Dependency|Uninstall-Dependency|Test-PackageManager|Install-PackageManager|Get-PackageManagerName|Get-DependencyInstallHint|New-TerminalTab|Switch-TerminalTab|Close-TerminalTabAt|Send-TerminalKeys|Invoke-Shutdown|Stop-Shutdown|Add-PersistentPathEntry|Test-PersistentPathEntry|Get-PathScopeLabel|Get-StarshipConfigPath|Get-TerminalSettingsPath|Get-TempPath|Get-HomePath|Get-PowerFlowConfigPath|Invoke-PowerShellUpdate|Get-InstalledApplication|Uninstall-Application|Get-DiskHotspot|Measure-FolderSize|Move-ToTrash|Remove-PathPermanently|Test-TrashSupport|Test-ProtectedPath|Get-FileMode|Test-PermsSupported|Get-Umask|Set-Umask|Get-MachineInfo|Get-PowerSnapshot|Get-StabilityEvents|Get-FirmwareInfo|Set-CpuMaxState|Export-StabilityReport)\b' |
                    ForEach-Object { $_.Matches[0].Value } | Sort-Object -Unique
 
           $failed = $false

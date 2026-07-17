@@ -9,197 +9,205 @@
 # ==============================================================================
 
 
+# ── update-check plumbing ─────────────────────────────────────────────────────
+
+<#
+.SYNOPSIS
+    The newest published PowerFlow version, WITHOUT spending API quota.
+.DESCRIPTION
+    github.com/<repo>/releases/latest 302-redirects to .../tag/vX.Y.Z. Reading that
+    Location header is the website, not the API — no meaningful rate limit. The API is
+    only the fallback, and an anonymous-API 403 is precisely what silently killed the
+    v3.3.2 release, so avoiding it by default is not a micro-optimisation.
+#>
+function Get-LatestPowerFlowVersion {
+    try {
+        $resp = Invoke-WebRequest -Uri "https://github.com/$script:POWERFLOW_REPO/releases/latest" `
+                    -MaximumRedirection 0 -SkipHttpErrorCheck -TimeoutSec 3 -ErrorAction Stop
+        $loc = @($resp.Headers.Location)[0]
+        if ($loc -match '/tag/v?([\d][\d.]*)$') {
+            return [pscustomobject]@{ Version = [Version]$matches[1]; Url = "$loc" }
+        }
+    } catch {}
+
+    # Fallback: the API (rate-limited when anonymous — hence the cooldown handling
+    # in the caller).
+    $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$script:POWERFLOW_REPO/releases/latest" `
+               -TimeoutSec 3 -ErrorAction Stop
+    return [pscustomobject]@{ Version = [Version]($rel.tag_name -replace '^v'); Url = $rel.html_url }
+}
+
+# The snooze marker holds an ISO date; checks are suppressed until it passes.
+# (The old file held today's date and compared equality — "defer" could only ever
+# mean "until midnight".)
+function Test-UpdateSnoozed {
+    $f = Join-Path (Get-TempPath) '.powerflow_update_check'
+    if (-not (Test-Path $f)) { return $false }
+    try {
+        $until = [DateTime](Get-Content $f -ErrorAction Stop | Select-Object -First 1)
+        return ((Get-Date) -lt $until)
+    } catch { return $false }   # unreadable/legacy marker -> just check again
+}
+
+function Set-UpdateSnooze {
+    param([int]$Days = 1)
+    (Get-Date).Date.AddDays($Days).ToString('yyyy-MM-dd') |
+        Set-Content (Join-Path (Get-TempPath) '.powerflow_update_check')
+}
+
 function Check-PowerFlowUpdates {
     if (-not $script:CHECK_PROFILE_UPDATES) { return }
 
-    # Check if we've already prompted for this version today OR if we're in a rate limit cooldown
-    $updateCheckFile = Join-Path (Get-TempPath) '.powerflow_update_check'
     $rateLimitFile = Join-Path (Get-TempPath) '.powerflow_rate_limit'
-    $today = Get-Date -Format "yyyy-MM-dd"
 
-    # Check for existing rate limit cooldown
+    # Rate-limit cooldown from a previous 403 still active? Skip silently.
     if (Test-Path $rateLimitFile) {
         try {
-            $rateLimitData = Get-Content $rateLimitFile | ConvertFrom-Json
-            $cooldownUntil = [DateTime]$rateLimitData.cooldownUntil
-
-            if ((Get-Date) -lt $cooldownUntil) {
-                # Still in cooldown period, skip silently
-                return
-            } else {
-                # Cooldown expired, remove the file
-                Remove-Item $rateLimitFile -ErrorAction SilentlyContinue
-            }
-        } catch {
-            # If rate limit file is corrupted, remove it
+            if ((Get-Date) -lt [DateTime]((Get-Content $rateLimitFile | ConvertFrom-Json).cooldownUntil)) { return }
             Remove-Item $rateLimitFile -ErrorAction SilentlyContinue
-        }
+        } catch { Remove-Item $rateLimitFile -ErrorAction SilentlyContinue }
     }
 
-    # Check for daily update check
-    if (Test-Path $updateCheckFile) {
-        $lastCheck = Get-Content $updateCheckFile -ErrorAction SilentlyContinue
-        if ($lastCheck -eq $today) {
-            return # Already checked today
-        }
-    }
+    if (Test-UpdateSnoozed) { return }
 
     try {
-        # Check for PowerFlow updates with shorter timeout to fail fast
-        $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/$script:POWERFLOW_REPO/releases/latest" -TimeoutSec 3 -ErrorAction Stop
-        $latestVersion = [Version]($latestRelease.tag_name -replace '^v')
-        $currentVersion = [Version]$script:POWERFLOW_VERSION
+        $latest  = Get-LatestPowerFlowVersion
+        $current = [Version]$script:POWERFLOW_VERSION
 
-        if ($latestVersion -gt $currentVersion) {
-            Write-Host ""
-            Write-Host "🚀 PowerFlow update available: v$currentVersion → v$latestVersion" -ForegroundColor Cyan
-            Write-Host "   Notes: $($latestRelease.html_url)" -ForegroundColor DarkGray
-            Write-Host ""
-            Write-Host "   1) Install now" -ForegroundColor White
-            Write-Host "   2) Skip today" -ForegroundColor White
-            Write-Host "   3) Turn off update reminders" -ForegroundColor White
-            Write-Host ""
+        if ($latest.Version -le $current) {
+            Set-UpdateSnooze -Days 1     # up to date; don't ask the network again today
+            return
+        }
 
-            $choice = Read-Host "   Choice [1/2/3]"
+        # A profile load with REDIRECTED stdin (scripts, scp, tooling that forgot
+        # -NoProfile) has nobody to answer Read-Host — it would read EOF and fall
+        # through. Announce on one line, snooze the day, never block.
+        if ([Console]::IsInputRedirected) {
+            Write-Host "🚀 PowerFlow v$($latest.Version) is available (you have v$current) — run: powerflow-update" -ForegroundColor Cyan
+            Set-UpdateSnooze -Days 1
+            return
+        }
 
-            switch ($choice) {
-                "1" {
-                    powerflow-update
+        Write-Host ""
+        Write-Host "🚀 PowerFlow update available: v$current → v$($latest.Version)" -ForegroundColor Cyan
+        Write-Host "   Notes: $($latest.Url)" -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "   1) Install now" -ForegroundColor White
+        Write-Host "   2) Remind me tomorrow" -ForegroundColor White
+        Write-Host "   3) Snooze for a week" -ForegroundColor White
+        Write-Host "   4) Turn off update reminders" -ForegroundColor White
+        Write-Host ""
+
+        switch (Read-Host "   Choice [1/2/3/4]") {
+            "1" { powerflow-update -Yes }
+            "2" { Set-UpdateSnooze -Days 1; Write-Host "⏭️  Okay — tomorrow." -ForegroundColor Yellow }
+            "3" { Set-UpdateSnooze -Days 7; Write-Host "😴 Snoozed until $((Get-Date).Date.AddDays(7).ToString('MMM d'))." -ForegroundColor Yellow }
+            "4" {
+                $settingsPath = Join-Path $script:PowerFlowRoot "config\PowerFlow.settings.ps1"
+                if (Test-Path $settingsPath) {
+                    $raw = Get-Content $settingsPath -Raw
+                    $raw = $raw -replace '\$script:CHECK_PROFILE_UPDATES\s*=\s*\$true', '$script:CHECK_PROFILE_UPDATES = $false'
+                    Set-Content $settingsPath $raw -Encoding UTF8
                 }
-                "2" {
-                    Write-Host "⏭️  Skipping update check for today." -ForegroundColor Yellow
-                    $today | Set-Content $updateCheckFile
-                }
-                "3" {
-                    $settingsPath = Join-Path $script:PowerFlowRoot "config\PowerFlow.settings.ps1"
-                    if (Test-Path $settingsPath) {
-                        $raw = Get-Content $settingsPath -Raw
-                        $raw = $raw -replace '\$script:CHECK_PROFILE_UPDATES\s*=\s*\$true', '$script:CHECK_PROFILE_UPDATES = $false'
-                        Set-Content $settingsPath $raw -Encoding UTF8
-                    }
-                    $script:CHECK_PROFILE_UPDATES = $false
-                    $today | Set-Content $updateCheckFile
-                    Write-Host "🔕 Update reminders disabled. Run 'pwsh-reminders' to re-enable." -ForegroundColor Yellow
-                }
-                default {
-                    Write-Host "⏭️  Update skipped." -ForegroundColor DarkGray
-                }
+                $script:CHECK_PROFILE_UPDATES = $false
+                Write-Host "🔕 Update reminders disabled. Run 'pwsh-reminders' to re-enable." -ForegroundColor Yellow
             }
-        } else {
-            # Save successful check to avoid daily spam
-            $today | Set-Content $updateCheckFile
+            default { Set-UpdateSnooze -Days 1; Write-Host "⏭️  Skipped — I'll ask again tomorrow." -ForegroundColor DarkGray }
         }
     } catch {
-        # Handle different types of errors intelligently
-        $errorMessage = $_.Exception.Message
-
-        if ($errorMessage -match "403|rate.?limit|API.?limit" -or $_.Exception.Response.StatusCode -eq 403) {
-            # This is specifically a rate limit error
-            # Set a longer cooldown period (3 days) to avoid spam
-            $cooldownUntil = (Get-Date).AddDays(3).ToString("o")
-            $rateLimitData = @{
-                lastAttempt = (Get-Date).ToString("o")
-                cooldownUntil = $cooldownUntil
-                reason = "GitHub API rate limit"
-            }
-
+        if ($_.Exception.Message -match "403|rate.?limit" -or $_.Exception.Response.StatusCode -eq 403) {
+            # 403 = rate limited. Cool down for 3 days so a limited IP isn't hammered
+            # by every new shell.
             try {
-                $rateLimitData | ConvertTo-Json | Set-Content $rateLimitFile
-            } catch {
-                # If we can't write the cooldown file, just skip silently
-            }
-
-            # Show a one-time informative message
-            Write-Host "ℹ️  Update check temporarily disabled (GitHub API limit). Will retry in 3 days." -ForegroundColor DarkGray
-        } else {
-            # For other network errors (timeouts, DNS issues, etc.), fail completely silently
-            # This avoids spam when users have network issues or are offline
-            # Don't set any cooldown files - just skip this attempt
+                @{ lastAttempt = (Get-Date).ToString('o')
+                   cooldownUntil = (Get-Date).AddDays(3).ToString('o')
+                   reason = 'GitHub API rate limit' } | ConvertTo-Json | Set-Content $rateLimitFile
+            } catch {}
+            Write-Host "ℹ️  Update check paused (GitHub API limit). Will retry in 3 days." -ForegroundColor DarkGray
         }
+        # Anything else (offline, DNS, timeout): silent — a dead network should not
+        # make opening a shell noisy.
     }
 }
 
 <#
 .SYNOPSIS
-    Check for PowerFlow profile updates
+    powerflow-update — upgrade PowerFlow in place, the WHOLE tree.
 .DESCRIPTION
-    Checks GitHub repository for newer versions and offers to update
+    Downloads install.ps1 from the repo and runs it. The installer fetches the full
+    tree itself, recognises its own manifest (so an existing install is upgraded, not
+    interrogated), keeps the original pre-PowerFlow profile backup, and preserves
+    dependency ownership. Everything a real upgrade needs — because it IS the installer.
+
+    ⚠️ HISTORY, so nobody "simplifies" this back: the previous implementation
+    downloaded ONLY Microsoft.PowerShell_profile.ps1 and overwrote $PROFILE — a relic
+    of the pre-2.0 monolith. On the component layout that produced a NEW bootloader
+    loading OLD components, and since $script:POWERFLOW_VERSION lives in config/ (which
+    it never touched), the "updated" install still reported the old version and
+    re-prompted every day, forever.
 .EXAMPLE
-    powerflow-update     # Check for updates interactively
+    powerflow-update          # confirm, then upgrade
+    powerflow-update -Yes     # no questions (the startup prompt uses this)
 #>
 function powerflow-update {
+    param([switch]$Yes)
+
     Write-Host "🔍 Checking for PowerFlow updates..." -ForegroundColor Cyan
 
     try {
-        # Get latest release info from GitHub
-        $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/${script:POWERFLOW_REPO}/releases/latest" -TimeoutSec 10 -ErrorAction Stop
-        $latestVersion = $latestRelease.tag_name -replace '^v', ''
-        $currentVersion = $script:POWERFLOW_VERSION
+        $latest  = Get-LatestPowerFlowVersion
+        $current = [Version]$script:POWERFLOW_VERSION
 
-        Write-Host "📦 Current version: v${currentVersion}" -ForegroundColor Green
-        Write-Host "🌐 Latest version: v${latestVersion}" -ForegroundColor Green
+        Write-Host "📦 Current: v$current   🌐 Latest: v$($latest.Version)" -ForegroundColor Green
 
-        # Compare versions
-        if ([Version]$latestVersion -gt [Version]$currentVersion) {
-            Write-Host ""
-            Write-Host "🚀 PowerFlow update available!" -ForegroundColor Yellow
-            Write-Host "📍 Release notes: $($latestRelease.html_url)" -ForegroundColor DarkGray
-            Write-Host ""
-            Write-Host "Changes in v${latestVersion}:" -ForegroundColor Cyan
-
-            # Show release notes (first 500 chars)
-            $releaseNotes = $latestRelease.body
-            if ($releaseNotes.Length -gt 500) {
-                $releaseNotes = $releaseNotes.Substring(0, 500) + "..."
-            }
-            Write-Host $releaseNotes -ForegroundColor DarkGray
-            Write-Host ""
-
-            $choice = Read-Host "🔄 Update PowerFlow now? (y/n)"
-
-            if ($choice -eq 'y' -or $choice -eq 'Y') {
-                Write-Host "📦 Updating PowerFlow..." -ForegroundColor Yellow
-
-                try {
-                    # Backup current profile
-                    $backupPath = "$PROFILE.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-                    Copy-Item $PROFILE $backupPath -Force
-                    Write-Host "💾 Backed up current profile to: $backupPath" -ForegroundColor Green
-
-                    # Download new profile
-                    $newProfileUrl = "https://raw.githubusercontent.com/${script:POWERFLOW_REPO}/main/Microsoft.PowerShell_profile.ps1"
-                    Invoke-RestMethod -Uri $newProfileUrl -OutFile $PROFILE
-
-                    Write-Host "✅ PowerFlow updated successfully!" -ForegroundColor Green
-                    Write-Host "🔄 Restart PowerShell or run '. `$PROFILE' to load the new version" -ForegroundColor Cyan
-
-                } catch {
-                    Write-Host "❌ Update failed: $($_.Exception.Message)" -ForegroundColor Red
-                    Write-Host "🔄 Restoring from backup..." -ForegroundColor Yellow
-
-                    if (Test-Path $backupPath) {
-                        Copy-Item $backupPath $PROFILE -Force
-                        Write-Host "✅ Profile restored from backup" -ForegroundColor Green
-                    }
-                }
-            } else {
-                Write-Host "⏭️  Update cancelled" -ForegroundColor Yellow
-            }
-
-        } elseif ([Version]$latestVersion -eq [Version]$currentVersion) {
+        if ($latest.Version -eq $current) {
             Write-Host "✅ PowerFlow is up to date!" -ForegroundColor Green
-        } else {
-            Write-Host "🚀 You're running a development version (v${currentVersion} > v${latestVersion})" -ForegroundColor Cyan
+            return
+        }
+        if ($latest.Version -lt $current) {
+            Write-Host "🚀 You're running a development version (v$current > v$($latest.Version))" -ForegroundColor Cyan
+            return
         }
 
+        Write-Host "📍 Release notes: $($latest.Url)" -ForegroundColor DarkGray
+
+        if (-not $Yes) {
+            if ((Read-Host "🔄 Update PowerFlow to v$($latest.Version) now? (y/n)") -notin @('y', 'Y')) {
+                Write-Host "⏭️  Update cancelled" -ForegroundColor Yellow
+                return
+            }
+        }
+
+        Write-Host "📦 Updating PowerFlow (full tree, via the installer)..." -ForegroundColor Yellow
+
+        $tmp = Join-Path (Get-TempPath) "powerflow-update-$(Get-Random)"
+        New-Item -ItemType Directory -Path $tmp -Force | Out-Null
+        try {
+            $installer = Join-Path $tmp 'install.ps1'
+            Invoke-RestMethod -Uri "https://raw.githubusercontent.com/$script:POWERFLOW_REPO/main/install.ps1" `
+                -OutFile $installer -TimeoutSec 30 -ErrorAction Stop
+
+            # A CHILD pwsh, -NoProfile: the installer must not run inside the very
+            # session whose files it is replacing.
+            & pwsh -NoProfile -File $installer -Yes -NoDeps
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "❌ The installer reported failure (exit $LASTEXITCODE). Nothing to roll back — it backs itself up." -ForegroundColor Red
+                return
+            }
+
+            Write-Host ""
+            Write-Host "✅ PowerFlow updated to v$($latest.Version)!" -ForegroundColor Green
+            Write-Host "🔄 Restart your shell (or run:  . `$PROFILE ) to load it" -ForegroundColor Cyan
+        }
+        finally {
+            Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        }
     } catch {
-        if ($_.Exception.Message -match "404") {
-            Write-Host "❌ PowerFlow repository not found. Check repository URL." -ForegroundColor Red
-        } elseif ($_.Exception.Message -match "403") {
+        if ($_.Exception.Message -match "403") {
             Write-Host "❌ GitHub API rate limit exceeded. Try again later." -ForegroundColor Red
         } else {
-            Write-Host "⚠️  Could not check for updates: $($_.Exception.Message)" -ForegroundColor Yellow
-            Write-Host "🌐 Check manually: https://github.com/${script:POWERFLOW_REPO}/releases" -ForegroundColor DarkGray
+            Write-Host "⚠️  Could not update: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "🌐 Manual route: https://github.com/$script:POWERFLOW_REPO/releases" -ForegroundColor DarkGray
         }
     }
 }

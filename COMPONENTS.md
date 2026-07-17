@@ -40,6 +40,7 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `adapters/pwsh-update.ps1` | `Invoke-PowerShellUpdate` | winget / MSI / Store | apt / snap / dotnet-tool |
 | `adapters/apps.ps1` | `Get-InstalledApplication`, `Uninstall-Application`, `Get-DiskHotspot`, `Measure-FolderSize`, `Move-ToTrash`, `Remove-PathPermanently`, `Test-TrashSupport`, `Test-ProtectedPath` | registry + Scoop; Recycle Bin | dpkg / rpm / pacman; `gio trash` |
 | `adapters/perms.ps1` | `Get-FileMode`, `Test-PermsSupported`, `Get-Umask`, `Set-Umask` | **returns `$null`** — Windows has ACLs, not POSIX mode bits, and inventing a fake `755` would teach something false | `stat(1)` for the mode; **libc `umask(2)` via P/Invoke** for the umask³ |
+| `adapters/health.ps1` | `Get-MachineInfo`, `Get-PowerSnapshot`, `Get-StabilityEvents`, `Get-FirmwareInfo`, `Set-CpuMaxState`, `Export-StabilityReport` | `powercfg` (hex decoded, stock plans by GUID), WHEA/WER via `Get-WinEvent`, CIM, minidumps | cpufreq governor + `scaling_max_freq`, kernel MCE via `journalctl`, `/sys/class/dmi/id` (no root needed), `/var/crash` |
 
 ### Command bindings — loaded **after** components
 
@@ -68,6 +69,14 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 > single command and **cannot carry arguments**, so `alias ll='ls -la'` — the most common
 > thing anyone does with an alias in bash — is impossible with it. PowerFlow compiles
 > bash-style aliases into functions instead, which can.
+>
+> ⁷ **`pc-cap` records before it changes — the order is the feature.** The prior plan and
+> cap are written to `~/.powerflow-power-state.json` *before* anything is modified; a second
+> `pc-cap` refuses while a record exists (100→85→70 must not make "restore" mean 85);
+> restore verifies by re-querying and only then deletes the record; and `pc-whoami` banners
+> for as long as the record exists, so an abandoned cap cannot go unnoticed. Born from a
+> real incident where a "temporary" 85% cap was left behind with no record of the original.
+> The gate now also forbids `powercfg`/`Get-CimInstance`/`Get-WinEvent` in `components/`.
 >
 > ⁶ **`mv` is overloaded by argument count, deliberately.** One argument **cuts** (the
 > PowerFlow cut/paste workflow: `mv <file>` … `mv-t`). Two or more is a **real move**, because
@@ -137,6 +146,7 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `components/system/shutdown.ps1` | System | `shutdown`, `s` |
 | `components/system/path.ps1` | System | `set-path` |
 | `components/system/apps.ps1` | System | `installed-apps`, `i-a` (alias), `disk-big`, `d-b` (alias), `Get-SizeBands`, `Convert-ToBytes`, `Format-Size`, `Format-Age`, `Resolve-SizeRange`, `Show-SizeBandMenu`, `Show-AppPicker`, `Show-BandOverview`, `Invoke-AppAction` |
+| `components/system/health.ps1` | System | `pc-whoami` (+ `-power`, `-crashes [-export]`, `-bios`, `-days N`), `pc-cap`⁷ — machine vitals + a CPU cap with guaranteed restoration. Design: [docs/plan/pc-whoami/](docs/plan/pc-whoami/README.md) |
 | `components/help/menu.ps1` | Help | `pwsh-h` |
 
 > ¹ **Rebound on Linux.** `platform/linux/bindings.ps1` removes these so the GNU

@@ -162,9 +162,30 @@ install_pwsh_tarball() {
     info "⬇️  Installing PowerShell from the official release archive..."
     install_pwsh_prereqs
 
-    tag="$(curl -fsSL https://api.github.com/repos/PowerShell/PowerShell/releases/latest \
-            | grep -m1 '"tag_name"' | cut -d'"' -f4)"
-    [[ -n "$tag" ]] || { err "Could not determine the latest PowerShell release."; return 1; }
+    # Finding the latest release WITHOUT dying to rate limits. api.github.com 403s
+    # anonymous calls from shared CI runner IPs — that exact 403 killed the v3.3.2
+    # release on the Arch leg. Three layers:
+    #
+    #   1. The redirect trick: github.com/…/releases/latest 302s to …/tag/vX.Y.Z.
+    #      That is the website, not the API — no meaningful rate limit.
+    #   2. The API, authenticated if a token is around (CI passes GITHUB_TOKEN).
+    #   3. A pinned known-good version, loudly, so an outage degrades instead of aborts.
+    tag="$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+            https://github.com/PowerShell/PowerShell/releases/latest 2>/dev/null \
+            | sed 's|.*/tag/||')"
+
+    if [[ ! "$tag" =~ ^v[0-9] ]]; then
+        auth=()
+        [[ -n "${GITHUB_TOKEN:-}" ]] && auth=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+        tag="$(curl -fsSL ${auth[@]+"${auth[@]}"} \
+                https://api.github.com/repos/PowerShell/PowerShell/releases/latest \
+                | grep -m1 '"tag_name"' | cut -d'"' -f4)"
+    fi
+
+    if [[ ! "$tag" =~ ^v[0-9] ]]; then
+        tag="v7.5.2"
+        warn "Could not query the latest PowerShell release (rate limit or outage) — falling back to ${tag}."
+    fi
     ver="${tag#v}"
     url="https://github.com/PowerShell/PowerShell/releases/download/${tag}/powershell-${ver}-${libc}-${arch}.tar.gz"
 

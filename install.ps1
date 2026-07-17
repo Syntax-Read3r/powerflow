@@ -303,6 +303,16 @@ if (-not $NoDeps) {
         }
     }
 }
+else {
+    # -NoDeps means "install nothing" — it must NOT mean "forget who owns what".
+    # The manifest below is written either way, and writing it with an empty
+    # dependencies list would erase ownership: uninstall would then keep every tool
+    # forever. powerflow-update upgrades with -NoDeps, so this path is the NORMAL
+    # upgrade path, not an edge case.
+    if ($alreadyInstalled) {
+        try { $dependencies = @((Get-Content $manifestPath -Raw | ConvertFrom-Json).dependencies) } catch {}
+    }
+}
 
 # ── Manifest ──────────────────────────────────────────────────────────────────
 # The uninstaller reads this. Without it, uninstall is guesswork — which is how
