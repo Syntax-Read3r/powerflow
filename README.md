@@ -43,12 +43,30 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 - **Interactive Branch Manager**: Pick, create, delete branches with visual interface
 - **GitHub Integration**: Browse, clone, and manage your repositories with token security
 
-### ✂️ Cut-and-Paste File Operations
+### ✂️ File Operations That Speak Bash
 
-- **Smart File Moving**: `mv filename` cuts files, `mv-t` pastes anywhere
-- **Fuzzy File Search**: Find files with partial names and patterns
+- **Real GNU flags**: `rm -rf`, `mkdir -p a/b/c`, `touch -c`, `ls -la` — your muscle
+  memory just works, on Windows too
+- **Move or cut**: `mv old.txt new.txt` moves like bash; `mv filename` cuts, `mv-t` pastes
 - **Interactive Rename**: Beautiful interface for renaming files
-- **Safety Checks**: Prevents accidental deletion and data loss
+- **Safety Checks**: `rm <dir>` without `-r` refuses, like GNU — a typo'd path should
+  not take a tree with it
+
+### 🎓 It Teaches You Linux While You Use It
+
+- **`lesson <command>` / `l <command>`**: learn any command — runs nothing, always safe.
+  24 lessons across 7 topics, with tab-completion
+- **Brother commands**: `changemode` → `chmod`, `findtext` → `grep`, `dirsize` → `du` and
+  20 more — same flags, same result, and each prints the real command it ran
+- **`perms <path>`**: file permissions with every column actually labelled
+- **`linux-lessons full|hint|off`**: teaching is a phase, not a permanent state
+
+### 🖥️ Machine Health at a Glance
+
+- **`pc-whoami`**: power plan, CPU cap, hardware errors, crash dumps, BIOS age — one
+  screen, no hex, no GUIDs. Custom/OEM power plans get flagged
+- **`pc-cap 85` / `pc-cap restore`**: cap CPU speed with **guaranteed restoration** —
+  the prior state is recorded to disk before anything changes
 
 ### 🎨 Beautiful Interface
 
@@ -85,8 +103,16 @@ git-l              # Beautiful log viewer with actions
 # GitHub repo browser
 gh-l               # Browse your repos with activity stats
 
+# Learn Linux as you go
+l grep             # a lesson on grep — runs nothing, always safe
+perms ward-a       # permissions with every column explained
+changemode 775 dir # runs chmod 775, and tells you it did
+
+# Machine health
+pc-whoami          # power plan, CPU cap, hardware errors, BIOS age — one screen
+
 # Check for updates
-powerflow-update   # Built-in update system
+powerflow-update   # Full-tree update via the real installer
 ```
 
 ## ⚡ Quick Installation
@@ -352,6 +378,8 @@ PowerFlow includes automated release workflows:
 | `nav create-b <name>` | Create bookmark from current directory   |
 | `nav delete-b <name>` | Delete bookmark with confirmation        |
 | `nav list`            | Interactive bookmark manager             |
+| `nav roots`           | Show where nav searches (Win: `~/Code` · Linux: `~`) |
+| `nav roots add /srv`  | Also search `/srv` (or `/opt`, `/mnt/data`, …) |
 | `..`, `...`, `....`   | Quick parent directory navigation        |
 
 ### Enhanced Git Workflow
@@ -370,17 +398,48 @@ PowerFlow includes automated release workflows:
 
 ### File Operations
 
+Single dash is Linux's, long dash is PowerFlow's: `ls -t` sorts by time (GNU),
+`ls --tree` is PowerFlow's tree view. On Linux the real GNU coreutils stay untouched —
+PowerFlow's versions live on as `del` and `mvf`.
+
 | Command             | Description                                        |
 | ------------------- | -------------------------------------------------- |
-| `mv <file>`         | Smart cut file for moving                          |
+| `mv <src> <dst>`    | Move or rename, like bash (`-f` force, `-n` never overwrite) |
+| `mv <a> <b> <dir>/` | Move several files into a directory                |
+| `mv <file>`         | ✂️ Cut for moving (1 arg = cut, 2+ = move)          |
 | `mv-t`              | Paste cut file                                     |
 | `rn [file]`         | Interactive file rename                            |
 | `rm`                | fzf picker, then confirm before deleting           |
-| `rm <file>`         | Remove a file or directory (recursive)             |
-| `rm <f1> <f2>`      | Remove multiple targets in one command             |
+| `rm -rf <dir>`      | Recursive force remove — bash muscle memory works  |
 | `rm *.log`          | Wildcard removal — lists every match, one confirm  |
-| `rm <file> -f`      | Force remove (skip the confirmation prompt)        |
-| `ls -t`             | Tree view with smart depth                         |
+| `mkdir -p a/b/c`    | Create the whole chain                             |
+| `touch -c <file>`   | Bump timestamp only if it exists — never truncates |
+| `ls -la` / `ls -t`  | Real GNU flags (list all / sort by time)           |
+| `ls --tree`         | PowerFlow's tree view with smart depth             |
+
+### Learn Linux While You Use It
+
+| Command                | Description                                      |
+| ---------------------- | ------------------------------------------------ |
+| `lesson <command>`     | Learn any command — runs nothing, always safe    |
+| `l grep` · `l rm`      | Shorthand; tab-completes commands and topics     |
+| `lesson permissions`   | Every lesson in a topic (7 topics, 24 lessons)   |
+| `perms <path>`         | Permissions with every column labelled           |
+| `changemode 775 <dir>` | Brother of `chmod` — same flags, teaches the real command |
+| `dirsize -sh *`        | Brother of `du` (also: `diskfree`, `listports`, `systemlogs`, …) |
+| `defaultmode 022`      | The umask, with what it actually produces        |
+| `linux-lessons off`    | Hide the teaching (`full` · `hint` · `off`)      |
+
+### Machine Health
+
+| Command              | Description                                       |
+| -------------------- | ------------------------------------------------- |
+| `pc-whoami`          | Vitals: power plan, CPU cap, HW errors, BIOS age  |
+| `pc-whoami -power`   | Every power plan, caps decoded — no hex, no GUIDs |
+| `pc-whoami -crashes` | Hardware errors, bugchecks, dumps (`-export` bundles the evidence) |
+| `pc-whoami -bios`    | Firmware version, age, board model                |
+| `pc-cap 85`          | Cap CPU speed — prior state recorded for safe undo |
+| `pc-cap restore`     | Put back exactly what was recorded                |
 
 ### System
 
@@ -416,8 +475,12 @@ deleting them destroys every container and volume inside.
 | Command              | Description                      |
 | -------------------- | -------------------------------- |
 | `powerflow-version`  | Show PowerFlow version info      |
-| `powerflow-update`   | Check for PowerFlow updates     |
+| `powerflow-update`   | Full-tree update via the real installer |
 | `Get-PowerFlowVersion` | Detailed version information   |
+
+On startup, PowerFlow checks for updates once a day (via the `releases/latest`
+redirect — no API quota) and offers: **install now · remind me tomorrow · snooze a
+week · turn off**. Piped/non-interactive shells get one quiet line, never a prompt.
 
 ### Terminal Management
 

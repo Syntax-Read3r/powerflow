@@ -93,3 +93,14 @@ resolve to `Application` (a native binary) — it will fail if you shadow one.
 `git-rl` owns the version bump. Never hand-edit `$script:POWERFLOW_VERSION`.
 New feature → minor; breaking change → major. Update `CHANGELOG.md` in the same change,
 and add a session log under `docs/log/`. See `docs/instructions.md`.
+
+**Before every release, work through `docs/release-checklist.md` top to bottom and say
+so.** Every item on it exists because skipping it shipped (or nearly shipped) a real
+failure — including a tag cut on uncommitted work, a README that documented behaviour a
+release had reversed, and two releases whose CI failed silently and sat unpublished.
+The two items most often skipped, so stated here too:
+
+1. **The tag points at HEAD** — everything belonging to the release must be committed
+   *before* `git-rl` runs.
+2. **The release is not done until `gh release view vX.Y.Z` shows it published with
+   assets.** A pushed tag with failed CI is not a release, and it fails silently.
