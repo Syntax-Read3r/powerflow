@@ -160,7 +160,12 @@ if ($Prefix -and (Test-Path (Join-Path $Prefix 'components'))) {
     $source = $Prefix
     Write-Host "📦 Installing from: $source" -ForegroundColor White
 }
-elseif (Test-Path (Join-Path $PSScriptRoot 'components')) {
+elseif ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot 'components'))) {
+    # $PSScriptRoot is EMPTY under `irm … | iex` — there is no script file. Without
+    # the guard, Join-Path throws "Cannot bind argument to parameter 'Path' because
+    # it is an empty string" and the documented Windows one-liner install dies right
+    # after printing the install location. The same bug family as the Linux
+    # `curl | bash` prompts: the piped path was never exercised.
     $source = $PSScriptRoot
     Write-Host "📦 Installing from: $source (local checkout)" -ForegroundColor White
 }

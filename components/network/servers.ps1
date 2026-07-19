@@ -151,7 +151,10 @@ function Connect-PFServer {
     srv add <name> <user@host>   save a connection — tested before saving
     srv add <name> <user@host:2222>   non-standard port
     srv rm <name> [-f]           forget a connection
+    srv rename <old> <new>       rename — history and status travel with it
     srv list                     every server with its status
+
+    Inside the picker:  Enter connects · ctrl-d deletes · ctrl-r renames
 .EXAMPLE
     srv add proxmox munya@192.168.8.247
     srv proxmox
@@ -257,6 +260,33 @@ function srv {
             return
         }
 
+        'rename' {
+            $old = $Param1; $new = $Param2
+            if (-not $old -or -not $new) {
+                Write-Host "❌ Usage:  srv rename <old> <new>" -ForegroundColor Red
+                return
+            }
+            if (-not $servers.ContainsKey($old)) {
+                Write-Host "❌ No server called '$old'.  srv list" -ForegroundColor Red
+                return
+            }
+            if ($servers.ContainsKey($new)) {
+                Write-Host "❌ '$new' already exists → $($servers[$new].user)@$($servers[$new].host)" -ForegroundColor Red
+                return
+            }
+            if ($new -in @('add', 'rm', 'remove', 'rename', 'list', 'ls', 'help') -or $new -cnotmatch '^[a-z0-9][\w-]*$') {
+                Write-Host "❌ Names are lowercase letters, digits, dashes — and not a srv subcommand." -ForegroundColor Red
+                return
+            }
+            # Re-key only. The record — host, port, addedAt, lastSeen — travels intact,
+            # which is the whole reason rename exists instead of rm + add.
+            $servers[$new] = $servers[$old]
+            $servers.Remove($old)
+            Save-PFServers $servers
+            Write-Host "✅ $old → $new" -ForegroundColor Green
+            return
+        }
+
         { $_ -in 'list', 'ls' } {
             if ($servers.Count -eq 0) {
                 Write-Host "ℹ️  No servers yet.  srv add <name> <user@host>" -ForegroundColor DarkGray
@@ -314,36 +344,69 @@ function srv {
         return
     }
 
-    $statuses = Get-PFServerStatuses $servers
-    $rank = @{ online = 0; 'no-ssh' = 1; offline = 2 }
-    $lines = $servers.GetEnumerator() |
-        Sort-Object { $rank[$statuses[$_.Key]] }, Key |
-        ForEach-Object {
-            $s = $_.Value
-            "{0}`t{1}@{2}{3}`t{4}" -f $_.Key, $s.user, $s.host,
-                $(if ([int]$s.port -ne 22) { ":$($s.port)" }), (Format-PFServerStatus $statuses[$_.Key] $s)
+    Show-PFServerPicker
+}
+
+# The picker is a MANAGER, not just a launcher: Enter connects, ctrl-d deletes,
+# ctrl-r renames — fzf's --expect reports which key ended the selection, and after a
+# delete or rename the picker reopens with fresh statuses.
+function Show-PFServerPicker {
+    while ($true) {
+        $servers = Get-PFServers
+        if ($servers.Count -eq 0) { Write-Host "ℹ️  No servers left.  srv add <name> <user@host>" -ForegroundColor DarkGray; return }
+
+        $statuses = Get-PFServerStatuses $servers
+        $rank = @{ online = 0; 'no-ssh' = 1; offline = 2 }
+        $lines = $servers.GetEnumerator() |
+            Sort-Object { $rank[$statuses[$_.Key]] }, Key |
+            ForEach-Object {
+                $s = $_.Value
+                "{0}`t{1}@{2}{3}`t{4}" -f $_.Key, $s.user, $s.host,
+                    $(if ([int]$s.port -ne 22) { ":$($s.port)" }), (Format-PFServerStatus $statuses[$_.Key] $s)
+            }
+
+        # --expect makes fzf's FIRST output line the key that was pressed ('' = Enter),
+        # and the SECOND the selection.
+        $out = @($lines | fzf `
+            --expect=ctrl-d,ctrl-r `
+            --delimiter "`t" `
+            --reverse --border=rounded --height=40% `
+            --prompt="🌐 Connect: " `
+            --header="Enter connect · ctrl-d delete · ctrl-r rename · Esc close" `
+            --header-first `
+            --color="header:bold:cyan,prompt:bold:green,border:cyan")
+
+        if ($out.Count -lt 2) { return }   # Esc / nothing picked
+        $key  = $out[0]
+        $name = ($out[1] -split "`t")[0]
+
+        switch ($key) {
+            'ctrl-d' {
+                if ((Read-Host "🗑️  Forget '$name' ($($servers[$name].user)@$($servers[$name].host))? [y/N]") -in @('y', 'Y')) {
+                    srv rm $name -f
+                }
+                continue   # back to the picker with fresh state
+            }
+            'ctrl-r' {
+                $new = Read-Host "✏️  New name for '$name'"
+                if ($new) { srv rename $name $new }
+                continue
+            }
+            default {
+                if ($statuses[$name] -ne 'online') {
+                    Write-Host "⛔ $name is $(if ($statuses[$name] -eq 'no-ssh') { 'up, but ssh is not answering' } else { 'offline — it may need turning on' })." -ForegroundColor Yellow
+                    if ((Read-Host "   Try to connect anyway? [y/N]") -notin @('y', 'Y')) { return }
+                }
+                Connect-PFServer $name $servers[$name]
+                return
+            }
         }
-
-    $sel = $lines | fzf `
-        --delimiter "`t" `
-        --reverse --border=rounded --height=40% `
-        --prompt="🌐 Connect: " `
-        --header="$($servers.Count) server(s) — Enter connects · Esc cancels" `
-        --header-first `
-        --color="header:bold:cyan,prompt:bold:green,border:cyan"
-
-    if (-not $sel) { Write-Host "❌ Cancelled" -ForegroundColor DarkGray; return }
-
-    $name = ($sel -split "`t")[0]
-    if ($statuses[$name] -ne 'online') {
-        Write-Host "⛔ $name is $(if ($statuses[$name] -eq 'no-ssh') { 'up, but ssh is not answering' } else { 'offline — it may need turning on' })." -ForegroundColor Yellow
-        if ((Read-Host "   Try to connect anyway? [y/N]") -notin @('y', 'Y')) { return }
     }
-    Connect-PFServer $name $servers[$name]
 }
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
-Register-PFCommand -Name 'srv'      -Section '🌐 SSH SERVERS' -Synopsis 'pick a server (live status, online first) and connect' -Example 'srv · srv proxmox'
-Register-PFCommand -Name 'srv add'  -Section '🌐 SSH SERVERS' -Synopsis 'save a connection by name - tested before saving' -Example 'srv add proxmox munya@192.168.8.247'
-Register-PFCommand -Name 'srv rm'   -Section '🌐 SSH SERVERS' -Synopsis 'forget a connection (-f skips the confirm)'
-Register-PFCommand -Name 'srv list' -Section '🌐 SSH SERVERS' -Synopsis 'every server with online / ssh-down / offline status'
+Register-PFCommand -Name 'srv'        -Section '🌐 SSH SERVERS' -Synopsis 'picker: Enter connects, ctrl-d deletes, ctrl-r renames' -Example 'srv · srv proxmox'
+Register-PFCommand -Name 'srv add'    -Section '🌐 SSH SERVERS' -Synopsis 'save a connection by name - tested before saving' -Example 'srv add proxmox munya@192.168.8.247'
+Register-PFCommand -Name 'srv rm'     -Section '🌐 SSH SERVERS' -Synopsis 'forget a connection (-f skips the confirm)'
+Register-PFCommand -Name 'srv rename' -Section '🌐 SSH SERVERS' -Synopsis 'rename a server - history and status travel with it' -Example 'srv rename lab proxmox'
+Register-PFCommand -Name 'srv list'   -Section '🌐 SSH SERVERS' -Synopsis 'every server with online / ssh-down / offline status'

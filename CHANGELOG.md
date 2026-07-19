@@ -9,7 +9,38 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [3.5.0] - Unreleased
+## [3.6.0] - 2026-07-19
+
+### Fixed
+
+- 🚨 **The documented Windows install was broken.** `irm …/install.ps1 | iex` died with
+  *"Cannot bind argument to parameter 'Path' because it is an empty string"* right after
+  printing the install location. Under `iex` there is **no script file**, so
+  `$PSScriptRoot` is empty, and the local-checkout probe fed that emptiness to
+  `Join-Path`. Guarded — a no-file context now falls through to the download path, which
+  is what the one-liner always meant. Reproduced against the published v3.5.0 asset in a
+  sandboxed `$PROFILE`; verified fixed the same way (download → full tree → manifest).
+  The release checklist gains the Windows twin of the `curl | bash` item: the piped form
+  of an installer is the *documented* form, and must be exercised as such.
+
+### Added
+
+- 🌐 **The `srv` picker is now a manager, not just a launcher.**
+
+  ```
+  Enter    connect          ctrl-d   delete (confirms first)
+  ctrl-r   rename           Esc      close
+  ```
+
+  After a delete or rename the picker reopens with fresh statuses. And
+  **`srv rename <old> <new>`** exists as a command too — the record travels intact
+  (host, port, added date, **last seen**), which is the whole reason rename beats
+  `rm` + `add`: re-adding would re-probe and lose the history that tells you when an
+  offline server was last alive.
+
+---
+
+## [3.5.0] - 2026-07-19
 
 > 📖 **pwsh-h is no longer a hand-drawn wall — it is generated, browsable, and cannot
 > drift from the code.** Plus: 🌐 **`srv` — named SSH connections with live status.**

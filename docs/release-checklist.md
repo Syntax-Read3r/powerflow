@@ -45,6 +45,11 @@ nobody relitigates the item.**
 - [ ] **Anything that prompts**: run it with **stdin redirected** (`</dev/null`). No
   `Read-Host`/`read` may hang or mis-answer in a pipe.
   *Incident: `curl | bash` upgrades could never succeed — Read-Host read EOF and cancelled; the login-shell `read` made a SUCCESSFUL install exit 1.*
+- [ ] **The Windows one-liner** (`irm … | iex`): run `install.ps1` as an iex-equivalent
+  scriptblock — `& ([scriptblock]::Create((Get-Content install.ps1 -Raw))) -Yes -NoDeps`
+  with `$PROFILE` redirected to a sandbox. Under `iex` there is **no script file**, so
+  `$PSScriptRoot` is empty — any unguarded `Join-Path $PSScriptRoot …` kills the install.
+  *Incident: v3.5.0's published install.ps1 died on exactly that, right after printing the install location. The documented Windows install had never been exercised in its piped form.*
 - [ ] **Anything that changes state**: verify by reading the state back, and verify the
   undo path restores it.
   *Incident: `touch` truncated existing files to zero bytes; a "temporary" CPU cap was left behind with no record.*
