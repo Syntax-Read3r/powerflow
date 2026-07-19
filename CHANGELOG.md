@@ -50,7 +50,7 @@ All notable changes to PowerFlow will be documented in this file.
 - 🌐 **`srv` — servers by name, not by memorised IP.**
 
   ```
-  srv add proxmox munya@192.168.8.247    tested before saving
+  srv add proxmox you@192.168.1.50    tested before saving
   srv proxmox                            connect by name
   srv                                    fzf picker, online servers first
   srv list · srv rm <name>

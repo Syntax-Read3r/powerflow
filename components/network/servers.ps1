@@ -4,7 +4,7 @@
 # Domain   : Network
 # File     : components/network/servers.ps1
 # Purpose  : Named SSH connections with live online/offline status —
-#            `srv proxmox` instead of `ssh munya@192.168.8.247`
+#            `srv proxmox` instead of `ssh you@192.168.1.50`
 # Functions: srv, Test-ServerOnline, Get-PFServers, Save-PFServers
 # Depends  : Get-HomePath (locations adapter), fzf (optional), ssh (client)
 # ==============================================================================
@@ -156,7 +156,7 @@ function Connect-PFServer {
 
     Inside the picker:  Enter connects · ctrl-d deletes · ctrl-r renames
 .EXAMPLE
-    srv add proxmox munya@192.168.8.247
+    srv add proxmox you@192.168.1.50
     srv proxmox
 #>
 function srv {
@@ -174,7 +174,7 @@ function srv {
             $name = $Param1; $target = $Param2
             if (-not $name -or -not $target) {
                 Write-Host "❌ Usage:  srv add <name> <user@host[:port]>" -ForegroundColor Red
-                Write-Host "   e.g.    srv add proxmox munya@192.168.8.247" -ForegroundColor DarkGray
+                Write-Host "   e.g.    srv add proxmox you@192.168.1.50" -ForegroundColor DarkGray
                 return
             }
             if ($name -in @('add', 'rm', 'remove', 'list', 'ls', 'help')) {
@@ -334,7 +334,7 @@ function srv {
     # ── bare srv: the picker ──────────────────────────────────────────────────
     if ($servers.Count -eq 0) {
         Write-Host "ℹ️  No servers yet." -ForegroundColor DarkGray
-        Write-Host "   srv add proxmox munya@192.168.8.247" -ForegroundColor Cyan
+        Write-Host "   srv add proxmox you@192.168.1.50" -ForegroundColor Cyan
         return
     }
 
@@ -406,7 +406,7 @@ function Show-PFServerPicker {
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
 Register-PFCommand -Name 'srv'        -Section '🌐 SSH SERVERS' -Synopsis 'picker: Enter connects, ctrl-d deletes, ctrl-r renames' -Example 'srv · srv proxmox'
-Register-PFCommand -Name 'srv add'    -Section '🌐 SSH SERVERS' -Synopsis 'save a connection by name - tested before saving' -Example 'srv add proxmox munya@192.168.8.247'
+Register-PFCommand -Name 'srv add'    -Section '🌐 SSH SERVERS' -Synopsis 'save a connection by name - tested before saving' -Example 'srv add proxmox you@192.168.1.50'
 Register-PFCommand -Name 'srv rm'     -Section '🌐 SSH SERVERS' -Synopsis 'forget a connection (-f skips the confirm)'
 Register-PFCommand -Name 'srv rename' -Section '🌐 SSH SERVERS' -Synopsis 'rename a server - history and status travel with it' -Example 'srv rename lab proxmox'
 Register-PFCommand -Name 'srv list'   -Section '🌐 SSH SERVERS' -Synopsis 'every server with online / ssh-down / offline status'

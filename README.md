@@ -63,7 +63,7 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 
 ### 🌐 Servers by Name, Not by IP
 
-- **`srv proxmox`** instead of `ssh munya@192.168.8.247` — connections saved by name
+- **`srv proxmox`** instead of `ssh you@192.168.1.50` — connections saved by name
 - **Live status in the picker**: `✅ online` · `🟡 host up, ssh not answering` ·
   `⛔ offline · last seen Jul 17` — so you know to press the power button, not retry
 - **Tested before saving**: `srv add` probes the SSH port first, catching typo'd IPs

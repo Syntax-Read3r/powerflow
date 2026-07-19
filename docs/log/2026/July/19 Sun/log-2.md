@@ -1,6 +1,6 @@
 # Log 2 — July 19, 2026 — srv: named SSH connections (joins 3.5.0)
 
-**User request:** `ssh munya@192.168.8.247` is hard to recall — wanted servers saved by
+**User request:** `ssh you@192.168.1.50` is hard to recall — wanted servers saved by
 name, a ping test before saving, and an online/offline flag at pick time so an offline
 server reads as "go turn it on", not a connection error.
 
