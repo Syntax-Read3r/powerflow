@@ -9,6 +9,19 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.6.1] - 2026-07-19
+
+### Fixed
+
+- 🔒 **Example text no longer contains a real username and server address.** The `srv`
+  hints, examples, README, CHANGELOG and logs used a genuine `user@ip` where a
+  placeholder (`you@192.168.1.50`) teaches identically. The v3.6.0 archive shipped
+  before the scrub, so this release re-cuts from the cleaned tree. The release
+  checklist now greps the staged diff and description for real IPs/usernames before
+  every cut.
+
+---
+
 ## [3.6.0] - 2026-07-19
 
 ### Fixed

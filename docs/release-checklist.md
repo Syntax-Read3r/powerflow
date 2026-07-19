@@ -74,6 +74,15 @@ nobody relitigates the item.**
 
 ## 4 · The cut itself
 
+- [ ] **No private data in the diff or the description.** Grep the staged changes AND the
+  release description for real IPs, usernames, hostnames, and paths that identify a
+  machine. Example text uses placeholders (`you@192.168.1.50`) — a doc example never
+  needs a real address to teach.
+  ```powershell
+  git diff --cached | Select-String -Pattern '\b\d{1,3}(\.\d{1,3}){3}\b' | Where-Object { $_ -notmatch '127\.0\.0\.1|192\.168\.1\.50|192\.0\.2\.|0\.0\.0\.0' }
+  ```
+  *Incident: v3.5.0's examples, CHANGELOG, README and commit message all carried the author's real username + server address. Scrubbing the tree and release bodies afterwards is easy; a pushed commit message is forever without a history rewrite.*
+
 - [ ] **`git status` is clean** of everything that belongs in the release — `git-rl`
   commits the tree, and the tag points wherever HEAD is.
   *Incident: the first v3.3.0 tag was cut before half the work was committed. It pointed at the file-destroying `touch`. The failing CI was the only thing that stopped it shipping.*
