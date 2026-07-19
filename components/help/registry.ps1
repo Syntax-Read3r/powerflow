@@ -35,6 +35,7 @@ $script:PF_HelpSections = @(
     '🎓 LEARN LINUX'
     '🐚 BASH BUILTINS'
     '🖥️ MACHINE HEALTH'
+    '🌐 SSH SERVERS'
     '🗄️ DISK RECLAIM'
     '🪟 TERMINAL TABS'
     '🧱 PROJECT GENERATORS'

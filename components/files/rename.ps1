@@ -205,3 +205,6 @@ function rn {
         Write-Host ""
     }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'rn' -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'interactive rename with fzf picker' -Example 'rn draft.md'

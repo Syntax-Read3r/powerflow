@@ -470,3 +470,6 @@ function git-release {
 }
 
 function git-rl { git-release @args }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'git-rl' -Aliases @('git-release') -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'release: bump version, commit, tag, push - any project' -Example 'git-rl · git-rl -h (set up a project)'

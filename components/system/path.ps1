@@ -37,3 +37,6 @@ function set-path {
         Write-Host "❌ Failed to add to $label PATH — please try again." -ForegroundColor Red
     }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'set-path' -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'add a directory to PATH (-system needs admin)' -Example 'set-path C:\tools'

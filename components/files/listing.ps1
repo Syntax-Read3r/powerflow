@@ -100,3 +100,11 @@ Set-Alias clr clear                                 # Clear screen
 Set-Alias cat Get-Content
 if (Test-Path Alias:\cp) { Remove-Item Alias:\cp -Force }
 Set-Alias cp Copy-Item
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'ls'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'pretty listing; real GNU flags (-la, -t) plus --tree' -Example 'ls -la · ls --tree'
+Register-PFCommand -Name 'la'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'list all, hidden included'
+Register-PFCommand -Name 'll'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'long list with sizes and dates'
+Register-PFCommand -Name 'clr' -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'clear the screen'
+Register-PFCommand -Name 'cat' -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'print a file (the GNU cat on Linux)'
+Register-PFCommand -Name 'cp'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'copy files (the GNU cp on Linux)'

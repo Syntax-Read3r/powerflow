@@ -40,3 +40,7 @@ function git-next {
         Write-Host "❌ Cancelled." -ForegroundColor DarkGray
     }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'git-f'    -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'fetch and fast-forward the current branch'
+Register-PFCommand -Name 'git-next' -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'jump forward one commit (walk history upward)'

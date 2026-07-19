@@ -218,3 +218,8 @@ function pf {
         paste-file -Force:$Force
     }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'open-pwd'   -Aliases @('op') -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'open the current folder in the file manager'
+Register-PFCommand -Name 'copy-file'  -Aliases @('cf') -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'copy a file to the clipboard (fzf picker)'
+Register-PFCommand -Name 'paste-file' -Aliases @('pf') -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'paste the clipboard file into this folder'

@@ -254,3 +254,8 @@ function Test-NavFunction {
 }
 
 Set-Alias z nav
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'nav' -Aliases @('z') -Section '🧭 SMART NAVIGATION & BOOKMARKS' -Synopsis 'fuzzy-find and jump to a project (4 levels deep)' -Example 'nav chess-guru'
+Register-PFCommand -Name 'nav b'     -Section '🧭 SMART NAVIGATION & BOOKMARKS' -Synopsis 'jump to a bookmark; cb creates, db deletes, list manages' -Example 'nav b docs · nav list'
+Register-PFCommand -Name 'nav roots' -Section '🧭 SMART NAVIGATION & BOOKMARKS' -Synopsis 'where nav searches (Win: ~/Code · Linux: ~)' -Example 'nav roots add /srv'

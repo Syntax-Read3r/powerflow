@@ -232,3 +232,10 @@ function copy-pwd {
     Copy-ToClipboard $path
     Write-Host "📋 Copied path: $path" -ForegroundColor Green
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name '..'       -Aliases @('...', '....', '.....') -Section '🧭 SMART NAVIGATION & BOOKMARKS' -Synopsis 'up one level (each extra dot goes one deeper)'
+Register-PFCommand -Name 'here'     -Section '🧭 SMART NAVIGATION & BOOKMARKS' -Synopsis 'show where you are, with quick actions'
+Register-PFCommand -Name 'back'     -Aliases @('cd-') -Section '🧭 SMART NAVIGATION & BOOKMARKS' -Synopsis 'return to the previous directory'
+Register-PFCommand -Name '~'        -Section '🧭 SMART NAVIGATION & BOOKMARKS' -Synopsis 'go home'
+Register-PFCommand -Name 'copy-pwd' -Section '🧭 SMART NAVIGATION & BOOKMARKS' -Synopsis 'copy the current path to the clipboard'

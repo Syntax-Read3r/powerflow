@@ -342,3 +342,7 @@ function pc-cap {
         Write-Host "   Your prior state IS recorded ($($snap.ACMaxPercent)%) — 'pc-cap restore' remains safe." -ForegroundColor DarkGray
     }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'pc-whoami' -Section '🖥️ MACHINE HEALTH' -Synopsis 'vitals: power plan, CPU cap, HW errors, BIOS age' -Example 'pc-whoami -power · -crashes · -bios'
+Register-PFCommand -Name 'pc-cap'    -Section '🖥️ MACHINE HEALTH' -Synopsis 'cap CPU speed; prior state recorded for safe undo' -Example 'pc-cap 85 · pc-cap restore'

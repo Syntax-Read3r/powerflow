@@ -63,3 +63,11 @@ function close-t {
         Write-Host "🗑 Closed tab $index" -ForegroundColor Yellow
     }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'open-nt'   -Section '🪟 TERMINAL TABS' -Synopsis 'open a new terminal tab' -Platform 'Windows'
+Register-PFCommand -Name 'close-ct'  -Section '🪟 TERMINAL TABS' -Synopsis 'close the current tab' -Platform 'Windows'
+Register-PFCommand -Name 'next-t'    -Aliases @('prev-t') -Section '🪟 TERMINAL TABS' -Synopsis 'switch to the next / previous tab' -Platform 'Windows'
+Register-PFCommand -Name 'open-t'    -Section '🪟 TERMINAL TABS' -Synopsis 'switch to tab N' -Example 'open-t 3' -Platform 'Windows'
+Register-PFCommand -Name 'close-t'   -Section '🪟 TERMINAL TABS' -Synopsis 'close tab N' -Platform 'Windows'
+Register-PFCommand -Name 'send-keys' -Section '🪟 TERMINAL TABS' -Synopsis 'send keystrokes to another tab' -Platform 'Windows'

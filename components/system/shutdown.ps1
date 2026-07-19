@@ -89,3 +89,6 @@ function s {
     # For scheduling, forward to shutdown (full function)
     shutdown @Args
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'shutdown' -Aliases @('s') -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'schedule a shutdown (10 min - 6 h); cancel with s c' -Example 'shutdown 1h 30m · s c'

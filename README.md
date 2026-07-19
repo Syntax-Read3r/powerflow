@@ -61,6 +61,13 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 - **`perms <path>`**: file permissions with every column actually labelled
 - **`linux-lessons full|hint|off`**: teaching is a phase, not a permanent state
 
+### 🌐 Servers by Name, Not by IP
+
+- **`srv proxmox`** instead of `ssh munya@192.168.8.247` — connections saved by name
+- **Live status in the picker**: `✅ online` · `🟡 host up, ssh not answering` ·
+  `⛔ offline · last seen Jul 17` — so you know to press the power button, not retry
+- **Tested before saving**: `srv add` probes the SSH port first, catching typo'd IPs
+
 ### 🖥️ Machine Health at a Glance
 
 - **`pc-whoami`**: power plan, CPU cap, hardware errors, crash dumps, BIOS age — one
@@ -497,7 +504,7 @@ week · turn off**. Piped/non-interactive shells get one quiet line, never a pro
 | `pwsh-profile`  | Edit PowerShell profile        |
 | `pwsh-starship` | Edit Starship config           |
 | `pwsh-settings` | Edit Windows Terminal settings |
-| `pwsh-h`        | Show complete help menu        |
+| `pwsh-h`        | Browse every command (fzf browser; `-all` prints, `pwsh-h git` filters) |
 
 ## 🔧 Configuration
 
@@ -564,7 +571,7 @@ powerflow-version       # Show current version info
 ### Quick Self-Help
 
 ```powershell
-pwsh-h              # Complete help menu
+pwsh-h              # Browse every command (fzf); pwsh-h git filters a section
 powerflow-version   # Version and status info
 Get-Command starship, fzf, zoxide, lsd, git  # Check dependencies
 ```

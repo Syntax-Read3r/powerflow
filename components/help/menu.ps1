@@ -1,366 +1,187 @@
 # ==============================================================================
-# PowerFlow — Help Menu
+# PowerFlow — Help
 # ==============================================================================
 # Domain   : Help
 # File     : components/help/menu.ps1
-# Purpose  : Comprehensive command reference and help display
-# Functions: pwsh-h, Show-HelpTopic
-# Depends  : Get-LinuxLesson, Get-LessonTopics (components/shell/lessons.ps1)
+# Purpose  : pwsh-h — rendered entirely from the command registry
+# Functions: pwsh-h, Show-PFCommandDetail
+# Depends  : components/help/registry.ps1 (the data), components/shell/lessons.ps1
 # ==============================================================================
 #
-# ONE menu, not two. But the full reference is ~16k characters, so bolting 40+ Linux
-# commands onto it would make it unreadable. It takes a TOPIC instead:
+# There is no hand-drawn menu any more. Every row below is GENERATED from
+# Register-PFCommand calls that live beside the functions they document, so the
+# help cannot drift from the code — CI fails the release if a user-facing command
+# has no registration (release-validate.yml, "help registry covers every command").
 #
-#     pwsh-h                 everything (unchanged)
-#     pwsh-h permissions     chmod / chown / groups only
-#     pwsh-h files           ls / rm / find
-#     pwsh-h linux           every Linux lesson
-#     lesson chmod           one command's lesson  (or: l chmod)
-#
-# All of it reads from components/shell/lessons.ps1 — one source of truth, so the
-# menu, `lesson`, and the inline hints can never drift apart.
+# The old menu was a 350-line wall of box characters: rows went missing (an audit
+# found 4), went false (`ls -t` documented as "tree view" a full version after it
+# became GNU time-sort), and 11 rows drifted off the 80-char grid from emoji-width
+# bugs. Alignment is now arithmetic, not surgery.
 # ==============================================================================
 
-# pwsh-h <topic> — the Linux lessons for one topic.
-function Show-HelpTopic {
-    param([Parameter(Mandatory)][string]$Topic)
+<#
+.SYNOPSIS
+    pwsh-h — every PowerFlow command.
+.DESCRIPTION
+    pwsh-h              interactive fzf browser (plain print when piped / no fzf)
+    pwsh-h -all         print everything, grouped by section
+    pwsh-h git          one section (nav · git · github · files · linux · health …)
+    pwsh-h chmod        one command, or its Linux lesson
+    pwsh-h permissions  every lesson in a topic
+#>
+function pwsh-h {
+    param([Parameter(Position = 0)][string]$Topic = '', [switch]$all)
 
-    $t = $Topic.ToLower()
+    if ($all) { Show-PFHelpSections; return }
 
-    # An exact command name wins: `pwsh-h chmod` is the lesson for chmod.
-    $direct = Get-LinuxLesson -Command $t
-    if ($direct) { Show-Lesson -Command $t; return }
+    if ($Topic) {
+        $reg = Get-PFCommandRegistry
 
-    $topics  = Get-LessonTopics
-    $matches = @($script:PF_Lessons.GetEnumerator() | Where-Object { $_.Value.Topic -eq $t })
+        # 1. Exact command (or alias) → detail view, plus its lesson if one exists.
+        $hit = $reg | Where-Object { $_.Name -eq $Topic -or $Topic -in $_.Aliases } | Select-Object -First 1
+        if ($hit) { Show-PFCommandDetail $hit; return }
 
-    if ($t -eq 'linux') { $matches = @($script:PF_Lessons.GetEnumerator()) }
+        # 2. A Linux lesson (real name, brother name, or topic like 'permissions').
+        if ((Get-Command Get-LinuxLesson -ErrorAction SilentlyContinue) -and (Get-LinuxLesson -Command $Topic)) {
+            Show-Lesson -Command $Topic; return
+        }
+        if ((Get-Command Get-LessonTopics -ErrorAction SilentlyContinue) -and ($Topic.ToLower() -in (Get-LessonTopics))) {
+            lesson $Topic; return
+        }
 
-    if ($matches.Count -eq 0) {
-        Write-Host ""
-        Write-Host "  ❌ No topic '$Topic'." -ForegroundColor Red
-        Write-Host "     Topics : $($topics -join ' · ') · linux" -ForegroundColor DarkGray
-        Write-Host "     Or a command name, e.g.  pwsh-h chmod" -ForegroundColor DarkGray
-        Write-Host ""
+        # 3. A section keyword: pwsh-h git → 🎯 ENHANCED GIT WORKFLOW, etc.
+        $sections = @((Get-PFHelpSections) | Where-Object { $_ -match [regex]::Escape($Topic) })
+        if ($sections.Count -gt 0) {
+            foreach ($s in $sections) { Show-PFHelpSections -Only $s }
+            return
+        }
+
+        # 4. Substring match over names + synopses — a search, effectively.
+        $near = @($reg | Where-Object { $_.Name -match [regex]::Escape($Topic) -or $_.Synopsis -match [regex]::Escape($Topic) })
+        if ($near.Count -gt 0) {
+            Write-Host ""
+            Write-Host "🔍 Commands matching '$Topic':" -ForegroundColor Cyan
+            Show-PFHelpRows $near
+            Write-Host ""
+            return
+        }
+
+        Write-Host "❌ Nothing called '$Topic'. Try:  pwsh-h -all" -ForegroundColor Red
         return
     }
 
-    Write-Host ""
-    Write-Host "  🐧 $($t.ToUpper())" -ForegroundColor Cyan
-    Write-Host "  ────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
-    Write-Host ("  {0,-14} {1,-14} {2}" -f 'LINUX', 'BROTHER', 'WHAT IT DOES') -ForegroundColor DarkGray
+    # Bare pwsh-h: fzf browser when there is a human at a terminal; plain print
+    # otherwise (piped output, scripts, no fzf installed).
+    $interactive = -not [Console]::IsOutputRedirected -and (Get-Command fzf -ErrorAction SilentlyContinue)
+    if ($interactive) { Show-PFHelpBrowser } else { Show-PFHelpSections }
+}
 
-    foreach ($m in ($matches | Sort-Object { $_.Key })) {
-        Write-Host ("  {0,-14} " -f $m.Key) -NoNewline -ForegroundColor Yellow
-        Write-Host ("{0,-14} " -f $m.Value.Brother) -NoNewline -ForegroundColor Green
-        Write-Host $m.Value.Short -ForegroundColor White
+# ── the generated print view ──────────────────────────────────────────────────
+function Show-PFHelpRows {
+    param($Commands)
+    # One computed width for the whole run — this is the entire alignment system.
+    $w = ($Commands | ForEach-Object {
+        $_.Name.Length + $(if ($_.Aliases.Count) { (" (" + ($_.Aliases -join ', ') + ")").Length } else { 0 })
+    } | Measure-Object -Maximum).Maximum + 2
+
+    foreach ($c in $Commands) {
+        $label = $c.Name + $(if ($c.Aliases.Count) { " (" + ($c.Aliases -join ', ') + ")" } else { "" })
+        Write-Host ("  {0}" -f $label.PadRight($w)) -NoNewline -ForegroundColor Green
+        Write-Host $c.Synopsis -ForegroundColor White
+    }
+}
+
+function Show-PFHelpSections {
+    param([string]$Only)
+
+    $reg = Get-PFCommandRegistry
+    Write-Host ""
+    if (-not $Only) {
+        Write-Host "🚀 PowerFlow v$script:POWERFLOW_VERSION — $($reg.Count) commands" -ForegroundColor Cyan
+        Write-Host "   pwsh-h <section|command>  filters · bare pwsh-h opens the fzf browser" -ForegroundColor DarkGray
     }
 
-    Write-Host ""
-    Write-Host "  Full lesson for any of them:  " -NoNewline -ForegroundColor DarkGray
-    Write-Host "lesson <command>" -NoNewline -ForegroundColor Cyan
-    Write-Host "   or   " -NoNewline -ForegroundColor DarkGray
-    Write-Host "l <command>" -ForegroundColor Cyan
-    Write-Host "  e.g.  " -NoNewline -ForegroundColor DarkGray
-    Write-Host "lesson chmod" -NoNewline -ForegroundColor Cyan
-    Write-Host "  ·  " -NoNewline -ForegroundColor DarkGray
-    Write-Host "l grep" -ForegroundColor Cyan
+    foreach ($section in (Get-PFHelpSections)) {
+        if ($Only -and $section -ne $Only) { continue }
+        $rows = @($reg | Where-Object Section -eq $section)
+        if ($rows.Count -eq 0) { continue }
+        Write-Host ""
+        Write-Host $section -ForegroundColor Cyan
+        Show-PFHelpRows $rows
+    }
     Write-Host ""
 }
 
-function pwsh-h {
-    param([Parameter(Position = 0)][string]$Topic = '')
+# ── the detail view (also the fzf preview content) ────────────────────────────
+function Show-PFCommandDetail {
+    param($Command)
 
-    if ($Topic) { Show-HelpTopic -Topic $Topic; return }
+    Write-Host ""
+    Write-Host "  $($Command.Name)" -NoNewline -ForegroundColor Green
+    if ($Command.Aliases.Count) { Write-Host "  ($($Command.Aliases -join ', '))" -NoNewline -ForegroundColor DarkGray }
+    if ($Command.Platform -ne 'Both') { Write-Host "  [$($Command.Platform) only]" -NoNewline -ForegroundColor Yellow }
+    Write-Host ""
+    Write-Host "  $($Command.Synopsis)" -ForegroundColor White
+    if ($Command.Example) {
+        Write-Host "  e.g.  " -NoNewline -ForegroundColor DarkGray
+        Write-Host $Command.Example -ForegroundColor Cyan
+    }
+    Write-Host "  $($Command.Section)" -ForegroundColor DarkGray
 
-    # Build the version banner line with centred padding so the box stays aligned
-    $verText   = "Enhanced Profile v$($script:POWERFLOW_VERSION)"
-    $innerWidth = 78
-    $totalPad  = $innerWidth - $verText.Length
-    $leftPad   = ' ' * [math]::Floor($totalPad / 2)
-    $rightPad  = ' ' * [math]::Ceiling($totalPad / 2)
-    $verLine   = "║$leftPad$verText$rightPad║"
-
-    $helpText = @"
-
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                    🐚 POWERSHELL COMMAND REFERENCE                           ║
-$verLine
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-┌─ 🧭 SMART NAVIGATION & BOOKMARKS ────────────────────────────────────────────┐
-│  🎯 CORE NAVIGATION:                                                         │
-│  nav <project>       → smart project search in your roots + bookmarked dirs  │
-│  nav -verbose        → detailed search output for troubleshooting            │
-│  z <project>         → alias for nav                                         │
-│                                                                              │
-│  📍 SEARCH ROOTS (where nav looks):                                          │
-│  nav roots           → show current roots  (Win: ~/Code · Linux: ~)          │
-│  nav roots add <dir> → also search <dir>   e.g. /srv, /opt, /mnt/data        │
-│  nav roots rm <dir>  → stop searching <dir>                                  │
-│  nav roots reset     → back to the platform default                          │
-│                                                                              │
-│  🔖 BOOKMARK MANAGEMENT:                                                     │
-│  nav b <bookmark>    → navigate to bookmark                                  │
-│  nav create-b <name> → create bookmark (current dir)                         │
-│  nav cb <name>       → shorthand for create-b                                │
-│  nav delete-b <name> → delete bookmark with confirmation                     │
-│  nav db <name>       → shorthand for delete-b                                │
-│  nav rename-b <old> <new> → rename existing bookmark                         │
-│  nav rb <old> <new>  → shorthand for rename-b                                │
-│  nav list            → interactive bookmark manager                          │
-│  nav l               → shorthand for list                                    │
-│                                                                              │
-│  ⬆️ PARENT NAVIGATION:                                                       │
-│  ..                  → go up one level (fast!)                               │
-│  ...                 → go up two levels (fast!)                              │
-│  ....                → go up three levels (fast!)                            │
-│  ~                   → go to home directory                                  │
-│                                                                              │
-│  📍 LOCATION UTILITIES:                                                      │
-│  here                → detailed info about current directory                 │
-│  copy-pwd            → copy current path to clipboard                        │
-│  open-pwd            → open current directory in File Explorer               │
-│  op                  → alias for open-pwd                                    │
-│  back                → go to previous directory                              │
-│  cd-                 → alias for back                                        │
-│  pwd                 → print working directory (alias)                       │
-└───────────────────────────────────────────────────────────────────────────────┘
-
-
-┌─ 🧱 PROJECT GENERATORS ──────────────────────────────────────────────────────┐
-│  create-next         → create full Next.js app with DB/Docker/CI setup       │
-│  create-n            → shorthand for create-next                             │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌─ 🐧 WSL / TERMINAL LAUNCHERS  (Windows only) ────────────────────────────────┐
-│  open-nt             → open new PowerShell tab                               │
-│  open-nt ubuntu      → open Ubuntu/WSL tab                                   │
-│  open-nt cmd         → open Command Prompt tab                               │
-│  open-ubuntu         → direct Ubuntu launcher using configured profile GUID  │
-│  open-wsl-simple     → simple WSL profile launcher                           │
-│  Get-WindowsTerminalProfiles → inspect Windows Terminal profiles             │
-│  (on Linux, tab commands drive tmux windows instead)                         │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌─ ⏻ SHUTDOWN TIMER ───────────────────────────────────────────────────────────┐
-│  shutdown 1h         → schedule shutdown in 1 hour                           │
-│  shutdown 1h 30m     → schedule shutdown in 1 hour 30 minutes                │
-│  shutdown cancel     → cancel scheduled shutdown                             │
-│  s 1h                → shorthand shutdown timer                              │
-│  s c                 → cancel scheduled shutdown                             │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌─ 📂 ENHANCED FILE OPERATIONS ────────────────────────────────────────────────┐
-│  📋 DIRECTORY LISTING:                                                       │
-│  ls [path]           → beautiful directory listing with lsd                  │
-│  ls -t [path]        → tree view with smart depth detection                  │
-│  ls -t -d <N> [path] → tree view with custom depth                           │
-│  la                  → list all files including hidden                       │
-│  ll                  → long list format with details                         │
-│  clr                 → clear the screen                                      │
-│                                                                              │
-│  📄 FILE VIEWING & SEARCH:                                                   │
-│  cat <file>          → display file contents                                 │
-│  grep <pattern>      → search text in files                                  │
-│  less <file>         → page through file content                             │
-│  which <cmd>         → show command location                                 │
-│                                                                              │
-│  🔧 FILE MANIPULATION:                                                       │
-│  cp <src> <dst>      → copy files/directories                                │
-│  touch <file>        → create new empty file                                 │
-│  mkdir <dir>         → create new directory (strict naming rules)            │
-│                                                                              │
-│  ✂️ CUT-AND-PASTE FILE WORKFLOW:                                             │
-│  mv <src> <dst>      → move / rename it now, like bash  (-f force · -n keep) │
-│  mv <a> <b> <dir>/   → move several files into a directory                   │
-│  mv <filename>       → ✂️  cut file for moving (1 arg = cut, 2+ = move)      │
-│  mv-t                → paste cut file in current directory                   │
-│  mv-c                → cancel move operation (drop held file)                │
-│                                                                              │
-│  🏷️ ENHANCED RENAME:                                                         │
-│  rn [filename]       → 🎨 beautiful interactive rename with fuzzy search     │
-│                                                                              │
-│  🗑️ SMART FILE REMOVAL:   (🐧 on Linux this is 'del', not 'rm' — see below)  │
-│  rm                  → 🎯 fzf picker, then confirm before deleting           │
-│  rm <filename>       → remove a single file or directory (recursive)         │
-│  rm <file1> <file2>  → remove multiple targets in one command                │
-│  rm *.log            → wildcard removal — lists every match, one confirm     │
-│  rm <filename> -f    → force remove (skip the confirmation prompt)           │
-│  rmdir <path>        → enhanced directory removal with confirmations         │
-│                                                                              │
-│  🐧 ON LINUX — GNU coreutils are NOT shadowed:                               │
-│  del [...]           → PowerFlow's smart removal (what 'rm' is on Windows)   │
-│  mvf <filename>      → PowerFlow's cut-and-paste move (Windows calls it 'mv')│
-│  rm / mv / cp / cat  → the real GNU tools, untouched                         │
-│                                                                              │
-│  📋 FILE CLIPBOARD OPERATIONS:                                               │
-│  copy-file <file>    → copy file to clipboard for pasting                    │
-│  cf <file>           → shorthand for copy-file                               │
-│  paste-file [path]   → paste file from clipboard                             │
-│  pf [path]           → shorthand for paste-file                              │
-│  pf -Force [path]    → paste file with overwrite confirmation skip           │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌─ 🎯 ENHANCED GIT WORKFLOW ───────────────────────────────────────────────────┐
-│  🚀 ADD-COMMIT-PUSH WORKFLOW:                                                │
-│  git-a               → 🎨 beautiful add → commit → push workflow             │
-│  git-a-plus          → enhanced version with multiple modes:                 │
-│    git-aa / git-aq   → ⚡ quick mode (minimal prompts)                        │
-│    git-ad            → 🔍 dry run mode (preview changes)                     │
-│    git-am            → 🔄 amend last commit with new message                 │
-│                                                                              │
-│  🏷️  RELEASE WORKFLOW:                                                       │
-│  git-release         → 🚀 bump version → update settings → commit → tag     │
-│  git-rl              → alias for git-release                                 │
-│  git-rl -h           → 🧰 set up git-rl in ANOTHER project (writes a guide   │
-│                         into it + copies an AI setup prompt to clipboard)    │
-│    patch             → v2.0.0 → v2.0.1  (bug fixes)                         │
-│    minor             → v2.0.0 → v2.1.0  (new features)                      │
-│    major             → v2.0.0 → v3.0.0  (breaking changes)                  │
-│    custom            → enter a specific version number                       │
-│  (automatically updates config/PowerFlow.settings.ps1 and triggers CI)      │
-│                                                                              │
-│  🔄 ROLLBACK WORKFLOW:                                                       │
-│  git-rb <commit>     → 🔄 create rollback branch from specific commit        │
-│  git-rba             → 🚀 rollback branch add-commit-push (rollback-* only)  │
-│  grba                → alias for git-rba                                     │
-│                                                                              │
-│  🔥 INTERACTIVE INTERFACES:                                                  │
-│  git-l               → 🌟 beautiful interactive log viewer with actions      │
-│  git-log             → alias for git-l                                       │
-│  git-pick            → 🎯 commit hash picker (copies to clipboard)           │
-│  git-p               → alias for git-pick                                    │
-│  git-branch          → 🌿 beautiful branch picker with delete actions        │
-│  git-b               → alias for git-branch                                  │
-│  git-c.sb            → 🔀 enhanced branch creation/switching interface       │
-│  git-s               → 📊 interactive status viewer with quick actions       │
-│  git-st              → alias for git-s                                       │
-│  git-stash           → 📦 interactive stash manager                          │
-│  git-sh              → alias for git-stash                                   │
-│  git-remote          → 🌐 interactive remote manager                          │
-│  git-r               → alias for git-remote                                  │
-│                                                                              │
-│  🛠 UTILITY COMMANDS:                                                        │
-│  git-f               → nuclear reset + clean + fetch (with confirmation)     │
-│  git-cm              → quickly checkout main branch                          │
-│  git-bd <branch>     → safe delete branch (prevents current branch)          │
-│  git-bD <branch>     → force delete branch (with safety check)               │
-│  git-next            → clean .next + node_modules + reinstall deps           │
-│                                                                              │
-│  🐙 GITHUB INTEGRATION:                                                      │
-│  gh-l [count]        → 🚀 list your GitHub repos with activity stats         │
-│  gh-l-reset          → remove saved GitHub token                             │
-│  gh-l-status         → check if GitHub token is saved                        │
-│  gh-l-org [org]      → 🏢 browse org repos; clone one or all                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌─ 🪟 TERMINAL TAB MANAGEMENT ─────────────────────────────────────────────────┐
-│  open-nt             → open new Windows Terminal tab                         │
-│  close-ct            → close current tab                                     │
-│  next-t              → switch to next terminal tab                           │
-│  prev-t              → switch to previous terminal tab                       │
-│  open-t <N>          → switch to terminal tab N (1-9)                        │
-│  close-t <N>         → switch to tab N then close it                         │
-│  send-keys <keys>    → send keyboard shortcuts to terminal                   │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-
-
-┌─ ⚙️  CONFIGURATION & SETTINGS ───────────────────────────────────────────────┐
-│  pwsh-profile        → open PowerShell profile in VS Code                    │
-│  pwsh-starship       → open Starship prompt config                           │
-│  pwsh-settings       → open Windows Terminal settings.json                   │
-│  pwsh-h              → show this help menu                                   │
-│  pwsh-recovery       → PowerFlow recovery and diagnostics menu               │
-│                                                                              │
-│  🖥️  MACHINE HEALTH:                                                        │
-│  pc-whoami           → the machine's vital signs: plan · CPU cap · crashes   │
-│  pc-whoami -power    → power plans + caps, decoded (no hex, no GUIDs)        │
-│  pc-whoami -crashes  → hardware errors · bugchecks · dumps  (-export bundle) │
-│  pc-whoami -bios     → firmware version, age, board model                    │
-│  pc-cap 85           → cap CPU speed — records prior state for a safe undo   │
-│  pc-cap restore      → put back exactly what was recorded                    │
-│                                                                              │
-│  🔄 VERSION MANAGEMENT:                                                      │
-│  Get-PowerFlowVersion    → detailed PowerFlow version and status info        │
-│  powerflow-version       → quick version display                             │
-│  powerflow-update        → check for and install PowerFlow updates           │
-│  pwsh-reminders          → toggle update reminder notifications on/off       │
-│  powerflow-uninstall     → remove PowerFlow and optionally its dependencies  │
-│                                                                              │
-│  📍 PATH MANAGEMENT:                                                         │
-│  set-path <path>            → add directory to User PATH (no quotes needed)  │
-│  set-path -system <path>    → add directory to System PATH (admin required)  │
-│                                                                              │
-│  🗄️ DISK RECLAIM:  (nothing under 1 GB is ever listed)                       │
-│  installed-apps -o       → 📊 overview of ALL bands, then drill into one     │
-│  i-a -o                  → shorthand for installed-apps                      │
-│  i-a                     → pick a size band, then browse installed apps      │
-│  i-a 2gb-4gb             → apps in a range (must fit inside ONE band)        │
-│  disk-big                → large FOLDERS and FILES (vhdx, node_modules, …)   │
-│  d-b 50gb-200gb          → shorthand — the biggest offenders on disk         │
-│  d-b -Path D:\           → scan a specific location instead of the hot spots │
-│    bands: 1-5GB · 5-20GB · 20-50GB · 50GB+   (a query cannot span two)       │
-│    actions: open folder · copy path · uninstall · trash · permanent delete   │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌─ 🐧 LINUX & BASH ────────────────────────────────────────────────────────────┐
-│  🎓 LEARN LINUX WHILE YOU USE IT:                                            │
-│  lesson <command>    → learn any command — runs nothing, always safe         │
-│  l <command>         → shorthand.  l grep · l chmod · l rm                   │
-│  lesson              → the full index, grouped by topic                      │
-│  lesson <topic>      → every lesson in a topic (e.g. lesson permissions)     │
-│  perms <path>        → permissions, with every column explained              │
-│  defaultmode [022]   → the umask: what new files DON'T get                   │
-│  24 lessons · 7 topics: permissions files text disk network processes …      │
-│  linux-lessons off   → hide the teaching (full · hint · off)                 │
-│                                                                              │
-│  👬 BROTHER COMMANDS — full words, same flags, teaches the real one:         │
-│  changemode → chmod     changeowner → chown     changegroup → chgrp          │
-│  defaultmode→ umask     whoamifull  → id        mygroups    → groups         │
-│  lookupentry→ getent    findtext    → grep      findfile    → find           │
-│  fileinfo   → stat      makelink    → ln        listfiles   → ls             │
-│  firstlines → head      lastlines   → tail      archive     → tar            │
-│  dirsize    → du        diskfree    → df        listdisks   → lsblk          │
-│  listports  → ss        listprocs   → ps        stopproc    → kill           │
-│  service    → systemctl systemlogs  → journalctl removefile  → rm            │
-│                                                                              │
-│  🐚 BASH BUILTINS POWERSHELL LACKS:                                          │
-│  export VAR=value    → set an env var, bash-style                            │
-│  alias ll='ls -lh'   → an alias WITH ARGUMENTS (Set-Alias cannot)            │
-│  unalias ll          → remove it again                                       │
-│  unset VAR           → remove it       source .env → load KEY=value lines    │
-│  jobs · fg · bg      → job control     history     → numbered history        │
-│  !!  ·  !$           → last command · last argument  (sudo !!)               │
-│                                                                              │
-│  ⚠️  SINGLE DASH IS LINUX'S. LONG DASH IS POWERFLOW'S:                       │
-│  ls -l -a -d -h -t   → GNU semantics, exactly                                │
-│  ls --tree --depth 3 → PowerFlow's extras                                    │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌─ 🔧 DEBUGGING & TESTING ─────────────────────────────────────────────────────┐
-│  Test-NavFunction    → debug navigation search with detailed output          │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌─ 🚀 KEY FEATURES ────────────────────────────────────────────────────────────┐
-│  🎯 Smart File Operations → mv, rm, rn all support fuzzy search and patterns │
-│  🔖 Persistent Bookmarks  → Saved across sessions in JSON file               │
-│  ✂️ Cut-Paste Workflow   → mv cuts files, mv-t pastes, mv-c cancels          │
-│  🔄 Git Rollback System  → Create rollback branches from any commit          │
-│  🐙 GitHub Integration   → Browse, clone, delete repos with token security   │
-│  🌟 Starship Prompt      → Beautiful, informative prompt with Git info       │
-│  📋 Clipboard Integration → All interactive tools copy results to clipboard  │
-│  🔍 Fuzzy Search         → Interactive pickers with fzf for everything       │
-│  🛡️  Safety Checks       → Prevents accidental deletion and data loss        │
-│  🎨 Beautiful UI         → Consistent emoji indicators and color schemes     │
-│  ⚡ Context-Aware        → Tools adapt to current repository state            │
-│  🌳 Git Integration      → Deep integration with Git workflows               │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-📚 DOCUMENTATION: All functions include detailed help via Get-Help
-
-"@
-
-    Write-Host $helpText -ForegroundColor White
+    # If a lesson exists for this command, say so — the two systems stay linked.
+    if ((Get-Command Get-LinuxLesson -ErrorAction SilentlyContinue) -and (Get-LinuxLesson -Command $Command.Name)) {
+        Write-Host "  🎓 there is a lesson:  lesson $($Command.Name)" -ForegroundColor Cyan
+    }
+    Write-Host ""
 }
+
+# ── the fzf browser ───────────────────────────────────────────────────────────
+function Show-PFHelpBrowser {
+    $reg = Get-PFCommandRegistry
+
+    # Preview files: one per command, regenerated when the count changes (i.e. on
+    # upgrade). fzf's preview runs under cmd on Windows and sh on Linux — reading a
+    # file is the one thing both do identically.
+    $pvDir = Join-Path (Get-TempPath) 'powerflow-help'
+    $stamp = Join-Path $pvDir 'count.txt'
+    if (-not (Test-Path $stamp) -or (Get-Content $stamp -ErrorAction SilentlyContinue) -ne "$($reg.Count)") {
+        New-Item -ItemType Directory -Path $pvDir -Force | Out-Null
+        foreach ($c in $reg) {
+            $safe = ($c.Name -replace '[^\w-]', '_')
+            $txt  = @("$($c.Name)" + $(if ($c.Aliases.Count) { "  ($($c.Aliases -join ', '))" } else { "" }))
+            $txt += ""
+            $txt += "  $($c.Synopsis)"
+            if ($c.Example)            { $txt += "  e.g. $($c.Example)" }
+            if ($c.Platform -ne 'Both'){ $txt += "  [$($c.Platform) only]" }
+            $txt += ""
+            $txt += "  $($c.Section)"
+            $txt -join "`n" | Set-Content (Join-Path $pvDir "$safe.txt") -Encoding UTF8
+        }
+        "$($reg.Count)" | Set-Content $stamp
+    }
+
+    $reader = if ($script:PowerFlowOS -eq 'linux') { 'cat' } else { 'type' }
+    $lines  = $reg | ForEach-Object {
+        $safe = ($_.Name -replace '[^\w-]', '_')
+        # name <TAB> synopsis <TAB> preview-file — fzf shows fields 1-2, preview reads 3
+        "{0}`t{1}`t{2}" -f $_.Name, $_.Synopsis, (Join-Path $pvDir "$safe.txt")
+    }
+
+    $sel = $lines | fzf `
+        --delimiter "`t" --with-nth "1,2" --nth 1,2 `
+        --preview "$reader {3}" --preview-window 'down,7,wrap' `
+        --reverse --border=rounded --height=80% `
+        --prompt="📖 PowerFlow help: " `
+        --header="$($reg.Count) commands — type to filter · Enter for details · Esc to close" `
+        --header-first `
+        --color="header:bold:cyan,prompt:bold:green,border:cyan"
+
+    if ($sel) {
+        $name = ($sel -split "`t")[0]
+        $cmd  = (Get-PFCommandRegistry) | Where-Object Name -eq $name | Select-Object -First 1
+        if ($cmd) { Show-PFCommandDetail $cmd }
+    }
+}
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'pwsh-h' -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'this help - fzf browser, or filter by section/command' -Example 'pwsh-h git · pwsh-h chmod · pwsh-h -all'

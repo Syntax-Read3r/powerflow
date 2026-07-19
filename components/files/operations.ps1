@@ -862,3 +862,12 @@ function mkdir {
         }
     }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'rm'    -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'delete with GNU flags; refuses a dir without -r' -Example 'rm -rf node_modules · rm *.log'
+Register-PFCommand -Name 'mv'    -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis '2+ args move like bash; 1 arg cuts (mv-t pastes)' -Example 'mv old.txt new.txt'
+Register-PFCommand -Name 'mv-t'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'paste the cut file here'
+Register-PFCommand -Name 'mv-c'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'cancel the cut - drop the held file'
+Register-PFCommand -Name 'mkdir' -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'create directories; -p builds the whole chain' -Example 'mkdir -p src/app/ui'
+Register-PFCommand -Name 'touch' -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'bump a timestamp or create; NEVER truncates' -Example 'touch -c maybe.txt'
+Register-PFCommand -Name 'rmdir' -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'remove a directory; asks before taking contents'

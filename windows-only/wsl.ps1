@@ -93,3 +93,7 @@ function open-wsl-simple {
     Set-Clipboard "cd '$wslPath'"
     Write-Host "📋 Command copied!" -ForegroundColor Green
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'open-ubuntu'     -Section '🐧 WSL (WINDOWS-ONLY)' -Synopsis 'open a WSL Ubuntu tab in Windows Terminal' -Platform 'Windows'
+Register-PFCommand -Name 'open-wsl-simple' -Section '🐧 WSL (WINDOWS-ONLY)' -Synopsis 'open WSL without Terminal profiles' -Platform 'Windows'

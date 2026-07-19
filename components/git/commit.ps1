@@ -453,3 +453,10 @@ function git-aa { git-a-plus -Quick }
 function git-aq { git-a-plus -Quick }
 function git-ad { git-a-plus -DryRun }
 function git-am { git-a-plus -AmendLast }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'git-a'      -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'add - commit - push, interactively' -Example 'git-a'
+Register-PFCommand -Name 'git-a-plus' -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'git-a with modes: -Quick, -DryRun, -AmendLast'
+Register-PFCommand -Name 'git-aa'  -Aliases @('git-aq') -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'quick add-commit-push, minimal prompts'
+Register-PFCommand -Name 'git-ad'  -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'dry run - preview what would be committed'
+Register-PFCommand -Name 'git-am'  -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'amend the last commit with a new message'

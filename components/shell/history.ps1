@@ -97,3 +97,6 @@ function history {
         "{0,5}  {1}" -f $_.Id, $_.CommandLine
     }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'history' -Section '🐚 BASH BUILTINS' -Synopsis 'numbered command history; !! and !$ work at the prompt' -Example 'sudo !!'

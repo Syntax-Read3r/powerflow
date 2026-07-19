@@ -373,3 +373,9 @@ function git-c.sb {
         }
     }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'git-b'    -Aliases @('git-branch') -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'interactive branch picker: switch, create, delete'
+Register-PFCommand -Name 'git-cm'   -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'checkout main/master, whichever exists'
+Register-PFCommand -Name 'git-bd'   -Aliases @('git-bD') -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'delete a branch (bD forces)'
+Register-PFCommand -Name 'git-c.sb' -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'create and switch to a new branch'

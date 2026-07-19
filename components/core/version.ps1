@@ -302,3 +302,9 @@ function pwsh-reminders {
     }
     Write-Host ""
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'powerflow-version'   -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'show the PowerFlow version'
+Register-PFCommand -Name 'powerflow-update'    -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'full-tree update via the real installer'
+Register-PFCommand -Name 'Get-PowerFlowVersion' -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'detailed version and install status'
+Register-PFCommand -Name 'pwsh-reminders'      -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'toggle the startup update reminder'

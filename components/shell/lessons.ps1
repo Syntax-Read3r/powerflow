@@ -734,3 +734,6 @@ Register-ArgumentCompleter -CommandName lesson, l -ParameterName Name -ScriptBlo
         Where-Object { $_ -like "$wordToComplete*" } |
         ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'lesson' -Aliases @('l') -Section '🎓 LEARN LINUX' -Synopsis 'learn any Linux command - runs nothing, always safe' -Example 'l grep · lesson permissions'

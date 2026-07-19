@@ -51,8 +51,10 @@ nobody relitigates the item.**
 
 ## 3 · Docs that ship with the release
 
-- [ ] **`pwsh-h`** — every new user-facing command, in the right section, box rows exactly
-  80 chars. (CLAUDE.md rule; internal helpers stay out.)
+- [ ] **Help registry** — every new user-facing command has a `Register-PFCommand` beside
+  its definition (CLAUDE.md's Help Registration Rule). The CI gate enforces it; run it
+  locally rather than discovering in the release run.
+  *Incident: the old hand-drawn menu let 4 commands vanish and one row go false.*
 - [ ] **`COMPONENTS.md`** — new files, new functions, Platform column, footnotes for any
   non-obvious design decision.
 - [ ] **`README.md`** — feature list AND command tables. Check specifically that no

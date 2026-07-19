@@ -1615,3 +1615,6 @@ This project was created with the enhanced `create-n` function and includes real
 function create-n {
     create-next
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'create-next' -Aliases @('create-n') -Section '🧱 PROJECT GENERATORS' -Synopsis 'scaffold a Next.js project, PowerFlow-style'

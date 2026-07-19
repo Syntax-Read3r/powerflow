@@ -249,3 +249,13 @@ function bg {
     Write-Host "⏸️  [$($job.Id)] $($job.Command) — running in the background" -ForegroundColor Yellow
     Write-Host "   fg $($job.Id)  to bring it back" -ForegroundColor DarkGray
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'export'  -Section '🐚 BASH BUILTINS' -Synopsis 'set an env var, bash-style' -Example 'export EDITOR=vim'
+Register-PFCommand -Name 'unset'   -Section '🐚 BASH BUILTINS' -Synopsis 'remove an env var or variable' -Example 'unset EDITOR'
+Register-PFCommand -Name 'source'  -Section '🐚 BASH BUILTINS' -Synopsis 'run a script in THIS scope; .env files get parsed' -Example 'source .env'
+Register-PFCommand -Name 'alias'   -Section '🐚 BASH BUILTINS' -Synopsis 'an alias WITH ARGUMENTS (Set-Alias cannot)' -Example "alias ll='ls -lh'"
+Register-PFCommand -Name 'unalias' -Section '🐚 BASH BUILTINS' -Synopsis 'remove an alias made with alias' -Example 'unalias ll'
+Register-PFCommand -Name 'jobs'    -Section '🐚 BASH BUILTINS' -Synopsis 'list background jobs (fg brings one back)'
+Register-PFCommand -Name 'fg'      -Section '🐚 BASH BUILTINS' -Synopsis 'bring a background job to the foreground' -Example 'fg 3'
+Register-PFCommand -Name 'bg'      -Section '🐚 BASH BUILTINS' -Synopsis 'report a job left running in the background'

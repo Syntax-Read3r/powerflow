@@ -44,31 +44,28 @@ check and explode at runtime on the other OS.
 
 ---
 
-## Help Menu Rule
+## Help Registration Rule
 
-Whenever a new **user-facing command** is added under `components/`, update
-`components/help/menu.ps1` in the same response — without waiting for the user to ask.
+`pwsh-h` is **generated from the command registry** — there is no hand-drawn menu to
+edit. When you add a user-facing command, add a `Register-PFCommand` call **in the same
+file, beside the function**:
 
-Internal helpers (`Assert-Admin`, `Create-RemoteRepository`, `Copy-ToClipboard`, …) go in
-`COMPONENTS.md` but **not** in `pwsh-h` — the help menu is a command reference, not a
-function index.
+```powershell
+Register-PFCommand -Name 'my-cmd' -Section '📂 ENHANCED FILE OPERATIONS' `
+    -Synopsis 'one line, ~60 chars, present tense' -Example 'my-cmd foo' `
+    -Aliases @('mc')            # -Platform 'Windows'|'Linux' if not Both
+```
 
-Place the entry in the correct section of `pwsh-h`:
+Rules:
 
-| Folder | Help section |
-|---|---|
-| `components/git/` | `🎯 ENHANCED GIT WORKFLOW` |
-| `components/navigation/` | `🧭 SMART NAVIGATION & BOOKMARKS` |
-| `components/files/` | `📂 ENHANCED FILE OPERATIONS` |
-| `components/terminal/` | `🪟 TERMINAL TAB MANAGEMENT` |
-| `components/system/` | `⚙️ CONFIGURATION & SETTINGS` |
-| `components/projects/` | `🧱 PROJECT GENERATORS` |
-| `components/help/` | `⚙️ CONFIGURATION & SETTINGS` |
-| `components/core/` | `⚙️ CONFIGURATION & SETTINGS` |
-| `components/shared/` | whichever section is most relevant |
-| `windows-only/` | `🐧 WSL / TERMINAL LAUNCHERS` (mark Windows-only) |
-| `platform/*/adapters/` | none — adapters are internal |
-| `platform/linux/bindings.ps1` | `📂 ENHANCED FILE OPERATIONS` (e.g. `del`, `mvf`) |
+- Section names come from `$script:PF_HelpSections` in `components/help/registry.ps1` —
+  use one of those exactly; new sections get added there first.
+- Every alias (`Set-Alias`) must appear in `-Aliases` of some registration.
+- Internal helpers (Verb-Noun names: `Assert-Admin`, `Copy-ToClipboard`, …) go in
+  `COMPONENTS.md`, **not** the registry — pwsh-h is a command reference, not a function
+  index. The CI gate is case-sensitive and only counts kebab/lowercase names.
+- **CI enforces this** (`release-validate.yml`, "Help registry covers every command"): a
+  kebab-named function or alias without a registration fails the release.
 
 Also update `COMPONENTS.md` — including the **Platform** column (Windows / Linux / Both).
 

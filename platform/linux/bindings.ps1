@@ -72,3 +72,7 @@ foreach ($fn in @('rm', 'mv', 'cp', 'mkdir', 'touch', 'rmdir', 'which', 'grep'))
 #       platform/windows/bindings.ps1) — the real tools are already on PATH.
 
 Write-Verbose "PowerFlow: Linux bindings applied — rm/mv/cp/cat/mkdir/touch defer to coreutils. Use 'del' and 'mvf'."
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'del' -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'PowerFlow delete (fzf picker + confirm) - rm stays GNU' -Platform 'Linux'
+Register-PFCommand -Name 'mvf' -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'PowerFlow move/cut workflow - mv stays GNU' -Platform 'Linux'

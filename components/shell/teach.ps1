@@ -205,3 +205,7 @@ function perms {
 
     Show-PermissionBreakdown -Mode $mode -RealCommand "ls -ld $Path"
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'perms'         -Section '🎓 LEARN LINUX' -Synopsis 'file permissions with every column labelled' -Example 'perms ward-a'
+Register-PFCommand -Name 'linux-lessons' -Section '🎓 LEARN LINUX' -Synopsis 'how much teaching to show: full · hint · off' -Example 'linux-lessons off'

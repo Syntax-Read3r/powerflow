@@ -116,6 +116,47 @@ jobs:
           }
           Write-Host "✅ components/ is platform-agnostic"
 
+      # pwsh-h renders from the command registry. A user-facing command that exists
+      # without a registration is invisible help — the exact drift that let 4 commands
+      # vanish from the old hand-drawn menu and let `ls -t` stay documented as "tree
+      # view" a full version after it became GNU time-sort.
+      - name: 📖 Help registry covers every command
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem components, windows-only -Recurse -Filter *.ps1
+
+          # User-facing = kebab/lowercase names. PowerShell Verb-Noun names are internal
+          # helpers (COMPONENTS.md documents those; pwsh-h does not).
+          # -CaseSensitive is LOAD-BEARING: PowerShell regex is case-insensitive by
+          # default, so a bare [a-z] would swallow every Verb-Noun helper too.
+          $defined = @()
+          foreach ($f in $files) {
+            $defined += (Select-String -CaseSensitive -Path $f.FullName -Pattern '^function ([a-z][\w\.-]*)\b' |
+                         ForEach-Object { $_.Matches[0].Groups[1].Value })
+            $defined += (Select-String -CaseSensitive -Path $f.FullName -Pattern '^Set-Alias(?: -Name)? ([a-z][\w\.-]*)' |
+                         ForEach-Object { $_.Matches[0].Groups[1].Value })
+          }
+          $defined = $defined | Sort-Object -Unique
+
+          $registered = @()
+          foreach ($f in $files) {
+            $raw = Get-Content $f.FullName -Raw
+            $registered += [regex]::Matches($raw, "Register-PFCommand\s+-Name\s+'([^']+)'") |
+                           ForEach-Object { $_.Groups[1].Value }
+            $registered += [regex]::Matches($raw, "-Aliases\s+@\(([^)]+)\)") | ForEach-Object {
+                             [regex]::Matches($_.Groups[1].Value, "'([^']+)'") |
+                             ForEach-Object { $_.Groups[1].Value } }
+          }
+
+          $missing = @($defined | Where-Object { $_ -notin $registered })
+          if ($missing) {
+            foreach ($m in $missing) {
+              Write-Error "❌ '$m' is defined but not registered — add Register-PFCommand beside it"
+            }
+            exit 1
+          }
+          Write-Host "✅ all $($defined.Count) user-facing commands are registered ($($registered.Count) registry entries)"
+
       - name: 🔌 Verify Adapter Contract Parity
         shell: pwsh
         run: |

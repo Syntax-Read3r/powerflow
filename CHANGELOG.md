@@ -9,7 +9,79 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [3.4.0] - Unreleased
+## [3.5.0] - Unreleased
+
+> 📖 **pwsh-h is no longer a hand-drawn wall — it is generated, browsable, and cannot
+> drift from the code.** Plus: 🌐 **`srv` — named SSH connections with live status.**
+
+### Added
+
+- 🌐 **`srv` — servers by name, not by memorised IP.**
+
+  ```
+  srv add proxmox munya@192.168.8.247    tested before saving
+  srv proxmox                            connect by name
+  srv                                    fzf picker, online servers first
+  srv list · srv rm <name>
+  ```
+
+  **The status check probes the SSH port, not just ping** — because the question is
+  "can I ssh in?", not "is it on?". That yields *three* states, and the middle one is
+  the one ping cannot see:
+
+  | | |
+  |---|---|
+  | `✅ online` | the port accepts — connect |
+  | `🟡 host up, ssh not answering` | machine on, **sshd down or blocked** — restart the service |
+  | `⛔ offline · last seen Jul 17` | nothing answers — **go turn it on** (or the IP is mistyped) |
+
+  `srv add` runs the same probe before saving, so a typo'd address is caught at entry;
+  a genuinely powered-off server can still be saved after confirming. All prompts are
+  pipe-safe (piped stdin refuses with an explanation rather than hanging — the
+  installer's old bug class). Offline entries show **last seen**, the picker sorts
+  online-first, ports are per-server (`user@host:2222`), and the server list survives
+  uninstall like bookmarks do (`-Purge` removes it). `ssh` itself is never wrapped or
+  shadowed — the coreutils principle.
+
+### Changed
+
+- 📖 **`pwsh-h` rewritten around a command registry.** The old menu was a 350-line wall
+  of hand-padded box characters in a file far from the commands it documented. An audit
+  found 4 commands missing and one row **actively false** (`ls -t` documented as "tree
+  view" a full version after 3.3.0 made `-t` the GNU time-sort), and 11 rows had drifted
+  off the 80-char grid from emoji-width bugs.
+
+  Now every component declares its own commands beside their definitions:
+
+  ```powershell
+  Register-PFCommand -Name 'nav' -Aliases @('z') -Section '🧭 SMART NAVIGATION & BOOKMARKS' `
+      -Synopsis 'fuzzy-find and jump to a project (4 levels deep)' -Example 'nav chess-guru'
+  ```
+
+  and `pwsh-h` renders from that data — alignment is arithmetic, sections are generated,
+  and platform filtering is automatic (`del`/`mvf` appear on Linux, terminal tabs only on
+  Windows, empty sections vanish).
+
+- 🔎 **Bare `pwsh-h` opens an fzf browser** — type to filter all ~130 entries, preview
+  pane shows synopsis + example + platform, Enter prints the detail view. Piped output,
+  scripts, and fzf-less machines get the generated print automatically; `pwsh-h -all`
+  forces it. Filtering got sharper too: `pwsh-h git` (section), `pwsh-h pc-cap` (command
+  detail), `pwsh-h chmod` (routes to the lesson), `pwsh-h clipboard` (substring search
+  over names *and* synopses).
+
+- 🚧 **CI now fails a release if a user-facing command has no registration** — the
+  "missing from pwsh-h" class is extinct the same way shadowed coreutils are. The gate is
+  case-sensitive on purpose: PowerShell regex is case-insensitive by default, and a bare
+  `[a-z]` would have swallowed every internal Verb-Noun helper into the requirement.
+
+### Fixed
+
+- 📝 Four commands that had quietly fallen out of the old menu (`clr`, `git-aa`,
+  `removefile`, `unalias`) are documented again — by construction, this time.
+
+---
+
+## [3.4.0] - 2026-07-17
 
 > 🖥️ **`pc-whoami` — the machine's vital signs on one screen.** Born from a real
 > diagnosis session (CPU throttling + WHEA crashes) that took seven hand-typed

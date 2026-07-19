@@ -285,3 +285,11 @@ function git-remote {
 # Add shorthand aliases
 function git-sh { git-stash }      # Shorthand for git stash
 function git-r { git-remote }      # Shorthand for git remote
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'git-l'     -Aliases @('git-log') -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'interactive log viewer with per-commit actions'
+Register-PFCommand -Name 'git-s'     -Aliases @('git-st') -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'interactive status viewer'
+Register-PFCommand -Name 'git-p'     -Aliases @('git-pick') -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'fuzzy-pick commits for cherry-pick'
+Register-PFCommand -Name 'git-stash' -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'interactive stash manager'
+Register-PFCommand -Name 'git-r'     -Aliases @('git-remote') -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'interactive remote manager'
+Register-PFCommand -Name 'git-sh'    -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'show a commit, interactively chosen'

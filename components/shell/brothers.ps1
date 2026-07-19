@@ -206,3 +206,30 @@ function listfiles {
 #
 # If you are ever tempted to add `function chmod { ... }` here: don't. Add a lesson to
 # $script:PF_Lessons instead and `lesson chmod` picks it up for free.
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+# Brothers: full words, same flags, each prints the real command it ran.
+Register-PFCommand -Name 'changemode'  -Section '🎓 LEARN LINUX' -Synopsis 'brother of chmod - change permissions' -Example 'changemode 775 shared/'
+Register-PFCommand -Name 'changeowner' -Section '🎓 LEARN LINUX' -Synopsis 'brother of chown - change owner'
+Register-PFCommand -Name 'changegroup' -Section '🎓 LEARN LINUX' -Synopsis 'brother of chgrp - change group'
+Register-PFCommand -Name 'defaultmode' -Section '🎓 LEARN LINUX' -Synopsis 'the umask, with what it actually produces' -Example 'defaultmode 022'
+Register-PFCommand -Name 'whoamifull'  -Section '🎓 LEARN LINUX' -Synopsis 'brother of id - who am I, uid, groups'
+Register-PFCommand -Name 'mygroups'    -Section '🎓 LEARN LINUX' -Synopsis 'brother of groups - my group memberships'
+Register-PFCommand -Name 'lookupentry' -Section '🎓 LEARN LINUX' -Synopsis 'brother of getent - look up users and groups'
+Register-PFCommand -Name 'findfile'    -Section '🎓 LEARN LINUX' -Synopsis 'brother of find - find files by name'
+Register-PFCommand -Name 'findtext'    -Section '🎓 LEARN LINUX' -Synopsis 'brother of grep - search text in files'
+Register-PFCommand -Name 'removefile'  -Section '🎓 LEARN LINUX' -Synopsis 'brother of rm - remove files'
+Register-PFCommand -Name 'archive'     -Section '🎓 LEARN LINUX' -Synopsis 'brother of tar - pack and unpack archives'
+Register-PFCommand -Name 'listfiles'   -Section '🎓 LEARN LINUX' -Synopsis 'brother of ls - routes to PowerFlow ls'
+Register-PFCommand -Name 'fileinfo'    -Section '🎓 LEARN LINUX' -Synopsis 'brother of stat - everything the kernel knows'
+Register-PFCommand -Name 'makelink'    -Section '🎓 LEARN LINUX' -Synopsis 'brother of ln - link paths (target FIRST)'
+Register-PFCommand -Name 'firstlines'  -Section '🎓 LEARN LINUX' -Synopsis 'brother of head - first lines of a file'
+Register-PFCommand -Name 'lastlines'   -Section '🎓 LEARN LINUX' -Synopsis 'brother of tail - last lines; -f follows live'
+Register-PFCommand -Name 'dirsize'     -Section '🎓 LEARN LINUX' -Synopsis 'brother of du - how big is this folder' -Example 'dirsize -sh *'
+Register-PFCommand -Name 'diskfree'    -Section '🎓 LEARN LINUX' -Synopsis 'brother of df - how much space is left'
+Register-PFCommand -Name 'listdisks'   -Section '🎓 LEARN LINUX' -Synopsis 'brother of lsblk - disks and partitions'
+Register-PFCommand -Name 'listports'   -Section '🎓 LEARN LINUX' -Synopsis 'brother of ss - what listens on which port' -Example 'listports -tulpn'
+Register-PFCommand -Name 'listprocs'   -Section '🎓 LEARN LINUX' -Synopsis 'brother of ps - running processes'
+Register-PFCommand -Name 'stopproc'    -Section '🎓 LEARN LINUX' -Synopsis 'brother of kill - stop a process'
+Register-PFCommand -Name 'service'     -Section '🎓 LEARN LINUX' -Synopsis 'brother of systemctl - control services' -Example 'service status jellyfin'
+Register-PFCommand -Name 'systemlogs'  -Section '🎓 LEARN LINUX' -Synopsis 'brother of journalctl - why did it die' -Example 'systemlogs -u jellyfin -e'

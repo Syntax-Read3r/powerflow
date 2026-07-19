@@ -142,15 +142,26 @@ if ($manifest.backup -and (Test-Path $manifest.backup)) {
 }
 
 # ── 4. Optional purge of user data ────────────────────────────────────────────
+# User data = things the USER built up (bookmarks, nav roots, saved SSH servers).
+# Kept by default: reinstalling should not cost anyone their server list.
+$userData = @(
+    @{ Label = 'bookmarks';   Path = (Join-Path $HOME '.nav_bookmarks.json') }
+    @{ Label = 'nav roots';   Path = (Join-Path $HOME '.nav_roots.json') }
+    @{ Label = 'SSH servers'; Path = (Join-Path $HOME '.powerflow-servers.json') }
+)
 if ($Purge) {
     Write-Host ""
     Write-Host "🧹 Purging user data..." -ForegroundColor Yellow
-    $bookmarks = Join-Path $HOME '.nav_bookmarks.json'
-    if (Test-Path $bookmarks) { Remove-Item $bookmarks -Force; Write-Host "  ✅ bookmarks" -ForegroundColor Green }
+    foreach ($d in $userData) {
+        if (Test-Path $d.Path) { Remove-Item $d.Path -Force; Write-Host "  ✅ $($d.Label)" -ForegroundColor Green }
+    }
 }
 else {
-    Write-Host ""
-    Write-Host "💾 Kept your bookmarks (~/.nav_bookmarks.json). Use -Purge to remove them." -ForegroundColor DarkGray
+    $kept = @($userData | Where-Object { Test-Path $_.Path } | ForEach-Object Label)
+    if ($kept.Count) {
+        Write-Host ""
+        Write-Host "💾 Kept your $($kept -join ', '). Use -Purge to remove them." -ForegroundColor DarkGray
+    }
 }
 
 Remove-Item $manifestPath -Force -ErrorAction SilentlyContinue

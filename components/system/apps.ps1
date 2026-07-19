@@ -565,3 +565,7 @@ function Invoke-AppAction {
         default { Write-Host "❌ Cancelled." -ForegroundColor DarkGray }
     }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'installed-apps' -Aliases @('i-a') -Section '🗄️ DISK RECLAIM' -Synopsis 'browse installed apps by size band; -o for overview' -Example 'i-a -o · i-a 2gb-4gb'
+Register-PFCommand -Name 'disk-big'       -Aliases @('d-b') -Section '🗄️ DISK RECLAIM' -Synopsis 'large folders and files (vhdx, node_modules, caches)' -Example 'd-b 50gb-200gb'

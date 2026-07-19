@@ -269,3 +269,7 @@ function git-rb {
         Write-Host "💡 Check if the commit hash is valid and try again" -ForegroundColor DarkGray
     }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'git-rb'  -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'create a rollback branch from any commit, safely'
+Register-PFCommand -Name 'git-rba' -Aliases @('grba') -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'rollback branch add-commit-push'

@@ -637,3 +637,9 @@ function gh-l-org {
         }
     }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'gh-l'        -Section '🐙 GITHUB BROWSER' -Synopsis 'browse your repos with activity stats; clone from the picker'
+Register-PFCommand -Name 'gh-l-org'    -Section '🐙 GITHUB BROWSER' -Synopsis 'browse an org - clone one repo or all' -Example 'gh-l-org my-team'
+Register-PFCommand -Name 'gh-l-status' -Section '🐙 GITHUB BROWSER' -Synopsis 'show the stored GitHub token status'
+Register-PFCommand -Name 'gh-l-reset'  -Section '🐙 GITHUB BROWSER' -Synopsis 'forget the stored GitHub token'

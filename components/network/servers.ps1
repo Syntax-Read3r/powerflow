@@ -1,0 +1,349 @@
+# ==============================================================================
+# PowerFlow — SSH Server Manager
+# ==============================================================================
+# Domain   : Network
+# File     : components/network/servers.ps1
+# Purpose  : Named SSH connections with live online/offline status —
+#            `srv proxmox` instead of `ssh munya@192.168.8.247`
+# Functions: srv, Test-ServerOnline, Get-PFServers, Save-PFServers
+# Depends  : Get-HomePath (locations adapter), fzf (optional), ssh (client)
+# ==============================================================================
+#
+# THE STATUS CHECK IS A TCP PROBE OF THE SSH PORT, NOT A PING.
+#
+# A ping answers "is the machine on?" — but the question being asked is "can I ssh
+# in?". Probing the port answers the real question and yields THREE states:
+#
+#   ✅ online    port accepts connections — ssh will work
+#   🟡 no-ssh    host answers ICMP but not the port — machine on, sshd down/blocked
+#   ⛔ offline   nothing answers — powered off, or the address is wrong
+#
+# The middle state is the one a plain ping cannot see, and it changes what you do
+# next (restart sshd vs. walk to the power button).
+#
+# `ssh` itself is NEVER wrapped or shadowed — the same principle as the GNU
+# coreutils. srv is a launcher beside it, not a layer over it.
+# ==============================================================================
+
+$script:PFServersFile = Join-Path (Get-HomePath) '.powerflow-servers.json'
+
+function Get-PFServers {
+    if (-not (Test-Path $script:PFServersFile)) { return @{} }
+    try {
+        $raw = Get-Content $script:PFServersFile -Raw | ConvertFrom-Json
+        $map = @{}
+        foreach ($p in $raw.PSObject.Properties) { $map[$p.Name] = $p.Value }
+        return $map
+    } catch {
+        Write-Warning "srv: could not read $script:PFServersFile"
+        return @{}
+    }
+}
+
+function Save-PFServers {
+    param([hashtable]$Servers)
+    $Servers | ConvertTo-Json -Depth 3 | Set-Content $script:PFServersFile -Encoding UTF8
+}
+
+<#
+.SYNOPSIS
+    online / no-ssh / offline for one host, in ~1s worst case.
+#>
+function Test-ServerOnline {
+    param(
+        [Parameter(Mandatory)][string]$TargetHost,
+        [int]$Port = 22,
+        [int]$TimeoutMs = 1200
+    )
+
+    $client = [System.Net.Sockets.TcpClient]::new()
+    try {
+        $task = $client.ConnectAsync($TargetHost, $Port)
+        if ($task.Wait($TimeoutMs) -and $client.Connected) { return 'online' }
+    } catch {} finally { $client.Dispose() }
+
+    # Port dead — does the MACHINE answer? (.NET Ping is unprivileged on both platforms.)
+    try {
+        $ping = [System.Net.NetworkInformation.Ping]::new()
+        if ($ping.Send($TargetHost, 800).Status -eq 'Success') { return 'no-ssh' }
+    } catch {}
+
+    return 'offline'
+}
+
+# Status for every server AT ONCE — one offline server must not add its timeout to
+# the next. ForEach-Object -Parallel cannot see local functions, so the probe is
+# inlined; keep it in sync with Test-ServerOnline above.
+function Get-PFServerStatuses {
+    param([hashtable]$Servers)
+
+    $jobs = $Servers.GetEnumerator() | ForEach-Object {
+        [pscustomobject]@{ Name = $_.Key; TargetHost = $_.Value.host; Port = [int]$_.Value.port }
+    }
+
+    $results = $jobs | ForEach-Object -ThrottleLimit 8 -Parallel {
+        $state  = 'offline'
+        $client = [System.Net.Sockets.TcpClient]::new()
+        try {
+            $task = $client.ConnectAsync($_.TargetHost, $_.Port)
+            if ($task.Wait(1200) -and $client.Connected) { $state = 'online' }
+        } catch {} finally { $client.Dispose() }
+        if ($state -ne 'online') {
+            try {
+                $ping = [System.Net.NetworkInformation.Ping]::new()
+                if ($ping.Send($_.TargetHost, 800).Status -eq 'Success') { $state = 'no-ssh' }
+            } catch {}
+        }
+        [pscustomobject]@{ Name = $_.Name; State = $state }
+    }
+
+    $map = @{}
+    foreach ($r in $results) { $map[$r.Name] = $r.State }
+    return $map
+}
+
+function Format-PFServerStatus {
+    param([string]$State, $Server)
+    switch ($State) {
+        'online'  { '✅ online' }
+        'no-ssh'  { '🟡 host up, ssh not answering' }
+        default   {
+            $seen = if ($Server.lastSeen) {
+                try { ' · last seen ' + ([datetime]$Server.lastSeen).ToString('MMM d') } catch { '' }
+            } else { '' }
+            "⛔ offline$seen"
+        }
+    }
+}
+
+function Connect-PFServer {
+    param([string]$Name, $Server)
+
+    if (-not (Get-Command ssh -ErrorAction SilentlyContinue)) {
+        Write-Host "❌ No ssh client on this machine." -ForegroundColor Red
+        if ($script:PowerFlowOS -eq 'windows') {
+            Write-Host "   Install it:  Settings → Optional features → OpenSSH Client" -ForegroundColor DarkGray
+        } else {
+            Write-Host "   Install it:  sudo apt install openssh-client" -ForegroundColor DarkGray
+        }
+        return
+    }
+
+    Write-Host "🔗 $Name → $($Server.user)@$($Server.host)$(if ([int]$Server.port -ne 22) { ":$($Server.port)" })" -ForegroundColor Cyan
+
+    # Reaching this point means the caller saw it online (or chose to try anyway) —
+    # record the sighting either way; a successful ssh will prove it shortly.
+    $servers = Get-PFServers
+    if ($servers[$Name]) {
+        $servers[$Name] | Add-Member -NotePropertyName lastSeen -NotePropertyValue (Get-Date).ToString('o') -Force
+        Save-PFServers $servers
+    }
+
+    & ssh -p ([int]$Server.port) "$($Server.user)@$($Server.host)"
+}
+
+<#
+.SYNOPSIS
+    srv — named SSH connections, with live status.
+.DESCRIPTION
+    srv                          pick a server (fzf, online-first) and connect
+    srv <name>                   connect by name; warns first if it looks offline
+    srv add <name> <user@host>   save a connection — tested before saving
+    srv add <name> <user@host:2222>   non-standard port
+    srv rm <name> [-f]           forget a connection
+    srv list                     every server with its status
+.EXAMPLE
+    srv add proxmox munya@192.168.8.247
+    srv proxmox
+#>
+function srv {
+    param(
+        [string]$Command,
+        [string]$Param1,
+        [string]$Param2,
+        [switch]$f
+    )
+
+    $servers = Get-PFServers
+
+    switch ($Command) {
+        'add' {
+            $name = $Param1; $target = $Param2
+            if (-not $name -or -not $target) {
+                Write-Host "❌ Usage:  srv add <name> <user@host[:port]>" -ForegroundColor Red
+                Write-Host "   e.g.    srv add proxmox munya@192.168.8.247" -ForegroundColor DarkGray
+                return
+            }
+            if ($name -in @('add', 'rm', 'remove', 'list', 'ls', 'help')) {
+                Write-Host "❌ '$name' is a srv subcommand — pick another name." -ForegroundColor Red
+                return
+            }
+            if ($name -cnotmatch '^[a-z0-9][\w-]*$') {
+                Write-Host "❌ Server names are lowercase: letters, digits, dashes. Try '$($name.ToLower())'." -ForegroundColor Red
+                return
+            }
+            if ($target -notmatch '^([^@\s]+)@([^@:\s]+)(?::(\d+))?$') {
+                Write-Host "❌ That is not user@host[:port]:  $target" -ForegroundColor Red
+                return
+            }
+            $user = $matches[1]; $addr = $matches[2]
+            $port = if ($matches[3]) { [int]$matches[3] } else { 22 }
+
+            if ($servers.ContainsKey($name) -and -not $f) {
+                Write-Host "❌ '$name' already exists → $($servers[$name].user)@$($servers[$name].host)" -ForegroundColor Red
+                Write-Host "   Replace it:  srv add $name $target -f" -ForegroundColor DarkGray
+                return
+            }
+
+            # THE PING TEST THE USER ASKED FOR — but probing the ssh port, which is
+            # the thing that actually matters, with ICMP only as the tiebreaker.
+            Write-Host "🔎 Testing $addr`:$port ..." -ForegroundColor DarkGray
+            $state = Test-ServerOnline -TargetHost $addr -Port $port
+
+            if ($state -ne 'online') {
+                $why = if ($state -eq 'no-ssh') {
+                    "the host answers ping, but nothing accepts connections on port $port (is sshd running?)"
+                } else {
+                    "nothing answers at all — powered off, or the address is mistyped"
+                }
+                Write-Host "⚠️  $addr is not reachable: $why" -ForegroundColor Yellow
+
+                # A dead address is EXACTLY what this test exists to catch — but a
+                # powered-off server is legitimate to save. Ask. Unless nobody can
+                # answer (piped stdin), in which case refuse rather than guess.
+                if ([Console]::IsInputRedirected) {
+                    Write-Host "❌ Not saved (no terminal to confirm on). Re-run interactively, or when the server is up." -ForegroundColor Red
+                    return
+                }
+                if ((Read-Host "   Save it anyway? [y/N]") -notin @('y', 'Y')) {
+                    Write-Host "❌ Not saved." -ForegroundColor Yellow
+                    return
+                }
+            }
+
+            $servers[$name] = [pscustomobject]@{
+                host    = $addr
+                user    = $user
+                port    = $port
+                addedAt = (Get-Date).ToString('o')
+                lastSeen = if ($state -eq 'online') { (Get-Date).ToString('o') } else { $null }
+            }
+            Save-PFServers $servers
+            $badge = Format-PFServerStatus $state $servers[$name]
+            Write-Host "✅ Saved: $name → $user@$addr$(if ($port -ne 22) { ":$port" })   $badge" -ForegroundColor Green
+            Write-Host "   Connect any time:  srv $name" -ForegroundColor Cyan
+            return
+        }
+
+        { $_ -in 'rm', 'remove' } {
+            $name = $Param1
+            if (-not $name -or -not $servers.ContainsKey($name)) {
+                Write-Host "❌ No server called '$name'.  srv list" -ForegroundColor Red
+                return
+            }
+            if (-not $f) {
+                if ([Console]::IsInputRedirected) {
+                    Write-Host "❌ Refusing to delete without confirmation on a piped stdin — use:  srv rm $name -f" -ForegroundColor Red
+                    return
+                }
+                if ((Read-Host "Forget '$name' ($($servers[$name].user)@$($servers[$name].host))? [y/N]") -notin @('y', 'Y')) {
+                    Write-Host "❌ Kept." -ForegroundColor Yellow
+                    return
+                }
+            }
+            $servers.Remove($name)
+            Save-PFServers $servers
+            Write-Host "✅ Forgotten: $name" -ForegroundColor Green
+            return
+        }
+
+        { $_ -in 'list', 'ls' } {
+            if ($servers.Count -eq 0) {
+                Write-Host "ℹ️  No servers yet.  srv add <name> <user@host>" -ForegroundColor DarkGray
+                return
+            }
+            Write-Host ""
+            Write-Host "🌐 Servers" -ForegroundColor Cyan
+            $statuses = Get-PFServerStatuses $servers
+            $w = ($servers.Keys | Measure-Object -Maximum Length).Maximum + 2
+            foreach ($e in ($servers.GetEnumerator() | Sort-Object Key)) {
+                $s = $e.Value
+                Write-Host ("  {0}" -f $e.Key.PadRight($w)) -NoNewline -ForegroundColor Green
+                Write-Host ("{0}@{1}{2}  " -f $s.user, $s.host, $(if ([int]$s.port -ne 22) { ":$($s.port)" })) -NoNewline -ForegroundColor White
+                Write-Host (Format-PFServerStatus $statuses[$e.Key] $s) -ForegroundColor $(switch ($statuses[$e.Key]) { 'online' { 'Green' } 'no-ssh' { 'Yellow' } default { 'DarkGray' } })
+            }
+            Write-Host ""
+            return
+        }
+    }
+
+    # ── srv <name>: connect by name ───────────────────────────────────────────
+    if ($Command) {
+        if (-not $servers.ContainsKey($Command)) {
+            Write-Host "❌ No server called '$Command'." -ForegroundColor Red
+            Write-Host "   srv list   ·   srv add $Command <user@host>" -ForegroundColor DarkGray
+            return
+        }
+        $s = $servers[$Command]
+        $state = Test-ServerOnline -TargetHost $s.host -Port ([int]$s.port)
+
+        if ($state -ne 'online') {
+            Write-Host "⛔ $Command looks $(if ($state -eq 'no-ssh') { 'up, but ssh is not answering' } else { 'offline' })." -ForegroundColor Yellow
+            if ($state -eq 'no-ssh') {
+                Write-Host "   The machine responds — sshd may be down or the port blocked." -ForegroundColor DarkGray
+            } else {
+                Write-Host "   It may need turning on. $(Format-PFServerStatus 'offline' $s)" -ForegroundColor DarkGray
+            }
+            if ([Console]::IsInputRedirected) { return }
+            if ((Read-Host "   Try to connect anyway? [y/N]") -notin @('y', 'Y')) { return }
+        }
+        Connect-PFServer $Command $s
+        return
+    }
+
+    # ── bare srv: the picker ──────────────────────────────────────────────────
+    if ($servers.Count -eq 0) {
+        Write-Host "ℹ️  No servers yet." -ForegroundColor DarkGray
+        Write-Host "   srv add proxmox munya@192.168.8.247" -ForegroundColor Cyan
+        return
+    }
+
+    # No terminal or no fzf → the list IS the answer.
+    if ([Console]::IsOutputRedirected -or -not (Get-Command fzf -ErrorAction SilentlyContinue)) {
+        srv list
+        return
+    }
+
+    $statuses = Get-PFServerStatuses $servers
+    $rank = @{ online = 0; 'no-ssh' = 1; offline = 2 }
+    $lines = $servers.GetEnumerator() |
+        Sort-Object { $rank[$statuses[$_.Key]] }, Key |
+        ForEach-Object {
+            $s = $_.Value
+            "{0}`t{1}@{2}{3}`t{4}" -f $_.Key, $s.user, $s.host,
+                $(if ([int]$s.port -ne 22) { ":$($s.port)" }), (Format-PFServerStatus $statuses[$_.Key] $s)
+        }
+
+    $sel = $lines | fzf `
+        --delimiter "`t" `
+        --reverse --border=rounded --height=40% `
+        --prompt="🌐 Connect: " `
+        --header="$($servers.Count) server(s) — Enter connects · Esc cancels" `
+        --header-first `
+        --color="header:bold:cyan,prompt:bold:green,border:cyan"
+
+    if (-not $sel) { Write-Host "❌ Cancelled" -ForegroundColor DarkGray; return }
+
+    $name = ($sel -split "`t")[0]
+    if ($statuses[$name] -ne 'online') {
+        Write-Host "⛔ $name is $(if ($statuses[$name] -eq 'no-ssh') { 'up, but ssh is not answering' } else { 'offline — it may need turning on' })." -ForegroundColor Yellow
+        if ((Read-Host "   Try to connect anyway? [y/N]") -notin @('y', 'Y')) { return }
+    }
+    Connect-PFServer $name $servers[$name]
+}
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'srv'      -Section '🌐 SSH SERVERS' -Synopsis 'pick a server (live status, online first) and connect' -Example 'srv · srv proxmox'
+Register-PFCommand -Name 'srv add'  -Section '🌐 SSH SERVERS' -Synopsis 'save a connection by name - tested before saving' -Example 'srv add proxmox munya@192.168.8.247'
+Register-PFCommand -Name 'srv rm'   -Section '🌐 SSH SERVERS' -Synopsis 'forget a connection (-f skips the confirm)'
+Register-PFCommand -Name 'srv list' -Section '🌐 SSH SERVERS' -Synopsis 'every server with online / ssh-down / offline status'

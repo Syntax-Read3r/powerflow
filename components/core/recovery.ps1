@@ -161,3 +161,7 @@ function powerflow-uninstall {
     Write-Host "🙏 Thanks for using PowerFlow!" -ForegroundColor DarkGray
     Write-Host ""
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'pwsh-recovery'       -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'PowerFlow recovery and diagnostics menu'
+Register-PFCommand -Name 'powerflow-uninstall' -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'remove PowerFlow; keeps tools you already had'

@@ -46,3 +46,8 @@ function pwsh-settings {
         Write-Host "❌ Could not find Windows Terminal settings.json" -ForegroundColor Red
     }
 }
+
+# ── pwsh-h registration ───────────────────────────────────────────────────────
+Register-PFCommand -Name 'pwsh-profile'  -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'open the PowerShell profile in your editor'
+Register-PFCommand -Name 'pwsh-starship' -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'open the Starship prompt config'
+Register-PFCommand -Name 'pwsh-settings' -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'open the terminal settings' -Platform 'Windows'
