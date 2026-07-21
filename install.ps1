@@ -301,11 +301,53 @@ if (-not $NoDeps) {
         $dependencies += @{
             name    = $tool
             manager = (Get-PackageManagerName)
-            # Ours if we JUST installed it, or if a previous install recorded it as ours.
-            # Never `-not $preExisting` on its own: on a re-install the tool is present
-            # BECAUSE we installed it, and that would silently disown it.
-            installedByPowerFlow = ((-not $preExisting) -or $weOwnIt)
+            # Ours iff we actually installed it — this run ($weOwnIt set on success at the
+            # Install-Dependency branch) or a previous run (carried in via $priorlyOwned).
+            # NOT `(-not $preExisting) -or $weOwnIt`: when a fresh install FAILS, $preExisting
+            # is $false and that disjunct still records ownership of a tool that is not on the
+            # system — which uninstall would then try to remove (and for a font, could delete
+            # one the user installed themselves). $weOwnIt alone is correct in every branch.
+            installedByPowerFlow = $weOwnIt
         }
+    }
+
+    # ── Nerd Font ─────────────────────────────────────────────────────────────
+    # Starship and lsd draw with Nerd Font glyphs. Without it the prompt shows tofu
+    # boxes / CJK fallback and lsd's icons overlap filenames. Cosmetic, so a failure
+    # here is a warning, never fatal. Tracked in the manifest ('kind: font') so
+    # uninstall removes it via the fonts adapter, and only if PowerFlow installed it.
+    . (Join-Path $profileDir "platform/$Platform/adapters/fonts.ps1")
+
+    $fontPre   = Test-NerdFont
+    $fontOwned = $priorlyOwned.ContainsKey('nerd-font')
+
+    if ($fontPre) {
+        Write-Host "   ✅ $(Get-NerdFontName) (already present)" -ForegroundColor DarkGray
+    } else {
+        Write-Host "   Installing $(Get-NerdFontName)..." -ForegroundColor DarkGray
+        if (Install-NerdFont) {
+            Write-Host "   ✅ $(Get-NerdFontName) installed" -ForegroundColor Green
+            $fontOwned = $true
+        } else {
+            Write-Host "   ⚠️  Font not installed automatically — run 'pwsh-font' later." -ForegroundColor Yellow
+        }
+    }
+
+    $dependencies += @{
+        name    = 'nerd-font'
+        kind    = 'font'
+        manager = (Get-PackageManagerName)
+        # $fontOwned alone — set true ONLY on a successful install this run, or carried
+        # from a prior owned install. `(-not $fontPre) -or …` would record ownership of a
+        # font that merely failed to install, and uninstall could then delete a font the
+        # user installed themselves (on Windows, `scoop uninstall FiraCode-NF-Mono`).
+        installedByPowerFlow = $fontOwned
+    }
+
+    # The one step no installer can do: set the terminal's font. Only nag when we
+    # actually just added the font — an existing one is presumably already selected.
+    if (-not $fontPre) {
+        Write-Host "   🎨 Set your terminal font to '$(Get-NerdFontName)' — run 'pwsh-font' for the exact step." -ForegroundColor Cyan
     }
 }
 else {

@@ -74,6 +74,10 @@ if ($manifest.dependencies) {
     }
     $keptDeps = @($manifest.dependencies | Where-Object { -not $_.installedByPowerFlow })
 }
+# A font is not a package-manager package — it uninstalls via the fonts adapter, not
+# `apt remove nerd-font`. Split it out from the CLI tools.
+$removableFonts = @($removableDeps | Where-Object { $_.kind -eq 'font' })
+$removableTools = @($removableDeps | Where-Object { $_.kind -ne 'font' })
 
 # ── Show exactly what will happen BEFORE doing any of it ──────────────────────
 Write-Host "PowerFlow v$($manifest.version) ($($manifest.platform))" -ForegroundColor White
@@ -104,21 +108,33 @@ if (-not $Yes -and (Read-Host "Proceed? (y/n)") -ne 'y') {
     exit 0
 }
 
-# ── 1. Remove dependencies FIRST (the adapter lives in files we're about to delete)
-if ($removableDeps.Count -gt 0) {
+# ── 1. Remove dependencies FIRST (the adapters live in files we're about to delete)
+if ($removableTools.Count -gt 0) {
     Write-Host ""
     Write-Host "📦 Removing dependencies PowerFlow installed..." -ForegroundColor Yellow
 
     $adapter = Join-Path $manifest.installRoot "platform/$($manifest.platform)/adapters/packages.ps1"
     if (Test-Path $adapter) {
         . $adapter
-        if (Uninstall-Dependency @($removableDeps.name)) {
-            Write-Host "✅ Removed: $(($removableDeps.name) -join ', ')" -ForegroundColor Green
+        if (Uninstall-Dependency @($removableTools.name)) {
+            Write-Host "✅ Removed: $(($removableTools.name) -join ', ')" -ForegroundColor Green
         } else {
-            Write-Host "⚠️  Some could not be removed — remove manually: $(($removableDeps.name) -join ', ')" -ForegroundColor Yellow
+            Write-Host "⚠️  Some could not be removed — remove manually: $(($removableTools.name) -join ', ')" -ForegroundColor Yellow
         }
     } else {
-        Write-Host "⚠️  Packages adapter missing — remove manually: $(($removableDeps.name) -join ', ')" -ForegroundColor Yellow
+        Write-Host "⚠️  Packages adapter missing — remove manually: $(($removableTools.name) -join ', ')" -ForegroundColor Yellow
+    }
+}
+
+# The Nerd Font — via the fonts adapter, and only PowerFlow's own copy.
+if ($removableFonts.Count -gt 0) {
+    $fontAdapter = Join-Path $manifest.installRoot "platform/$($manifest.platform)/adapters/fonts.ps1"
+    if (Test-Path $fontAdapter) {
+        . $fontAdapter
+        Uninstall-NerdFont | Out-Null
+        Write-Host "✅ Removed the Nerd Font PowerFlow installed" -ForegroundColor Green
+    } else {
+        Write-Host "⚠️  Fonts adapter missing — remove the Nerd Font manually if you want it gone." -ForegroundColor Yellow
     }
 }
 

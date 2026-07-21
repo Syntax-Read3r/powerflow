@@ -9,6 +9,67 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.7.0] - 2026-07-21
+
+> 🎨 **The prompt and `ls` finally have their font**, and starting PowerFlow on login is
+> now one short word.
+
+### Added
+
+- 🎨 **A Nerd Font is now actually installed.** Starship and lsd draw with Nerd Font
+  glyphs; without one you got tofu boxes or — on Fedora — Chinese characters from CJK
+  fallback, with lsd's icons overlapping filenames. The README had claimed "FiraCode Nerd
+  Font auto-installed" for years; **nothing ever installed it, on any platform.** Now it
+  does: Scoop's nerd-fonts bucket on Windows, a direct download to `~/.local/share/fonts`
+  + `fc-cache` on Linux — tracked in the manifest so uninstall removes it (but never a
+  font you already had). The **Mono** variant, deliberately — single-cell glyphs are what
+  stop lsd's icons from encroaching on filenames.
+
+  - **`pwsh-font`** — install it (if missing) and print the one step no tool can do for
+    you: pointing your terminal emulator at the font. `pwsh-font -status` just reports.
+
+- 🔑 **`--auto-login`** — a short alias for `--login-shell auto`. Start PowerFlow on login
+  straight from the install one-liner:
+  ```bash
+  curl -fsSL …/install.sh | bash -s -- --auto-login
+  ```
+
+- 🔑 **`pwsh-autologin`** — turn login-launch on or off from inside a running session, with
+  no installer re-run. `pwsh-autologin` enables it, `pwsh-autologin off` disables it,
+  `pwsh-autologin status` reports. It writes the **byte-identical** guarded `~/.bashrc`
+  block the installer does. On Windows there is no login-shell hook to toggle (pwsh always
+  loads `$PROFILE`), and the command says so rather than pretending.
+
+### Fixed
+
+- 🔒 **The login hook now survives a *broken* pwsh, not just a removed one.** The guard
+  previously only checked `command -v pwsh` (does it exist on PATH). A pwsh that exists but
+  crashes on start — the classic missing-ICU case the installer already guards against
+  elsewhere — would `exec pwsh`, crash, and terminate the session, re-crashing on every
+  fresh login: an effective lockout on a headless box. The guard now also runs
+  `pwsh --version`, so a broken pwsh falls through to bash. Applies to both
+  `install.sh --auto-login` and `pwsh-autologin` (they write the identical block).
+
+- 🔒 **`pwsh-autologin off` can't eat your `~/.bashrc`.** Removal now only deletes a
+  marker→`fi` block that actually contains `exec pwsh`, so a comment of yours that merely
+  mentions the hook — or a `~/.bashrc` where the marker never really wrote a hook — is left
+  untouched. The installer's own `sed` removal was hardened the same way (framed-comment
+  anchor, CR-tolerant).
+
+- 🔒 **A failed dependency install is no longer recorded as PowerFlow-owned.** The manifest
+  used `(-not $preExisting) -or $weOwnIt`, which marked ownership whenever a tool/font was
+  merely *absent* at the start — even if the install then failed. On Windows that could
+  make uninstall remove a font you later installed yourself. Ownership is now recorded only
+  on an actual successful install (or a prior owned record).
+
+- 🎨 **Font detection matches the Mono variant specifically.** A pre-existing non-Mono
+  `FiraCode Nerd Font` no longer counts as "installed" — otherwise the Mono variant that
+  actually fixes lsd's icon overlap would never get installed.
+
+  *(These four were found by an adversarial review pass over the feature before release.)*
+
+---
+
 ## [3.6.1] - 2026-07-19
 
 ### Fixed

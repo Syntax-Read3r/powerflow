@@ -135,8 +135,8 @@ irm https://github.com/Syntax-Read3r/powerflow/releases/latest/download/install.
 ### 🐧 Linux
 
 ```bash
-# terminal
-curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/latest/download/install.sh | bash
+# terminal — and start PowerFlow automatically on login
+curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/latest/download/install.sh | bash -s -- --auto-login
 
 # ...or a graphical installer (zenity / kdialog / yad)
 curl -fsSL https://github.com/Syntax-Read3r/powerflow/releases/latest/download/install-gui.sh -o install-gui.sh
@@ -144,22 +144,34 @@ bash install-gui.sh
 ```
 
 The Linux installer installs PowerShell if you don't have it (Debian, Ubuntu, Fedora,
-Arch, openSUSE, Alpine), then PowerFlow and its dependencies.
+Arch, openSUSE, Alpine), then PowerFlow, its dependencies, and a Nerd Font.
 
 > #### ⚠️ On Linux, PowerFlow only loads when `pwsh` runs
 >
 > It is a PowerShell *profile*. Your login shell is normally bash, so after a reboot you
 > land in bash and PowerFlow is **not there** — nothing is broken, you're just in a
-> different shell. To start it automatically:
+> different shell. **`--auto-login`** (above) handles this by adding a guarded block to
+> `~/.bashrc`. Already installed without it? Turn it on from inside PowerFlow — no
+> re-install:
 >
-> ```bash
-> bash install.sh --login-shell auto     # recommended — cannot lock you out
-> bash install.sh --login-shell login    # chsh: make pwsh your login shell
+> ```
+> pwsh-autologin          # start PowerFlow on login  (pwsh-autologin off to undo)
 > ```
 >
-> `auto` adds a guarded block to `~/.bashrc`: if pwsh is ever removed or broken you still
-> get bash, so you can't be locked out of your own server. Test it without logging out
-> with `bash -l`.
+> The hook is guarded: if pwsh is ever removed or broken you still get bash, so you can't
+> be locked out of your own server. Test it without logging out with `bash -l`.
+
+> #### 🎨 If the prompt or `ls` shows boxes / Chinese characters
+>
+> That's a **missing Nerd Font** — Starship and lsd draw with special glyphs. The installer
+> now installs one, but a font can only be *set* by you:
+>
+> ```
+> pwsh-font          # install the font (if needed) and print the one terminal step
+> ```
+>
+> Then set your terminal's font to **FiraCode Nerd Font Mono**. The Mono variant keeps
+> lsd's icons from overlapping filenames.
 
 ### 🐧 Linux keeps its GNU coreutils
 
@@ -180,11 +192,13 @@ shadows them. Its own versions are **`del`** and **`mvf`**.
 
 PowerFlow automatically sets up your environment:
 
-1. **🎨 Installs FiraCode Nerd Font** - For beautiful icons and symbols
-2. **📦 Installs Dependencies** - Starship, fzf, zoxide, lsd via Scoop
+1. **🎨 Installs FiraCode Nerd Font** - Scoop on Windows, direct download + `fc-cache`
+   on Linux (re-run any time with `pwsh-font`)
+2. **📦 Installs Dependencies** - Starship, fzf, zoxide, lsd (Scoop / your distro's
+   package manager)
 3. **🔖 Creates Default Bookmarks** - Quick access to common directories
 4. **🔄 Enables Auto-Updates** - Stay current with latest features
-5. **💡 Shows Setup Tips** - Guides you through Windows Terminal configuration
+5. **💡 Shows Setup Tips** - Points you at the one manual step: setting the terminal font
 
 ### Final Setup Step
 
@@ -447,6 +461,15 @@ PowerFlow's versions live on as `del` and `mvf`.
 | `pc-whoami -bios`    | Firmware version, age, board model                |
 | `pc-cap 85`          | Cap CPU speed — prior state recorded for safe undo |
 | `pc-cap restore`     | Put back exactly what was recorded                |
+
+### Appearance & Login
+
+| Command                | Description                                              |
+| ---------------------- | ------------------------------------------------------- |
+| `pwsh-font`            | Install the Nerd Font, then show the terminal-font step  |
+| `pwsh-font -status`    | Is the font installed? (installs nothing)                |
+| `pwsh-autologin`       | Start PowerFlow on login — no installer re-run (Linux)   |
+| `pwsh-autologin off`   | Stop starting on login                                   |
 
 ### System
 

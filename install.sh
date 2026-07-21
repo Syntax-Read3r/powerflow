@@ -56,6 +56,8 @@ usage() {
 PowerFlow installer (Linux)
 
   --yes                 Assume yes; no prompts (CI-safe)
+  --auto-login          Launch PowerFlow automatically on login (RECOMMENDED).
+                        Short alias for --login-shell auto.
   --no-deps             Install PowerFlow only; skip fzf/zoxide/starship/lsd
   --prefix DIR          Install root (default: ~/.local/share/powerflow)
   --uninstall           Remove PowerFlow
@@ -65,9 +67,9 @@ PowerFlow installer (Linux)
   your login shell is normally bash, so after a reboot you land in bash and
   PowerFlow is simply not there. Choose how it should start:
 
-  --login-shell auto    Launch pwsh from ~/.bashrc on interactive login.
-                        RECOMMENDED. Guarded, so a broken pwsh still leaves you
-                        with bash — no lockout.
+  --auto-login          Launch pwsh from ~/.bashrc on interactive login.
+                        RECOMMENDED, and the same as --login-shell auto. Guarded,
+                        so a broken pwsh still leaves you with bash — no lockout.
   --login-shell login   chsh: make pwsh your actual login shell. Cleaner, but if
                         pwsh fails to start you have NO shell. Risky on a headless
                         box.
@@ -81,6 +83,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --yes|-y)     ASSUME_YES=1; shift ;;
+        --auto-login) LOGIN_SHELL_MODE="auto"; shift ;;   # short alias for --login-shell auto
         --no-deps)    NO_DEPS=1; shift ;;
         --prefix)     PREFIX="$2"; shift 2 ;;
         --uninstall)  DO_UNINSTALL=1; shift ;;
@@ -354,10 +357,12 @@ install_bashrc_hook() {
 
 # ── ${PF_BASHRC_MARKER} ──
 # Guards, in order:
-#   \$- == *i*     only interactive shells — never scp/rsync/cron/scripts
-#   PWSH_STARTED  prevents a login loop
-#   command -v    if pwsh is ever removed you still get bash — no lockout
-if [[ \$- == *i* ]] && [[ -z "\$PWSH_STARTED" ]] && command -v pwsh >/dev/null 2>&1; then
+#   \$- == *i*      only interactive shells — never scp/rsync/cron/scripts
+#   PWSH_STARTED   prevents a login loop
+#   command -v     if pwsh is ever removed you still get bash — no lockout
+#   pwsh --version pwsh must RUN, not merely exist — a broken pwsh (e.g. missing
+#                  ICU) falls through to bash instead of exec-crash-looping login
+if [[ \$- == *i* ]] && [[ -z "\$PWSH_STARTED" ]] && command -v pwsh >/dev/null 2>&1 && pwsh --version >/dev/null 2>&1; then
     export PWSH_STARTED=1
     exec pwsh
 fi
@@ -503,7 +508,12 @@ main() {
         # would leave a dead `exec pwsh` in the login path — the `command -v pwsh`
         # guard saves the user from a lockout, but the block is still dead weight.
         if bashrc_hook_present; then
-            sed -i "/${PF_BASHRC_MARKER}/,/^fi$/d" "$HOME/.bashrc"
+            # Anchor the range START on the FRAMED comment line (# ── marker ──), not the
+            # bare marker: a user comment that merely mentions the phrase has no box-frame,
+            # so it can never start a deletion. End on `fi` allowing a trailing CR, so a
+            # CRLF ~/.bashrc (edited on Windows) still terminates the range correctly. If
+            # no framed line exists, the range never opens and nothing is deleted.
+            sed -i "/# ── ${PF_BASHRC_MARKER} ──/,/^fi[[:space:]]*\$/d" "$HOME/.bashrc"
             ok "Removed the PowerFlow launcher from ~/.bashrc"
         fi
 
