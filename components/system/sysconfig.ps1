@@ -140,7 +140,16 @@ function pwsh-config {
                 return
             }
             $choices = @(Get-SysConfigChoices -Key $entry.Key)
-            if ($choices.Count -eq 0) { Write-Host "❌ No choices available (are locales generated?)." -ForegroundColor Red; return }
+            if ($choices.Count -eq 0) {
+                # Per-setting hint — "are locales generated?" is wrong for a keyboard problem.
+                $why = switch ($entry.Key) {
+                    'locale'   { 'no locales are generated — add lines to /etc/locale.gen, then run `sudo locale-gen`' }
+                    'keyboard' { 'this system exposes no keyboard layouts (try `sudo apt install console-setup xkb-data`, or `kbd` on Fedora/Arch)' }
+                    default    { "localectl returned nothing for $($entry.Key)" }
+                }
+                Write-Host "❌ No choices available — $why." -ForegroundColor Red
+                return
+            }
             $val = $choices | fzf `
                 --query $entry.Current --reverse --border=rounded --height=60% `
                 --prompt="$($entry.Label): " `

@@ -81,6 +81,8 @@ function Invoke-PowerShellUpdate {
                 if ($updated -ne $content) {
                     Set-Content $settings $updated
                     Write-Host "✅ Automatic update checks disabled" -ForegroundColor Green
+                } else {
+                    Write-Host "💡 Already disabled — or set `$script:CHECK_UPDATES = `$false in config/PowerFlow.settings.ps1" -ForegroundColor DarkGray
                 }
             } catch {
                 Write-Host "💡 Edit config/PowerFlow.settings.ps1 and set `$script:CHECK_UPDATES = `$false" -ForegroundColor DarkGray

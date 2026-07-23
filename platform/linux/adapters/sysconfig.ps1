@@ -52,9 +52,26 @@ function Invoke-SysSet {
     return ($LASTEXITCODE -eq 0)
 }
 
+# The keyboard has TWO models across distros. Fedora/Arch use vconsole keymaps
+# (`localectl list-keymaps` / `set-keymap`, /etc/vconsole.conf). Debian/Ubuntu ship NO
+# vconsole keymaps and manage the keyboard via console-setup / X11 layouts
+# (`localectl list-x11-keymap-layouts` / `set-x11-keymap`, /etc/default/keyboard) — there,
+# `list-keymaps` is empty. Detect which model this box actually supports so pwsh-config's
+# keyboard setting works on both instead of dead-ending with "no choices" on Debian.
+function Get-KeyboardMode {
+    if (@(localectl list-keymaps 2>/dev/null).Count -gt 0) { return 'vc' }
+    return 'x11'
+}
+
 function Get-SysConfigOptions {
     $status = localectl status 2>/dev/null
     $keymap = ($status | Select-String 'VC Keymap' | ForEach-Object { (($_ -split ':', 2)[1]).Trim() })
+    # On Debian/Ubuntu the VC Keymap is unset and the real value is the X11 Layout — fall
+    # back to it so the menu shows what's actually configured, not "(unset)".
+    if (-not $keymap -or $keymap -in @('(unset)', 'n/a')) {
+        $x11 = ($status | Select-String 'X11 Layout' | ForEach-Object { (($_ -split ':', 2)[1]).Trim() })
+        if ($x11) { $keymap = $x11 }
+    }
     $locale = ($status | Select-String 'System Locale' | ForEach-Object { (($_ -split ':', 2)[1]).Trim() })
     # localectl prints "System Locale: LANG=en_US.UTF-8"; we manage LANG, so surface its
     # bare value — every other row's Current (and list-locales) is bare, so this matches.
@@ -81,7 +98,10 @@ function Get-SysConfigOptions {
 function Get-SysConfigChoices {
     param([Parameter(Mandatory)][string]$Key)
     switch ($Key) {
-        'keyboard' { return @(localectl list-keymaps 2>/dev/null) }
+        'keyboard' {
+            if ((Get-KeyboardMode) -eq 'vc') { return @(localectl list-keymaps 2>/dev/null) }
+            return @(localectl list-x11-keymap-layouts 2>/dev/null)   # Debian/Ubuntu
+        }
         'timezone' { return @(timedatectl list-timezones 2>/dev/null) }
         'locale'   { return @(localectl list-locales 2>/dev/null) }
         default    { return @() }
@@ -91,7 +111,12 @@ function Get-SysConfigChoices {
 function Set-SysConfig {
     param([Parameter(Mandatory)][string]$Key, [Parameter(Mandatory)][string]$Value)
     switch ($Key) {
-        'keyboard' { return (Invoke-SysSet @('localectl',   'set-keymap',   $Value)) }
+        # Set through whichever model this box uses (see Get-KeyboardMode): set-x11-keymap on
+        # Debian/Ubuntu writes /etc/default/keyboard and converts to a console keymap too.
+        'keyboard' {
+            if ((Get-KeyboardMode) -eq 'vc') { return (Invoke-SysSet @('localectl', 'set-keymap',     $Value)) }
+            return (Invoke-SysSet @('localectl', 'set-x11-keymap', $Value))
+        }
         'timezone' { return (Invoke-SysSet @('timedatectl', 'set-timezone', $Value)) }
         # set-locale wants VARIABLE=value; list-locales gives the bare locale, so wrap it.
         'locale'   { return (Invoke-SysSet @('localectl',   'set-locale',   "LANG=$Value")) }

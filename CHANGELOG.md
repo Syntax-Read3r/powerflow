@@ -9,6 +9,32 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.9.1] - 2026-07-23
+
+### Fixed
+
+- 🔧 **The "disable update checks" option (Windows) now actually works.** Choosing `4` on
+  the PowerShell-update prompt silently did nothing since the v3.0.0 split:
+  `Disable-PowerShellUpdateCheck` rewrote `$PROFILE` looking for
+  `$script:CHECK_UPDATES = $true`, but that flag moved into `config/PowerFlow.settings.ps1`,
+  so the replace matched nothing and the prompt returned every session. It now edits the
+  settings file — matching the Linux adapter, which was already correct — so the choice
+  persists.
+- 🪟 **Store/MSIX PowerShell installs get honest update guidance.** winget lists MSIX
+  packages, so a Microsoft Store install was misclassified as "winget-managed" and told to
+  "restart your terminal" — but an MSIX package can't be swapped while any of its processes
+  are running, so `winget upgrade` only *stages* the new version. PowerFlow now detects the
+  Store install, explains the update applies once **every** PowerShell window is closed (or
+  after a reboot), and offers the Microsoft Store as an alternative.
+- ⌨️ **`pwsh-config` keyboard now works on Debian/Ubuntu.** Those distros ship no vconsole
+  keymaps and manage the keyboard through console-setup / X11 layouts, so `localectl
+  list-keymaps` returned nothing and the setting dead-ended with "No choices available (are
+  locales generated?)" — a message that also wrongly blamed locales. PowerFlow now detects
+  which model the machine uses — vconsole keymaps on Fedora/Arch (`list-keymaps` /
+  `set-keymap`), X11 layouts on Debian/Ubuntu (`list-x11-keymap-layouts` / `set-x11-keymap`)
+  — reads the current layout from the X11 line when the VC keymap is unset, and gives a
+  per-setting hint when a list genuinely is empty.
+
 ## [3.9.0] - 2026-07-23
 
 ### Added

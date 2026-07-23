@@ -15,17 +15,26 @@
 # ==============================================================================
 
 # Turn off PowerFlow's PowerShell update checks by rewriting the settings file.
+#
+# The flag lives in config/PowerFlow.settings.ps1 — NOT in $PROFILE. Before this fix
+# the function rewrote $PROFILE, where the string `$script:CHECK_UPDATES = $true` does not
+# exist (it moved into the settings file in the v3.0.0 split), so the replace matched
+# nothing and option 4 silently did nothing — the prompt came back every session. This now
+# mirrors the Linux adapter, which already targeted the settings file correctly.
 function Disable-PowerShellUpdateCheck {
     Write-Host "🚫 Disabling automatic update checks" -ForegroundColor Yellow
     try {
-        $profileContent = Get-Content $PROFILE -Raw
-        $updatedContent = $profileContent -replace '\$script:CHECK_UPDATES = \$true', '$script:CHECK_UPDATES = $false'
-        if ($updatedContent -ne $profileContent) {
-            Set-Content $PROFILE $updatedContent
-            Write-Host "✅ Automatic update checks disabled in profile" -ForegroundColor Green
+        $settings = Join-Path $script:PowerFlowRoot 'config/PowerFlow.settings.ps1'
+        $content  = Get-Content $settings -Raw
+        $updated  = $content -replace '\$script:CHECK_UPDATES = \$true', '$script:CHECK_UPDATES = $false'
+        if ($updated -ne $content) {
+            Set-Content $settings $updated
+            Write-Host "✅ Automatic update checks disabled" -ForegroundColor Green
+        } else {
+            Write-Host "💡 Already disabled — or set `$script:CHECK_UPDATES = `$false in config/PowerFlow.settings.ps1" -ForegroundColor DarkGray
         }
     } catch {
-        Write-Host "💡 Edit your profile and set `$script:CHECK_UPDATES = `$false" -ForegroundColor DarkGray
+        Write-Host "💡 Edit config/PowerFlow.settings.ps1 and set `$script:CHECK_UPDATES = `$false" -ForegroundColor DarkGray
     }
 }
 
@@ -181,6 +190,38 @@ function Invoke-PowerShellUpdate {
                     Write-Host "❌ Migration failed: $($_.Exception.Message)" -ForegroundColor Red
                 }
             }
+            "3" { $Today | Set-Content $UpdateCheckFile }
+            "4" { Disable-PowerShellUpdateCheck }
+        }
+    }
+    # ── Microsoft Store / MSIX install ────────────────────────────────────────
+    # winget LISTS msix packages too, so this MUST come before the winget branch —
+    # otherwise a Store install is treated as "winget-managed" and told to "restart your
+    # terminal", which is wrong. An MSIX package can't be replaced while ANY of its
+    # processes run: winget only STAGES the new version, and it applies once every
+    # instance has closed. So the honest guidance is "close them all / reboot".
+    elseif ($actualInstallMethod -eq "Microsoft Store") {
+        Write-Host "🔧 Microsoft Store (MSIX) installation detected" -ForegroundColor Green
+        Write-Host "   Note: an MSIX update only takes effect once EVERY PowerShell window is closed." -ForegroundColor DarkGray
+
+        switch (Read-Host "🔄 (1) Stage update via winget (2) Open the Microsoft Store (3) Skip today (4) Disable checks") {
+            "1" {
+                Write-Host "📦 Staging update via winget..." -ForegroundColor Yellow
+                try {
+                    winget upgrade Microsoft.PowerShell --accept-source-agreements --accept-package-agreements
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "✅ Update staged." -ForegroundColor Green
+                        Write-Host "   It applies once you CLOSE EVERY PowerShell window (terminal tabs, VS Code" -ForegroundColor DarkGray
+                        Write-Host "   terminals, panes) — or reboot. Opening a new tab alone keeps the old version." -ForegroundColor DarkGray
+                    } else {
+                        Write-Host "❌ Winget update failed (exit code: $LASTEXITCODE)" -ForegroundColor Red
+                        Write-Host "💡 Try the Microsoft Store (option 2)" -ForegroundColor DarkGray
+                    }
+                } catch {
+                    Write-Host "❌ Winget update error: $($_.Exception.Message)" -ForegroundColor Red
+                }
+            }
+            "2" { Write-Host "🏪 Opening the Microsoft Store..." -ForegroundColor Cyan; Open-Url 'ms-windows-store://pdp/?productid=9MZ1SNWT0N5D' }
             "3" { $Today | Set-Content $UpdateCheckFile }
             "4" { Disable-PowerShellUpdateCheck }
         }
