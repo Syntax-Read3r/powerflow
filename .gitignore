@@ -1,0 +1,4 @@
+# Claude Code machine-local settings — permission grants tied to one machine.
+# Never commit: they leak local paths (a username) and are useless to anyone else.
+# The shared/team file, .claude/settings.json, is fine to track.
+.claude/settings.local.json

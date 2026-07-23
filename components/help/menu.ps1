@@ -4,7 +4,8 @@
 # Domain   : Help
 # File     : components/help/menu.ps1
 # Purpose  : pwsh-h — rendered entirely from the command registry
-# Functions: pwsh-h, Show-PFCommandDetail
+# Functions: pwsh-h, Show-PFManual, Show-PFHelpSections, Show-PFCommandDetail,
+#            Show-PFHelpBrowser
 # Depends  : components/help/registry.ps1 (the data), components/shell/lessons.ps1
 # ==============================================================================
 #
@@ -17,22 +18,36 @@
 # found 4), went false (`ls -t` documented as "tree view" a full version after it
 # became GNU time-sort), and 11 rows drifted off the 80-char grid from emoji-width
 # bugs. Alignment is now arithmetic, not surgery.
+#
+# TWO VIEWS, ON PURPOSE:
+#   pwsh-h        the MANUAL — the default. A quiet, grouped, printed reference you
+#                 scroll like a page. A handful of broad chapters, no fzf, no chrome.
+#   pwsh-h -a     the BROWSER — the interactive fzf finder (was the old default). For
+#                 when you want to search rather than read.
+# The default is the manual because "show me everything, let me read" is what a help
+# command is for; searching is the power move you opt into.
 # ==============================================================================
 
 <#
 .SYNOPSIS
     pwsh-h — every PowerFlow command.
 .DESCRIPTION
-    pwsh-h              interactive fzf browser (plain print when piped / no fzf)
-    pwsh-h -all         print everything, grouped by section
+    pwsh-h              the manual — grouped, printed, scroll to read (the default)
+    pwsh-h -a           the interactive fzf browser  (pwsh-help -advanced also works)
     pwsh-h git          one section (nav · git · github · files · linux · health …)
     pwsh-h chmod        one command, or its Linux lesson
     pwsh-h permissions  every lesson in a topic
 #>
 function pwsh-h {
-    param([Parameter(Position = 0)][string]$Topic = '', [switch]$all)
+    param([Parameter(Position = 0)][string]$Topic = '', [switch]$a, [switch]$advanced, [switch]$all)
 
-    if ($all) { Show-PFHelpSections; return }
+    # -a / -advanced → the searchable fzf browser. Falls back to the manual when output
+    # is redirected or fzf is absent (a pipe, a script, CI) so it can never hang.
+    if ($a -or $advanced) {
+        $interactive = -not [Console]::IsOutputRedirected -and (Get-Command fzf -ErrorAction SilentlyContinue)
+        if ($interactive) { Show-PFHelpBrowser } else { Show-PFManual }
+        return
+    }
 
     if ($Topic) {
         $reg = Get-PFCommandRegistry
@@ -66,14 +81,13 @@ function pwsh-h {
             return
         }
 
-        Write-Host "❌ Nothing called '$Topic'. Try:  pwsh-h -all" -ForegroundColor Red
+        Write-Host "❌ Nothing called '$Topic'. Try:  pwsh-h" -ForegroundColor Red
         return
     }
 
-    # Bare pwsh-h: fzf browser when there is a human at a terminal; plain print
-    # otherwise (piped output, scripts, no fzf installed).
-    $interactive = -not [Console]::IsOutputRedirected -and (Get-Command fzf -ErrorAction SilentlyContinue)
-    if ($interactive) { Show-PFHelpBrowser } else { Show-PFHelpSections }
+    # Bare pwsh-h (and the legacy -all): the readable manual. No fzf, so it prints and
+    # scrolls the same at a terminal, down a pipe, or in CI.
+    Show-PFManual
 }
 
 # ── the generated print view ──────────────────────────────────────────────────
@@ -91,6 +105,66 @@ function Show-PFHelpRows {
     }
 }
 
+# ── the manual (default pwsh-h) ───────────────────────────────────────────────
+# A printed reference grouped into chapters (registry.ps1 → $PF_HelpChapters), meant to
+# be read and scrolled, not searched. Commands are platform-filtered by the registry, so
+# a Linux box never sees Windows-only rows and vice-versa.
+function Show-PFManual {
+    $reg  = Get-PFCommandRegistry
+    $rule = '─' * 54
+
+    Write-Host ""
+    Write-Host "  PowerFlow Command Manual" -NoNewline -ForegroundColor Cyan
+    Write-Host "   v$script:POWERFLOW_VERSION · $($reg.Count) commands" -ForegroundColor DarkGray
+    Write-Host "  $rule" -ForegroundColor DarkGray
+    Write-Host "  Scroll to read.  " -NoNewline -ForegroundColor DarkGray
+    Write-Host "pwsh-h <name>" -NoNewline -ForegroundColor Green
+    Write-Host " opens one in detail · " -NoNewline -ForegroundColor DarkGray
+    Write-Host "pwsh-h -a" -NoNewline -ForegroundColor Green
+    Write-Host " searches." -ForegroundColor DarkGray
+
+    # Fold sections into chapters, preserving each chapter's section order (and the
+    # registry's within-section order) — Sort-Object is unstable, so we collect by hand.
+    $seen = @()
+    foreach ($chapter in (Get-PFHelpChapters)) {
+        $rows = @()
+        foreach ($sec in $chapter.Sections) { $rows += @($reg | Where-Object Section -eq $sec) }
+        $seen += $chapter.Sections
+        if ($rows.Count) { Show-PFManualChapter $chapter.Title $rows $rule }
+    }
+
+    # Anything registered into a section no chapter claims still prints — a new section
+    # can't silently disappear from the manual just because nobody filed it in a chapter.
+    $orphans = @($reg | Where-Object { $_.Section -notin $seen })
+    if ($orphans.Count) { Show-PFManualChapter '📦 MORE' $orphans $rule }
+
+    Write-Host ""
+}
+
+function Show-PFManualChapter {
+    param([string]$Title, $Rows, [string]$Rule)
+    Write-Host ""
+    Write-Host "  $Title" -ForegroundColor Cyan
+    Write-Host "  $Rule" -ForegroundColor DarkGray
+
+    # One column width for the chapter — the whole alignment system, same as the sections
+    # view. Names print green, aliases dim; padding is computed from the full label so the
+    # two colours don't throw the synopsis column off.
+    $w = ($Rows | ForEach-Object {
+        $_.Name.Length + $(if ($_.Aliases.Count) { (" (" + ($_.Aliases -join ', ') + ")").Length } else { 0 })
+    } | Measure-Object -Maximum).Maximum + 2
+
+    foreach ($c in $Rows) {
+        $aliasStr = if ($c.Aliases.Count) { " (" + ($c.Aliases -join ', ') + ")" } else { "" }
+        $labelLen = $c.Name.Length + $aliasStr.Length
+        Write-Host "    " -NoNewline
+        Write-Host $c.Name -NoNewline -ForegroundColor Green
+        if ($aliasStr) { Write-Host $aliasStr -NoNewline -ForegroundColor DarkGray }
+        Write-Host (' ' * [Math]::Max(1, $w - $labelLen)) -NoNewline
+        Write-Host $c.Synopsis -ForegroundColor Gray
+    }
+}
+
 function Show-PFHelpSections {
     param([string]$Only)
 
@@ -98,7 +172,7 @@ function Show-PFHelpSections {
     Write-Host ""
     if (-not $Only) {
         Write-Host "🚀 PowerFlow v$script:POWERFLOW_VERSION — $($reg.Count) commands" -ForegroundColor Cyan
-        Write-Host "   pwsh-h <section|command>  filters · bare pwsh-h opens the fzf browser" -ForegroundColor DarkGray
+        Write-Host "   pwsh-h <section|command>  filters · bare pwsh-h is the manual · pwsh-h -a searches" -ForegroundColor DarkGray
     }
 
     foreach ($section in (Get-PFHelpSections)) {
@@ -184,4 +258,8 @@ function Show-PFHelpBrowser {
 }
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
-Register-PFCommand -Name 'pwsh-h' -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'this help - fzf browser, or filter by section/command' -Example 'pwsh-h git · pwsh-h chmod · pwsh-h -all'
+# pwsh-help is the long name; it takes the same flags, so `pwsh-help -advanced` == `pwsh-h -a`.
+Set-Alias pwsh-help pwsh-h
+Register-PFCommand -Name 'pwsh-h' -Section '⚙️ CONFIGURATION & SETTINGS' -Aliases @('pwsh-help') `
+    -Synopsis 'the command manual - grouped list; -a for the fzf browser' `
+    -Example 'pwsh-h · pwsh-h -a · pwsh-h git'

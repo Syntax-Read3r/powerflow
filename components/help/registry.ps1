@@ -26,7 +26,9 @@
 # commands adjacent within a section without any extra bookkeeping.
 $script:PF_CommandRegistry = [ordered]@{}
 
-# Canonical section order — the order pwsh-h prints them in.
+# Canonical section order — the fine-grained grouping. Sections are what a command
+# registers into (and what `pwsh-h <section>` filters by); chapters (below) fold them
+# into a handful of readable groups for the printed manual.
 $script:PF_HelpSections = @(
     '🧭 SMART NAVIGATION & BOOKMARKS'
     '🎯 ENHANCED GIT WORKFLOW'
@@ -41,6 +43,20 @@ $script:PF_HelpSections = @(
     '🧱 PROJECT GENERATORS'
     '⚙️ CONFIGURATION & SETTINGS'
     '🐧 WSL (WINDOWS-ONLY)'
+)
+
+# Chapters — the printed manual (`pwsh-h`) reads like a paper reference: a few broad
+# groups, not thirteen small ones. Each chapter folds one or more sections together in
+# the order they should appear. A section left out of every chapter still renders (under
+# "MORE") so nothing silently vanishes — see Show-PFManual. `pwsh-h -a` (the fzf browser)
+# and `pwsh-h <section>` stay on the fine-grained sections above.
+$script:PF_HelpChapters = @(
+    @{ Title = '🧭 NAVIGATION';     Sections = @('🧭 SMART NAVIGATION & BOOKMARKS') }
+    @{ Title = '📂 FILES';          Sections = @('📂 ENHANCED FILE OPERATIONS') }
+    @{ Title = '🎯 GIT & GITHUB';   Sections = @('🎯 ENHANCED GIT WORKFLOW', '🐙 GITHUB BROWSER') }
+    @{ Title = '🎓 LEARN LINUX';    Sections = @('🎓 LEARN LINUX', '🐚 BASH BUILTINS') }
+    @{ Title = '🖥️ SYSTEM & DISK';  Sections = @('🖥️ MACHINE HEALTH', '🌐 SSH SERVERS', '🗄️ DISK RECLAIM') }
+    @{ Title = '⚙️ SETUP & CONFIG'; Sections = @('⚙️ CONFIGURATION & SETTINGS', '🪟 TERMINAL TABS', '🧱 PROJECT GENERATORS', '🐧 WSL (WINDOWS-ONLY)') }
 )
 
 <#
@@ -86,3 +102,4 @@ function Get-PFCommandRegistry {
 }
 
 function Get-PFHelpSections { return $script:PF_HelpSections }
+function Get-PFHelpChapters { return $script:PF_HelpChapters }

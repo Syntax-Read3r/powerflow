@@ -107,7 +107,7 @@ function Expand-Triad {
     The annotated permission breakdown for a path.
 .DESCRIPTION
     The teaching centrepiece. Shows WHICH COLUMN IS WHICH — the thing that is genuinely
-    hard to remember when you first meet `drwxr-xr-x 2 munya media`.
+    hard to remember when you first meet `drwxr-xr-x 2 you media`.
 #>
 function Show-PermissionBreakdown {
     param(

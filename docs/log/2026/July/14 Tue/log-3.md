@@ -3,7 +3,7 @@
 **Work performed:**
 
 - **Fixed `nav`, which was completely non-functional on Linux.** It built its search root as
-  the string `"$HOME\Code"`, which on Linux interpolates to `/home/munya\Code` — a backslash
+  the string `"$HOME\Code"`, which on Linux interpolates to `/home/you\Code` — a backslash
   is a legal *filename* character there, not a separator, so this was never an error, just a
   request for a directory that has never existed. Every default bookmark (`~\Documents`,
   `~\Pictures`, …) was built the same way and was equally dead. Underneath sat a silent second

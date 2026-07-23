@@ -207,14 +207,15 @@ jobs:
           # pwsh-h must render — asserted against REGISTRY DATA, not menu prose.
           # The old check matched literal strings from the hand-drawn menu; when the
           # menu became registry-generated the strings vanished and the check failed a
-          # release whose pwsh-h worked perfectly. Section names below come from
-          # $script:PF_HelpSections and command names from Register-PFCommand calls —
-          # if these are absent, the registry genuinely did not render.
+          # release whose pwsh-h worked perfectly. The default view is now the MANUAL,
+          # grouped into chapters ($script:PF_HelpChapters): NAVIGATION is a chapter
+          # title and command names come from Register-PFCommand calls — if these are
+          # absent, the registry genuinely did not render.
           # NOTE the 6>&1 — pwsh-h uses Write-Host (the information stream), so
-          # `pwsh-h | Out-String` is EMPTY even on a working build. Redirected output
-          # also forces print mode, so this can never hang waiting on fzf.
-          $help = pwsh-h -all 6>&1 | Out-String
-          if ($help -notmatch 'SMART NAVIGATION') { Write-Error "❌ pwsh-h did not render its sections"; exit 1 }
+          # `pwsh-h | Out-String` is EMPTY even on a working build. The manual never
+          # uses fzf, so this can never hang.
+          $help = pwsh-h 6>&1 | Out-String
+          if ($help -notmatch 'NAVIGATION' -or $help -notmatch 'Command Manual') { Write-Error "❌ pwsh-h did not render the manual"; exit 1 }
           if ($help -notmatch '\bgit-rl\b' -or $help -notmatch '\bsrv\b') { Write-Error "❌ pwsh-h is missing registered commands"; exit 1 }
           # The Linux-shadowing story is registry data now: del/mvf are Platform=Linux
           # entries and MUST appear in a Linux render.

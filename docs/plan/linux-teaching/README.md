@@ -38,7 +38,7 @@ It is a bug, not a feature request.**
 What `ls -ld ward-a` should produce with lessons **on**:
 
 ```
-  d : rwx : rwx : r-x   2   munya   media   4.0K   Jul 14 11:48   ward-a
+  d : rwx : rwx : r-x   2   you   media   4.0K   Jul 14 11:48   ward-a
   ╷    ╷     ╷     ╷    ╷     ╷       ╷       ╷         ╷            ╷
   │    │     │     │    │     │       │       │         │            └── name
   │    │     │     │    │     │       │       │         └── modified
@@ -64,7 +64,7 @@ point and `drwxr-xr-x` runs them together.
 ### Lessons off
 
 ```
-  drwxr-xr-x  2  munya  media  4.0K  Jul 14 11:48  ward-a
+  drwxr-xr-x  2  you  media  4.0K  Jul 14 11:48  ward-a
 ```
 
 Identical to GNU. No decoration, no teaching. Same command, same flags.

@@ -254,7 +254,8 @@ rn myfile.txt        # Direct rename with interface
 
 # Enhanced listing
 ls                   # Beautiful directory listing
-ls -t                # Tree view with smart depth
+ls --tree            # Tree view with smart depth
+ls -t                # Sort by time (real GNU flag)
 ```
 
 ### GitHub Integration
@@ -471,6 +472,7 @@ PowerFlow's versions live on as `del` and `mvf`.
 | `pwsh-autologin`       | Start PowerFlow on login — no installer re-run (Linux)   |
 | `pwsh-autologin off`   | Stop starting on login                                   |
 | `pwsh-exit`            | Drop to bash without closing your SSH session (Linux)    |
+| `pwsh-config`          | Menu to change OS settings: keyboard, timezone, locale, hostname, time-sync (Linux) |
 
 ### System
 
@@ -528,7 +530,8 @@ week · turn off**. Piped/non-interactive shells get one quiet line, never a pro
 | `pwsh-profile`  | Edit PowerShell profile        |
 | `pwsh-starship` | Edit Starship config           |
 | `pwsh-settings` | Edit Windows Terminal settings |
-| `pwsh-h`        | Browse every command (fzf browser; `-all` prints, `pwsh-h git` filters) |
+| `pwsh-h`        | The command manual — grouped, scroll to read (`pwsh-h -a` for the fzf browser, `pwsh-h git` filters) |
+| `pwsh-help`     | Long alias for `pwsh-h` (`pwsh-help -advanced` = `pwsh-h -a`) |
 
 ## 🔧 Configuration
 
@@ -595,7 +598,8 @@ powerflow-version       # Show current version info
 ### Quick Self-Help
 
 ```powershell
-pwsh-h              # Browse every command (fzf); pwsh-h git filters a section
+pwsh-h              # The command manual — grouped, scroll to read
+pwsh-h -a           # Searchable fzf browser · pwsh-h git filters a section
 powerflow-version   # Version and status info
 Get-Command starship, fzf, zoxide, lsd, git  # Check dependencies
 ```

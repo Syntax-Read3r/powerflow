@@ -9,6 +9,62 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.9.0] - 2026-07-23
+
+### Added
+
+- ⚙️ **`pwsh-config`** — one menu to change OS settings, replacing `dpkg-reconfigure`.
+  Browse every setting (with its current value shown) and pick what to change — you don't
+  have to know the setting's name:
+
+  ```
+  pwsh-config          # menu: keyboard · timezone · locale · hostname · time-sync
+  pwsh-config kb       # jump straight to one (kb/tz/loc/host/sync also work)
+  ```
+
+  Each pick opens an fzf list (or a prompt), and the change is applied with `sudo`. Built
+  on **systemd** (`localectl` / `timedatectl` / `hostnamectl`), so it behaves the same on
+  Fedora, Debian, Ubuntu, Arch and openSUSE — unlike `dpkg-reconfigure`, which is
+  Debian-only and silently does nothing when debconf has no dialog frontend (the original
+  "I ran it and nothing happened"). Adding a new setting later is a single row in the
+  adapter — the menu picks it up automatically.
+
+  On Windows there's no systemd; the command says so and points at Windows Settings /
+  `Set-TimeZone` / `Rename-Computer`.
+
+- 📖 **`pwsh-h` is now a manual you read**, with the searchable browser one flag away.
+  Plain `pwsh-h` prints a quiet, grouped reference — the whole command set folded into a
+  handful of chapters (Navigation · Files · Git & GitHub · Learn Linux · System & Disk ·
+  Setup & Config) — meant to be scrolled top to bottom like a page. The interactive fzf
+  finder that used to be the default moved to **`pwsh-h -a`** (and **`pwsh-help -advanced`**,
+  a new long alias). Filtering is unchanged: `pwsh-h git`, `pwsh-h chmod`. Both views still
+  render from the command registry, so neither can drift from the code.
+
+### Changed
+
+- 🌐 **`pwsh-config` locale** now shows the bare value (`en_US.UTF-8`) instead of
+  `LANG=en_US.UTF-8`, matching every other setting and the picker's own choices.
+
+### Fixed
+
+- 🌐 **`pwsh-config`** no longer lets you pick a setting it then refuses to apply: the menu
+  and its prompts now agree on what counts as an interactive terminal, so `pwsh-config kb`
+  in a non-tty context reports "run it in an interactive shell" instead of a misleading
+  "Cancelled." A hostname typed with a leading `-` (or surrounded by spaces) is now passed
+  through correctly rather than being read as a flag.
+
+### Security
+
+- 🔒 **Privacy scrub.** Replaced remaining occurrences of a real username used as example
+  text with the `you` placeholder — across the Linux lessons (`chown`/`id`/`groups`/`getent`
+  output), the teaching layer, two code comments, this CHANGELOG's historical `[3.3.0]`
+  section, and a few planning docs. Also **untracked `.claude/settings.local.json`** (a
+  machine-local editor permissions file that had been committed, leaking a local path) and
+  added a `.gitignore` so it can't return. The v3.6.1 scrub only covered the `srv`
+  `user@ip` examples; this finishes the job for the shipping tree.
+
+---
+
 ## [3.8.0] - 2026-07-21
 
 ### Added
@@ -454,7 +510,7 @@ All notable changes to PowerFlow will be documented in this file.
 
   ```
   ls -ld ward-a
-    GNU:        drwxr-xr-x 2 munya media 4096 ... ward-a
+    GNU:        drwxr-xr-x 2 you media 4096 ... ward-a
     PowerFlow:  <listed the current directory instead>
   ```
 
@@ -481,12 +537,12 @@ All notable changes to PowerFlow will be documented in this file.
 
   ```
   ❯ nav linux lab
-  ❌ No directories found in /home/munya\Code
+  ❌ No directories found in /home/you\Code
                                           ↑ a literal backslash
   ```
 
   `nav` built its search root as the string `"$HOME\Code"`. On Windows that is a path.
-  On Linux it interpolates to `/home/munya\Code` — and because a backslash is a perfectly
+  On Linux it interpolates to `/home/you\Code` — and because a backslash is a perfectly
   legal **filename character** on Linux, not a separator, this is not an error. It is a
   request for a directory that has never existed. `nav` dutifully searched it, found
   nothing, and said so. Every default bookmark (`~\Documents`, `~\Pictures`, …) was built
@@ -589,7 +645,7 @@ All notable changes to PowerFlow will be documented in this file.
   **which column is which**, the thing that is genuinely hard to remember:
 
   ```
-    d : rwx : rwx : r-x   2   munya   media   4.0K   Jul 14 12:05   ward-a
+    d : rwx : rwx : r-x   2   you   media   4.0K   Jul 14 12:05   ward-a
     ╷    ╷     ╷     ╷    ╷     ╷       ╷
     │    │     │     │    │     │       └── GROUP  · members of 'media'
     │    │     │     │    │     └── OWNER  · the user who owns it
@@ -776,7 +832,7 @@ All notable changes to PowerFlow will be documented in this file.
   Uninstall now reverts the shell **before** removing pwsh, verifies it, and **aborts
   loudly** if it cannot.
 
-## [3.1.0] - Unreleased
+## [3.1.0] - 2026-07-14
 
 > 🗄️ **New: find what is actually eating your disk** — `installed-apps` and `disk-big`.
 >

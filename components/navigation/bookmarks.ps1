@@ -17,7 +17,7 @@ function Initialize-DefaultBookmarks {
     $homeDir = Get-HomePath
 
     # Join-Path, never "$HOME\Code" — a hardcoded backslash produces the literal
-    # path "/home/munya\Code" on Linux, which of course never exists.
+    # path "/home/you\Code" on Linux, which of course never exists.
     $candidates = [ordered]@{
         "code"      = (Join-Path $homeDir 'Code')
         "documents" = (Join-Path $homeDir 'Documents')

@@ -86,7 +86,7 @@ function nav {
 
     # ---- Built-in shortcuts ---------------------------------------------------
     # Join-Path, never "$HOME\Code" — on Linux that string interpolates to the literal
-    # path "/home/munya\Code" (backslash is a legal filename character there, not a
+    # path "/home/you\Code" (backslash is a legal filename character there, not a
     # separator), so it silently never matches anything.
     $homeDir = Get-HomePath
     switch ($command) {

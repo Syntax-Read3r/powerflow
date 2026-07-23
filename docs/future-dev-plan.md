@@ -233,7 +233,7 @@ docker-list
 
 ## System Variables
 
-$adbPath = "C:\Users\munya\AppData\Local\Android\Sdk\platform-tools"
+$adbPath = "C:\Users\you\AppData\Local\Android\Sdk\platform-tools"
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 
 if ($userPath -notlike "*$adbPath*") {

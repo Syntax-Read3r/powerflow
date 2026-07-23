@@ -53,14 +53,14 @@ $script:PF_Lessons = @{
     Body    = @'
   changeowner  →  chown   "change owner"
 
-  chown munya          file      new owner
-  chown munya:media    file      new owner AND group
+  chown you          file      new owner
+  chown you:media    file      new owner AND group
   chown :media         file      group only
-  chown -R munya:media dir/      recurse
+  chown -R you:media dir/      recurse
 
   The two names in `ls -l` are OWNER then GROUP:
 
-      drwxrwxr-x  2  munya  media  ...  ward-a
+      drwxrwxr-x  2  you  media  ...  ward-a
                      ↑      ↑
                    owner  group
 
@@ -85,7 +85,7 @@ $script:PF_Lessons = @{
   💡 THE SHARED-FOLDER PATTERN — this is what a group is FOR:
 
       sudo groupadd media                 create the group
-      sudo usermod -aG media munya        add yourself
+      sudo usermod -aG media you        add yourself
       sudo usermod -aG media jellyfin     add the service
       sudo chgrp -R media /srv/movies     the folder belongs to the group
       sudo chmod -R 775 /srv/movies       group can read + write
@@ -159,15 +159,15 @@ $script:PF_Lessons = @{
   id -u                just the numeric user id  (0 = root)
   id -un               just the username
   id -G                all group ids
-  id munya             someone else's
+  id jellyfin          someone else's
 
   Typical output:
 
-      uid=1000(munya) gid=1000(munya) groups=1000(munya),1001(media),27(sudo)
+      uid=1000(you) gid=1000(you) groups=1000(you),1001(media),27(sudo)
                                               ↑            ↑
                                         primary group   supplementary
 
-  💡 After `usermod -aG media munya`, `id` will NOT show the new group until you
+  💡 After `usermod -aG media you`, `id` will NOT show the new group until you
      log out and back in. The membership is real; your SESSION is stale.
 '@
   }
@@ -180,12 +180,12 @@ $script:PF_Lessons = @{
   lookupentry  →  getent   "get entries"
 
   getent group media       does the 'media' group exist, and who is in it?
-  getent passwd munya      a user account
+  getent passwd you      a user account
   getent hosts debian.org  a hostname
 
   Output:
 
-      media:x:1001:munya,jellyfin
+      media:x:1001:you,jellyfin
       ↑     ↑ ↑    ↑
       name  │ GID  members
             password placeholder
@@ -203,7 +203,7 @@ $script:PF_Lessons = @{
   mygroups  →  groups
 
   groups           your groups
-  groups munya     someone else's
+  groups jellyfin  someone else's
 
   💡 If a group you just joined is missing, log out and back in. Group membership is
      attached to your LOGIN SESSION, not applied retroactively.
@@ -244,7 +244,7 @@ $script:PF_Lessons = @{
   find . -size +100M              bigger than 100 MB
   find . -mtime -7                modified in the last 7 days
   find . -perm 777                by permission
-  find . -user munya              by owner
+  find . -user you              by owner
   find . -name "*.tmp" -delete    find AND delete
   find . -name "*.sh" -exec chmod +x {} \;    run a command on each hit
 
@@ -510,7 +510,7 @@ $script:PF_Lessons = @{
   fileinfo  →  stat
 
   stat file.txt              the lot: size, mode, owner, timestamps, inode
-  stat -c '%a %U %G' f       just what you asked for — 644 munya media
+  stat -c '%a %U %G' f       just what you asked for — 644 you media
   stat -c '%s' f             size in bytes
 
   %a  numeric mode (644)     %A  symbolic (-rw-r--r--)
