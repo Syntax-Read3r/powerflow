@@ -86,5 +86,39 @@ function pwsh-autologin {
     }
 }
 
+<#
+.SYNOPSIS
+    pwsh-exit — step out of PowerFlow to bash WITHOUT closing your SSH session.
+.DESCRIPTION
+    When --auto-login is on, the ~/.bashrc hook runs `exec pwsh`, which REPLACES bash —
+    so pwsh IS your login shell and a plain `exit` ends the whole SSH session. There is no
+    bash underneath to fall back to. `pwsh-exit` starts one: you drop to a bash prompt with
+    the connection still open, and PowerFlow steps aside until you leave that bash.
+
+    (pwsh has no native `exec`, so bash runs as a child and pwsh resumes — then exits —
+    when you leave it. Practically: you're in bash, still connected, PowerFlow out of the
+    way.)
+.EXAMPLE
+    pwsh-exit          # → bash prompt, SSH still up.  'pwsh' returns; 'exit' disconnects.
+#>
+function pwsh-exit {
+    if ($script:PowerFlowOS -ne 'linux') {
+        Write-Host ""
+        Write-Host "ℹ️  pwsh-exit is for Linux servers where PowerFlow is your SSH login shell." -ForegroundColor Cyan
+        Write-Host "   On Windows, PowerFlow isn't your shell — just type 'exit' or close the tab." -ForegroundColor DarkGray
+        Write-Host ""
+        return
+    }
+    if (-not (Get-Command bash -CommandType Application -ErrorAction SilentlyContinue)) {
+        Write-Host "❌ bash not found on this system." -ForegroundColor Red
+        return
+    }
+    Write-Host "🐚 Stepping out to bash — your SSH connection stays open." -ForegroundColor Cyan
+    Write-Host "   'pwsh' brings PowerFlow back  ·  'exit' from bash ends the session" -ForegroundColor DarkGray
+    & bash
+    exit
+}
+
 # ── pwsh-h registration ───────────────────────────────────────────────────────
 Register-PFCommand -Name 'pwsh-autologin' -Platform 'Linux' -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'start PowerFlow on login (on/off) - no installer re-run' -Example 'pwsh-autologin · pwsh-autologin off'
+Register-PFCommand -Name 'pwsh-exit' -Platform 'Linux' -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'drop to bash without closing your SSH session (exit closes it)' -Example 'pwsh-exit'

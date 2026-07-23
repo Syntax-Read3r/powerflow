@@ -470,6 +470,7 @@ PowerFlow's versions live on as `del` and `mvf`.
 | `pwsh-font -status`    | Is the font installed? (installs nothing)                |
 | `pwsh-autologin`       | Start PowerFlow on login — no installer re-run (Linux)   |
 | `pwsh-autologin off`   | Stop starting on login                                   |
+| `pwsh-exit`            | Drop to bash without closing your SSH session (Linux)    |
 
 ### System
 

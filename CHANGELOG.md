@@ -9,6 +9,20 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.8.0] - 2026-07-21
+
+### Added
+
+- 🐚 **`pwsh-exit`** — step out to bash **without closing your SSH session.** With
+  `--auto-login` on, PowerFlow is your login shell — the `~/.bashrc` hook runs `exec pwsh`,
+  which *replaces* bash — so a plain `exit` ends the whole connection (there is no bash
+  underneath to fall back to; that's why `exit` disconnects you). `pwsh-exit` starts one:
+  you land at a bash prompt with the connection still up, PowerFlow stepped aside. `pwsh`
+  brings it back, `exit` from that bash ends the session. Linux only — on Windows PowerFlow
+  isn't your login shell, and the command says so.
+
+---
+
 ## [3.7.0] - 2026-07-21
 
 > 🎨 **The prompt and `ls` finally have their font**, and starting PowerFlow on login is
