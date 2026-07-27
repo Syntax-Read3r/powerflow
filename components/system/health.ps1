@@ -69,8 +69,44 @@ function pc-whoami {
     Write-Host ""
     Write-Host "🖥️  MACHINE" -ForegroundColor Cyan
     Write-HealthRow 'CPU' "$($m.CpuName) · $($m.Cores)c/$($m.Threads)t"
-    $up = $m.Uptime
-    Write-HealthRow 'RAM' ("{0} GB · uptime {1}d {2}h" -f $m.RamGB, $up.Days, $up.Hours)
+
+    # One row PER adapter — a machine legitimately has both an iGPU and a card, and they are
+    # different hardware, so they get their own lines rather than being merged or picked
+    # between. The label distinguishes them ('iGPU'), which also explains why an integrated
+    # chip shows no VRAM: it shares system memory, it is not a fault.
+    foreach ($g in @($m.Gpus)) {
+        $label = if ($g.Integrated) { 'iGPU' } else { 'GPU' }
+        $bits  = @($g.Name)
+        if ($g.VramGB -gt 0) { $bits += "$($g.VramGB) GB" }
+        Write-HealthRow $label ($bits -join ' · ') $(if (-not $g.Healthy) { 'driver reports a problem' })
+    }
+    if (-not @($m.Gpus).Count) { Write-HealthRow 'GPU' 'no display adapter detected' }
+
+    # RAM: a spec sheet, not just a number — "32 GB · DDR4-3600 · 4x8GB".
+    $mem  = $m.Memory
+    if ($mem -and $mem.Detail) {
+        $bits = @("$($mem.TotalGB) GB")
+        $bits += if ($mem.Type -and $mem.SpeedMTs) { "$($mem.Type)-$($mem.SpeedMTs)" }
+                 elseif ($mem.Type)                { $mem.Type }
+                 elseif ($mem.SpeedMTs)            { "$($mem.SpeedMTs) MT/s" }
+        $bits += $mem.Layout
+        if ($mem.SlotsTotal -gt $mem.Sticks) { $bits += "$($mem.Sticks)/$($mem.SlotsTotal) slots" }
+        # Running slower than the sticks are rated for means XMP/EXPO is off — a real and
+        # completely invisible performance loss, so it earns a warning rather than silence.
+        $slow = if ($mem.RatedMTs -gt $mem.SpeedMTs -and $mem.SpeedMTs -gt 0) {
+            "rated $($mem.RatedMTs) — XMP/EXPO may be off"
+        }
+        Write-HealthRow 'RAM' (@($bits | Where-Object { $_ }) -join ' · ') $slow
+    } else {
+        Write-HealthRow 'RAM' "$($m.RamGB) GB" $(if ($mem) { $mem.Note })
+    }
+
+    # Motherboard. Get-FirmwareInfo has carried the board vendor/model since v3.4.0 — it was
+    # simply never rendered, so pc-whoami could tell you your BIOS version without telling
+    # you which board it was for.
+    if ($fw.Supported -and ($fw.BoardVendor -or $fw.BoardName)) {
+        Write-HealthRow 'Board' ((@($fw.BoardVendor, $fw.BoardName) | Where-Object { $_ }) -join ' ')
+    }
 
     if ($fw.Supported) {
         $dateStr = if ($fw.BiosDate) { $fw.BiosDate.ToString('yyyy-MM-dd') } else { 'date unknown' }
@@ -83,6 +119,11 @@ function pc-whoami {
     } else {
         Write-HealthRow 'BIOS' $fw.Note
     }
+
+    # Uptime last: it is the one line here that is state rather than hardware. (It used to
+    # share the RAM row, which no longer fits now that RAM carries type/speed/layout.)
+    $up = $m.Uptime
+    Write-HealthRow 'Up' ("{0}d {1}h" -f $up.Days, $up.Hours)
 
     Write-Host ""
     Write-Host "🔌 POWER" -ForegroundColor Cyan

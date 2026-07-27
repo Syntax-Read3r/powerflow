@@ -9,6 +9,64 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.11.0] - 2026-07-27
+
+### Added
+
+- 🎮 **`pc-whoami` now reports your GPU** — every real display adapter, on its own row, with
+  its full product name. A machine with both an integrated chip and a card shows both,
+  labelled apart, because they are different hardware:
+
+  ```
+  GPU      NVIDIA GeForce RTX 4080 · 16 GB
+  iGPU     Intel UHD Graphics 770
+  ```
+
+  Two details that took real hardware to get right. `Win32_VideoController.AdapterRAM` is a
+  **uint32, so it wraps above 4 GB** — a 16 GB RTX 4080 reports ~4.29 GB — so VRAM is read
+  from the display-class registry key, which is 64-bit. And that same field reports *shared
+  system memory* on an integrated chip, which would both invent VRAM the chip doesn't have
+  and make the iGPU look discrete; only dedicated memory counts. Streaming/virtual display
+  drivers (Virtual Desktop, Parsec, RDP, DisplayLink…) are filtered out, and a card whose
+  driver is unhealthy is kept and **flagged** rather than hidden.
+
+- 🧠 **RAM is a spec sheet, not just a number** — type, real speed and stick layout:
+
+  ```
+  RAM      32 GB · DDR4-3600 · 4x8GB
+  ```
+
+  The speed shown is what the modules are *running* at, not what they are rated for; when
+  those differ the row warns that XMP/EXPO may be off — a real and normally invisible
+  performance loss. `SMBIOSMemoryType` is used for the type because
+  `Win32_PhysicalMemory.MemoryType` reports 0/"Unknown" on essentially every modern board.
+  Mixed types or capacities are shown as they are rather than averaged away.
+
+- 🔧 **Motherboard row.** `Get-FirmwareInfo` had carried the board vendor and model since
+  v3.4.0 — it was simply never displayed, so `pc-whoami` could tell you your BIOS version
+  without telling you which board it was for:
+
+  ```
+  Board    ASUS ROG STRIX Z690-A GAMING WIFI D4
+  ```
+
+  On Linux this needs no root (`/sys/class/dmi/id` is world-readable). Serial numbers are
+  deliberately not read or shown.
+
+  Linux gets the same three rows: GPUs via `nvidia-smi` (authoritative name and VRAM) then
+  `lspci`, preferring the bracketed product name (`Navi 31 [Radeon RX 7900 XTX]` →
+  "AMD Radeon RX 7900 XTX"). Integrated vs discrete is decided by **PCI topology**, not
+  vendor — AMD ships both APUs and cards, so "AMD ⇒ discrete" would mislabel every Ryzen
+  iGPU; bus 00 is the root complex where integrated graphics live. RAM type/speed comes from
+  `dmidecode`, which needs root, so it is attempted as root or via `sudo -n` (never
+  prompting) and otherwise reports the size with a plain reason why there is no more.
+
+### Changed
+
+- 🖥️ **`pc-whoami`: uptime moved to its own row** (`Up`), since RAM now carries type, speed
+  and layout. Vendor names are shortened (`ASUSTeK COMPUTER INC.` → `ASUS`) and `(R)`/`(TM)`
+  are stripped from CPU and GPU names.
+
 ## [3.10.0] - 2026-07-27
 
 ### Added
