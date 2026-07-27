@@ -9,6 +9,28 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.12.1] - 2026-07-27
+
+### Changed
+
+- 🔌 **`pc-whoami`: the storage headroom row is labelled `Ports`, not `Bays`.** A *bay* is a
+  mounting position in the case; that row counts connectors on the **motherboard**, so
+  "Bays … SATA 6 of 6 free" read as "six places I can put a drive" — which the board cannot
+  promise, since you also need a free bay and a spare PSU lead. Two limits SMBIOS genuinely
+  cannot express are now documented beside the code rather than implied away: many boards
+  **mux M.2 against specific SATA ports** (populating an M.2 can switch a SATA port off), and
+  the declared connectors are what physically *exist*, not what is currently *enabled* —
+  the board manual's storage table remains the authority.
+
+### Fixed
+
+- 💾 **Zero-size block devices are no longer listed as drives.** Hypervisors and empty card
+  readers expose placeholder devices; a Linux run surfaced `Virtual Disk · 0 GB`. A device
+  that holds nothing does not get a row, on either platform.
+- 💾 **Sub-gigabyte drives no longer render as "0 GB".** The drive-size formatter had no MB
+  branch, so a 107 MB volume displayed as `0 GB`. Small drives are still real drives — a USB
+  stick belongs in the list, correctly sized (`388 MB`).
+
 ## [3.12.0] - 2026-07-27
 
 ### Added

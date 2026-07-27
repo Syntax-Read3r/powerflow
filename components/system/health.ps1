@@ -39,7 +39,11 @@ function Write-HealthRow {
 function Format-DriveSize {
     param([int64]$Bytes)
     if ($Bytes -ge 1TB) { return ('{0:N1} TB' -f ($Bytes / 1TB)) }
-    return ('{0:N0} GB' -f ($Bytes / 1GB))
+    if ($Bytes -ge 1GB) { return ('{0:N0} GB' -f ($Bytes / 1GB)) }
+    # The MB branch is not decoration: without it a small device renders as "0 GB" (a 107 MB
+    # volume did exactly that). Small drives are still real drives — a USB stick belongs in
+    # the list, correctly sized.
+    return ('{0:N0} MB' -f ($Bytes / 1MB))
 }
 
 function Get-CpuCapRecord {
@@ -140,12 +144,19 @@ function pc-whoami {
     }
 
     # Upgrade headroom, read from the motherboard's own SMBIOS records rather than guessed.
+    #
+    # The label is 'Ports', NOT 'Bays' — this counts connectors ON THE BOARD, and a bay is a
+    # mounting position in the CASE. Calling it Bays read as "6 places I can put a drive",
+    # which the board cannot promise: you also need a free bay and a spare PSU lead. Two
+    # further limits SMBIOS cannot express, so we do not imply them away: many boards MUX
+    # M.2 against specific SATA ports (populating an M.2 can switch a SATA port off), and the
+    # declared connectors are what physically exist, not what is currently enabled.
     $sl = $m.Slots
     if ($sl -and $sl.Supported) {
         $storage = @()
         if ($sl.M2Total)   { $storage += "M.2 $($sl.M2Total - $sl.M2Used) of $($sl.M2Total) free" }
         if ($sl.SataTotal) { $storage += "SATA $($sl.SataTotal - $sl.SataUsed) of $($sl.SataTotal) free" }
-        if ($storage) { Write-HealthRow 'Bays' ($storage -join ' · ') }
+        if ($storage) { Write-HealthRow 'Ports' ($storage -join ' · ') }
 
         $exp = @()
         if ($sl.PcieTotal) { $exp += "PCIe $($sl.PcieFree) of $($sl.PcieTotal) free" }

@@ -196,6 +196,9 @@ function Get-DiskInfo {
 
     $out = foreach ($d in $disks) {
         $id = [string]$d.DeviceId
+        # Skip zero-size devices: card readers with no card, and hypervisor placeholders,
+        # both surface as empty "disks". A drive that holds nothing is not worth a row.
+        if (-not $d.Size -or [int64]$d.Size -le 0) { continue }
         # MediaType is occasionally 'Unspecified' on NVMe; the bus then settles it, since
         # there is no such thing as a spinning NVMe drive.
         $media = switch ("$($d.MediaType)") {

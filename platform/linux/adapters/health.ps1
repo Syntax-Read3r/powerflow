@@ -273,6 +273,10 @@ function Get-DiskInfo {
     $out = foreach ($d in $disks) {
         # Skip things that are not real drives: loopbacks, ram disks, optical, device-mapper.
         if ($d.NAME -match '^(loop|ram|sr|dm-|zram)') { continue }
+        # …and skip zero-size block devices. Hypervisors and card readers expose empty
+        # placeholder devices (a container showed "Virtual Disk · 0 GB"); a drive that holds
+        # nothing is not a drive worth a row.
+        if (-not ("$($d.SIZE)" -match '^\d+$') -or [int64]$d.SIZE -le 0) { continue }
 
         $media = if ($d.ROTA -eq '1') { 'HDD' } elseif ($d.ROTA -eq '0') { 'SSD' } else { 'unknown' }
         $bus   = if ($d.TRAN) { $d.TRAN.ToUpper() } else { $null }
