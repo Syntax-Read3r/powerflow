@@ -1,4 +1,4 @@
-# Log 5 — July 23, 2026 — start-folder, and making pwsh-config actually DO the work (v3.10.0)
+# Log 1 — July 27, 2026 — start-folder, and making pwsh-config actually DO the work (v3.10.0)
 
 Two asks in one turn, plus an instruction that shaped the whole session: *"You will need to
 verify that your code is functional before release."*

@@ -9,7 +9,7 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [3.10.0] - 2026-07-23
+## [3.10.0] - 2026-07-27
 
 ### Added
 
