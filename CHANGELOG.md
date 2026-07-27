@@ -9,6 +9,53 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.10.0] - 2026-07-23
+
+### Added
+
+- 🚀 **`start-folder`** — one list of everything that runs at login, and one place to
+  change it. The Startup folder is buried (`shell:startup`, or six levels into AppData)
+  and it is only *part* of the story: on Windows most autostart entries live in the
+  registry `Run` keys. On the machine this was built against, the folder held **one** item
+  while the Run keys held **thirteen**.
+
+  ```
+  start-folder              # picker: Enter toggles · ctrl-d deletes · ctrl-o opens
+  start-folder list         # plain print (also what pipes get)
+  start-folder add <path>   # add a program to your Startup folder
+  ```
+
+  **Enter toggles rather than deletes**, because "stop this starting up" is what people
+  actually want and it is completely reversible. Windows keeps the entry and flips the
+  `StartupApproved` flag — the same mechanism Task Manager uses; Linux keeps the
+  `.desktop` file and clears `Hidden=true`. Deleting is a separate confirmed key that
+  shows the full command first, since a removed registry `Run` value cannot be restored.
+
+  Crucially the list tells the **truth about state**: an entry can sit in `Run` yet be
+  disabled by flag, so reading the key alone would report it as starting up when it does
+  not. Every row is joined against `StartupApproved` (Linux: `Hidden`). Linux entries are
+  XDG autostart; a system entry is shadow-copied into your autostart directory rather than
+  edited, because the package owns the original.
+
+### Changed
+
+- ⚙️ **`pwsh-config` now works on Windows — it applies the change instead of telling you
+  what to run.** Previously the Windows path printed "change these in Settings, or with
+  cmdlets like `Set-TimeZone` / `Rename-Computer`", which is a printed man page, not a
+  tool. Timezone, regional format, hostname and network time sync are now read from the
+  machine and **set** by PowerFlow, with a single UAC prompt for the machine-wide ones
+  rather than a refusal. Keyboard stays Linux-only on purpose: a Windows layout is a
+  property of the input-language list, and a wrong value can leave you unable to type.
+  Per-setting caveats (e.g. a hostname needing a restart) now come from the adapter and
+  are printed after the change.
+
+### Fixed
+
+- ⚙️ **`pwsh-config` refuses a value that isn't on its own list.** `Set-Culture` accepts an
+  unknown culture name instead of failing — during testing it wrote a bogus `zz-ZZ`
+  regional format — so both the adapter and the menu now validate against the offered
+  choices before applying anything.
+
 ## [3.9.1] - 2026-07-23
 
 ### Fixed

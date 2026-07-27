@@ -86,12 +86,25 @@ function Get-SysConfigOptions {
     if (-not $name) { $name = '(unknown)' }
     $ntpLabel = if ($ntp -eq 'yes') { 'on' } else { 'off' }
 
+    # Note carries the per-setting caveat the menu prints after a successful change —
+    # same shape as the Windows adapter, so the component needs no per-OS special cases.
+    $kbNote = if ((Get-KeyboardMode) -eq 'vc') {
+        'console keymap; a graphical session may also need the X11 layout'
+    } else {
+        'X11 layout (/etc/default/keyboard); does not affect your SSH session'
+    }
+
     return @(
-        [pscustomobject]@{ Key = 'keyboard'; Label = 'Keyboard layout';    Current = $keymap;   Kind = 'list'   }
-        [pscustomobject]@{ Key = 'timezone'; Label = 'Timezone';           Current = $tz;       Kind = 'list'   }
-        [pscustomobject]@{ Key = 'locale';   Label = 'Locale / language';  Current = $locale;   Kind = 'list'   }
-        [pscustomobject]@{ Key = 'hostname'; Label = 'Hostname';           Current = $name;     Kind = 'text'   }
-        [pscustomobject]@{ Key = 'ntp';      Label = 'Network time sync';  Current = $ntpLabel; Kind = 'toggle' }
+        [pscustomobject]@{ Key = 'keyboard'; Label = 'Keyboard layout';    Current = $keymap;   Kind = 'list'
+                           Note = $kbNote }
+        [pscustomobject]@{ Key = 'timezone'; Label = 'Timezone';           Current = $tz;       Kind = 'list'
+                           Note = 'applies immediately' }
+        [pscustomobject]@{ Key = 'locale';   Label = 'Locale / language';  Current = $locale;   Kind = 'list'
+                           Note = 'applies to new logins' }
+        [pscustomobject]@{ Key = 'hostname'; Label = 'Hostname';           Current = $name;     Kind = 'text'
+                           Note = 'new shells show the new name' }
+        [pscustomobject]@{ Key = 'ntp';      Label = 'Network time sync';  Current = $ntpLabel; Kind = 'toggle'
+                           Note = 'systemd-timesyncd' }
     )
 }
 

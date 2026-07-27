@@ -30,29 +30,27 @@ $script:PF_ConfigAliases = @{
 
 <#
 .SYNOPSIS
-    pwsh-config — change a system setting from a menu (Linux).
+    pwsh-config — change a system setting from a menu (Windows and Linux).
 .DESCRIPTION
     pwsh-config            browse every setting (current values shown) and pick one
-    pwsh-config <name>     jump straight to one: keyboard | timezone | locale |
-                           hostname | ntp  (kb / tz / loc / host / sync also work)
-    Each change is applied with sudo; systemd (localectl/timedatectl) does the work,
-    so it behaves the same on Fedora, Debian, Ubuntu, Arch and openSUSE.
+    pwsh-config <name>     jump straight to one: timezone | locale | hostname | ntp,
+                           plus keyboard on Linux  (tz / loc / host / sync / kb)
+    PowerFlow applies the change for you — systemd (localectl/timedatectl) on Linux
+    with sudo, native cmdlets on Windows with a single UAC prompt when the setting is
+    machine-wide. Which settings exist is decided by the platform adapter.
 .EXAMPLE
     pwsh-config
-    pwsh-config kb
+    pwsh-config tz
 #>
 function pwsh-config {
     param([string]$Which)
 
     if (-not (Test-SysConfigSupported)) {
         Write-Host ""
-        if ($script:PowerFlowOS -eq 'windows') {
-            Write-Host "ℹ️  pwsh-config manages Linux system settings (systemd)." -ForegroundColor Cyan
-            Write-Host "   On Windows, change these in Settings, or with cmdlets like" -ForegroundColor DarkGray
-            Write-Host "   Set-TimeZone / Rename-Computer / Set-WinUserLanguageList." -ForegroundColor DarkGray
-        } else {
-            Write-Host "❌ pwsh-config needs systemd (localectl/timedatectl), which isn't operating here." -ForegroundColor Red
-            Write-Host "   (Common in containers/WSL without systemd as PID 1 — your real server is fine.)" -ForegroundColor DarkGray
+        Write-Host "❌ pwsh-config can't manage settings here." -ForegroundColor Red
+        if ($script:PowerFlowOS -eq 'linux') {
+            Write-Host "   It needs systemd (localectl/timedatectl), which isn't operating." -ForegroundColor DarkGray
+            Write-Host "   (Common in containers/WSL without systemd as PID 1 — a real server is fine.)" -ForegroundColor DarkGray
         }
         Write-Host ""
         return
@@ -166,16 +164,29 @@ function pwsh-config {
 # while showing 'on'/'off', so the confirmation matches the prompt's vocabulary.
 function Complete-SysConfigChange {
     param($Entry, [string]$Value, [string]$Display = $Value)
+
+    # A 'list' setting may only be set to something it actually offered. The picker can't
+    # produce anything else, but the underlying tools are not all careful — Windows'
+    # Set-Culture happily writes an unknown culture name — so refuse before applying
+    # rather than leave the machine holding a value that came from nowhere.
+    if ($Entry.Kind -eq 'list') {
+        $valid = @(Get-SysConfigChoices -Key $Entry.Key)
+        if ($valid.Count -gt 0 -and $Value -notin $valid) {
+            Write-Host "❌ '$Value' isn't an available value for $($Entry.Label) — unchanged." -ForegroundColor Red
+            return
+        }
+    }
+
     Write-Host "🔧 Setting $($Entry.Label) → $Display ..." -ForegroundColor DarkGray
     if (Set-SysConfig -Key $Entry.Key -Value $Value) {
         Write-Host "✅ $($Entry.Label) is now: $Display" -ForegroundColor Green
-        if ($Entry.Key -eq 'keyboard') {
-            Write-Host "   (affects the console/VC keymap; a graphical session may need X11 layout too)" -ForegroundColor DarkGray
-        }
+        # Caveats live with the setting (the adapter owns them) — e.g. a hostname change
+        # needing a restart, or a keymap that only covers the console.
+        if ($Entry.Note) { Write-Host "   ($($Entry.Note))" -ForegroundColor DarkGray }
     } else {
         Write-Host "❌ Could not apply the change (permission denied, or an invalid value)." -ForegroundColor Red
     }
 }
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
-Register-PFCommand -Name 'pwsh-config' -Platform 'Linux' -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'menu to change OS settings: keyboard, timezone, locale, hostname, time-sync' -Example 'pwsh-config · pwsh-config kb'
+Register-PFCommand -Name 'pwsh-config' -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'menu to change OS settings: timezone, locale, hostname, time-sync' -Example 'pwsh-config · pwsh-config tz'

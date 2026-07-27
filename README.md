@@ -472,7 +472,8 @@ PowerFlow's versions live on as `del` and `mvf`.
 | `pwsh-autologin`       | Start PowerFlow on login — no installer re-run (Linux)   |
 | `pwsh-autologin off`   | Stop starting on login                                   |
 | `pwsh-exit`            | Drop to bash without closing your SSH session (Linux)    |
-| `pwsh-config`          | Menu to change OS settings: keyboard, timezone, locale, hostname, time-sync (Linux) |
+| `pwsh-config`          | Menu that **applies** OS settings: timezone, locale, hostname, time-sync (+ keyboard on Linux) |
+| `start-folder`         | Manage what runs at login — Enter toggles, ctrl-d deletes (alias `startup`) |
 
 ### System
 
