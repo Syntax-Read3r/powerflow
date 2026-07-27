@@ -9,6 +9,7 @@
 # Depends  : platform adapters (health.ps1): Get-MachineInfo, Get-PowerSnapshot,
 #            Get-StabilityEvents, Get-FirmwareInfo, Set-CpuMaxState,
 #            Export-StabilityReport · elevation adapter: Assert-Admin
+#            · Format-Size (components/system/apps.ps1 — loads earlier)
 # ==============================================================================
 #
 # Design rules (docs/plan/pc-whoami/README.md):
@@ -30,6 +31,15 @@ function Write-HealthRow {
     if ($Warn) { Write-Host "   ⚠️ $Warn" -NoNewline -ForegroundColor Yellow }
     Write-Host ""
     if ($Hint) { Write-Host "            └─ details:  $Hint" -ForegroundColor DarkGray }
+}
+
+# Whole-drive sizes, rendered for a one-line summary. Deliberately NOT Format-Size (which
+# apps.ps1 owns and installed-apps needs to 2dp): at drive scale "931.51 GB" is noise where
+# "932 GB" is the fact, and these rows are already long.
+function Format-DriveSize {
+    param([int64]$Bytes)
+    if ($Bytes -ge 1TB) { return ('{0:N1} TB' -f ($Bytes / 1TB)) }
+    return ('{0:N0} GB' -f ($Bytes / 1GB))
 }
 
 function Get-CpuCapRecord {
@@ -90,7 +100,7 @@ function pc-whoami {
                  elseif ($mem.Type)                { $mem.Type }
                  elseif ($mem.SpeedMTs)            { "$($mem.SpeedMTs) MT/s" }
         $bits += $mem.Layout
-        if ($mem.SlotsTotal -gt $mem.Sticks) { $bits += "$($mem.Sticks)/$($mem.SlotsTotal) slots" }
+        # Slot occupancy is NOT repeated here — the dedicated 'Slots' row below owns it.
         # Running slower than the sticks are rated for means XMP/EXPO is off — a real and
         # completely invisible performance loss, so it earns a warning rather than silence.
         $slow = if ($mem.RatedMTs -gt $mem.SpeedMTs -and $mem.SpeedMTs -gt 0) {
@@ -99,6 +109,51 @@ function pc-whoami {
         Write-HealthRow 'RAM' (@($bits | Where-Object { $_ }) -join ' · ') $slow
     } else {
         Write-HealthRow 'RAM' "$($m.RamGB) GB" $(if ($mem) { $mem.Note })
+    }
+
+    # Storage: one row per physical drive — what it is, how big, how much is left. The
+    # interface (NVMe/SATA/USB) and, for a spinning disk, its RPM are what actually separate
+    # a modern M.2 from an old 2.5" SATA; Windows leaves the form-factor field blank, so an
+    # inferred size is shown only where the bus makes it certain.
+    foreach ($d in @($m.Disks)) {
+        # Form factor first, so it reads as hardware: "M.2 NVMe SSD", "SATA HDD 7200rpm".
+        $spec = @()
+        if ($d.FormFactor)            { $spec += $d.FormFactor }
+        if ($d.Bus)                   { $spec += $d.Bus }
+        if ($d.Media -ne 'unknown')   { $spec += $d.Media }
+        if ($d.Rpm)                   { $spec += "$($d.Rpm)rpm" }
+
+        $bits = @($d.Name, (Format-DriveSize $d.SizeBytes), ($spec -join ' '))
+        if ($d.FreeBytes -gt 0) {
+            $bits += "$(Format-DriveSize $d.FreeBytes) free$(if ($d.Letters) { " on $($d.Letters)" })"
+        }
+        if ($d.External) { $bits += 'external' }
+
+        # A nearly-full drive is a genuine vital, and PowerFlow already has the tool for it.
+        $warn = $null; $hint = $null
+        if ($d.SizeBytes -gt 0 -and $d.FreeBytes -gt 0) {
+            $pct = [math]::Round(100 * $d.FreeBytes / $d.SizeBytes)
+            if ($pct -le 10) { $warn = "only $pct% free"; $hint = 'installed-apps 1gb-5gb' }
+        }
+        if (-not $d.Healthy) { $warn = 'the drive reports a health problem' }
+        Write-HealthRow 'Disk' ($bits -join ' · ') $warn $hint
+    }
+
+    # Upgrade headroom, read from the motherboard's own SMBIOS records rather than guessed.
+    $sl = $m.Slots
+    if ($sl -and $sl.Supported) {
+        $storage = @()
+        if ($sl.M2Total)   { $storage += "M.2 $($sl.M2Total - $sl.M2Used) of $($sl.M2Total) free" }
+        if ($sl.SataTotal) { $storage += "SATA $($sl.SataTotal - $sl.SataUsed) of $($sl.SataTotal) free" }
+        if ($storage) { Write-HealthRow 'Bays' ($storage -join ' · ') }
+
+        $exp = @()
+        if ($sl.PcieTotal) { $exp += "PCIe $($sl.PcieFree) of $($sl.PcieTotal) free" }
+        if ($sl.MemTotal)  {
+            $memFree = $sl.MemTotal - $sl.MemUsed
+            $exp += "RAM $memFree of $($sl.MemTotal) slots free" + $(if ($sl.MemMaxGB) { " (max $($sl.MemMaxGB) GB)" })
+        }
+        if ($exp) { Write-HealthRow 'Slots' ($exp -join ' · ') }
     }
 
     # Motherboard. Get-FirmwareInfo has carried the board vendor/model since v3.4.0 — it was

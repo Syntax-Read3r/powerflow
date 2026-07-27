@@ -165,6 +165,143 @@ function Get-MemoryInfo {
     }
 }
 
+# Physical drives: what they are (SSD/HDD), how big, and how much is left.
+#
+# Get-PhysicalDisk is preferred; the MSFT_PhysicalDisk CIM class is the fallback for a box
+# where the Storage module is missing (Server Core, a trimmed image). Both report MediaType,
+# which is the only reliable SSD/HDD answer — Win32_DiskDrive does not carry it.
+#
+# Keyed by DeviceId, never by name: this machine has TWO identically-named NVMe drives, so
+# grouping by FriendlyName would silently merge them into one row.
+function Get-DiskInfo {
+    $disks = @(Get-PhysicalDisk -ErrorAction SilentlyContinue)
+    if (-not $disks) {
+        try {
+            $disks = @(Get-CimInstance -Namespace root/Microsoft/Windows/Storage `
+                                       -ClassName MSFT_PhysicalDisk -ErrorAction Stop)
+        } catch { return @() }
+    }
+    if (-not $disks) { return @() }
+
+    # Free space lives on VOLUMES, capacity on DISKS — partitions are the join between them.
+    $freeByDisk = @{}
+    $lettersByDisk = @{}
+    foreach ($p in @(Get-Partition -ErrorAction SilentlyContinue | Where-Object DriveLetter)) {
+        $v = Get-Volume -DriveLetter $p.DriveLetter -ErrorAction SilentlyContinue
+        if (-not $v) { continue }
+        $n = [string]$p.DiskNumber
+        $freeByDisk[$n]    = [int64]($freeByDisk[$n]) + [int64]$v.SizeRemaining
+        $lettersByDisk[$n] = @($lettersByDisk[$n]) + "$($p.DriveLetter):" | Where-Object { $_ }
+    }
+
+    $out = foreach ($d in $disks) {
+        $id = [string]$d.DeviceId
+        # MediaType is occasionally 'Unspecified' on NVMe; the bus then settles it, since
+        # there is no such thing as a spinning NVMe drive.
+        $media = switch ("$($d.MediaType)") {
+            'SSD'  { 'SSD' }
+            'HDD'  { 'HDD' }
+            'SCM'  { 'SCM' }
+            default { if ("$($d.BusType)" -eq 'NVMe') { 'SSD' } else { 'unknown' } }
+        }
+
+        # Rotational speed, when the drive really is spinning. SSDs report 0 and USB
+        # enclosures report 'Unknown' (the bridge hides it), so only a real number is used —
+        # this is what actually tells an old 7200rpm platter drive from a modern SSD.
+        $rpm = 0
+        if ("$($d.SpindleSpeed)" -match '^\d+$' -and [int]$d.SpindleSpeed -gt 0) { $rpm = [int]$d.SpindleSpeed }
+
+        # FORM FACTOR IS INFERRED, and deliberately so: Get-PhysicalDisk.FormFactor is blank
+        # on every drive in practice (verified — NVMe reports nothing, USB reports 'Unknown'),
+        # so there is no API answer to read. The bus is a sound proxy for consumer hardware:
+        # NVMe ships as M.2, and a SATA SSD is a 2.5" drive. A spinning SATA disk could be
+        # 3.5" or 2.5" with no way to tell, so it gets its RPM instead of a guessed size.
+        $form = switch -Regex ("$($d.BusType)|$media") {
+            '^NVMe'      { 'M.2' }
+            '^SATA\|SSD' { '2.5"' }
+            default      { $null }
+        }
+
+        [pscustomobject]@{
+            Id         = $id
+            Name       = ("$($d.FriendlyName)" -replace '\s+', ' ').Trim()
+            Media      = $media
+            Bus        = "$($d.BusType)"
+            Rpm        = $rpm
+            FormFactor = $form
+            SizeBytes  = [int64]$d.Size
+            FreeBytes  = if ($freeByDisk.ContainsKey($id)) { [int64]$freeByDisk[$id] } else { 0 }
+            Letters    = (@($lettersByDisk[$id]) -join ' ')
+            # A USB drive is storage you can unplug — worth distinguishing from the disks the
+            # machine actually runs on.
+            External   = ("$($d.BusType)" -in @('USB', '1394', 'Fibre Channel'))
+            Healthy    = ("$($d.HealthStatus)" -in @('Healthy', ''))
+            # The drive Windows boots from — the one you care about first.
+            System     = ((@($lettersByDisk[$id]) -contains "$env:SystemDrive"))
+        }
+    }
+    # Boot drive, then other internal drives (biggest first), then anything unpluggable.
+    return @($out | Sort-Object -Property @{ Expression = 'External' },
+                                          @{ Expression = 'System'; Descending = $true },
+                                          @{ Expression = 'SizeBytes'; Descending = $true }, Id)
+}
+
+# Upgrade headroom, straight from the motherboard's own SMBIOS records.
+#
+# WHERE EACH NUMBER COMES FROM (nothing here is a hardcoded board database):
+#   M.2 sockets   Type 8 port connectors whose designator is M.2 …(SOCKET3). Wi-Fi/CNVi
+#                 M.2 keys are excluded — they take a radio, not a drive.
+#   SATA ports    Type 8 connectors of PortType 32 (SATA). Vendors label them in PAIRS
+#                 ("SATA6G_12" = ports 1 and 2), so the trailing digit run is counted
+#                 rather than assuming one port per record.
+#   PCIe slots    Type 9 system slots, which carry a real used/free flag (CurrentUsage
+#                 3 = Available, 4 = In Use) — no inference needed.
+#   Memory        Type 16/17: declared slots vs populated, plus the board's max capacity.
+#
+# Occupancy for M.2/SATA is counted from the drives actually attached by bus, because SMBIOS
+# describes the BOARD, not what is plugged into it.
+function Get-SlotInfo {
+    $ports = @()
+    try { $ports = @(Get-CimInstance Win32_PortConnector -ErrorAction Stop) } catch { }
+    $slots = @(Get-CimInstance Win32_SystemSlot -ErrorAction SilentlyContinue)
+    $array = Get-CimInstance Win32_PhysicalMemoryArray -ErrorAction SilentlyContinue | Select-Object -First 1
+    $sticks = @(Get-CimInstance Win32_PhysicalMemory -ErrorAction SilentlyContinue).Count
+    $disks  = @(Get-PhysicalDisk -ErrorAction SilentlyContinue)
+
+    # ── M.2 storage sockets ───────────────────────────────────────────────────
+    $m2 = @($ports | Where-Object {
+        $d = "$($_.InternalReferenceDesignator)$($_.ExternalReferenceDesignator)"
+        $d -match 'M\.?2' -and $d -notmatch '(?i)wifi|wlan|cnvi|bt|key.?e'
+    }).Count
+
+    # ── SATA ports (counted from paired designators) ──────────────────────────
+    $sata = 0
+    foreach ($p in $ports) {
+        $d = "$($p.InternalReferenceDesignator)$($p.ExternalReferenceDesignator)"
+        if ([int]$p.PortType -ne 32 -and $d -notmatch '(?i)sata') { continue }
+        # Take the label's last segment: "SATA6G_12" -> "12" (two ports), "SATA1" -> "1".
+        $tail = ($d -split '[_-]')[-1]
+        $digits = ($tail -replace '\D', '')
+        $sata += if ($digits.Length -ge 1) { $digits.Length } else { 1 }
+    }
+
+    $m2Used   = @($disks | Where-Object { "$($_.BusType)" -eq 'NVMe' }).Count
+    $sataUsed = @($disks | Where-Object { "$($_.BusType)" -eq 'SATA' }).Count
+
+    [pscustomobject]@{
+        Supported  = [bool]($ports.Count -or $slots.Count -or $array)
+        M2Total    = $m2
+        M2Used     = [math]::Min($m2Used, [math]::Max($m2, $m2Used))
+        SataTotal  = $sata
+        SataUsed   = [math]::Min($sataUsed, [math]::Max($sata, $sataUsed))
+        PcieTotal  = $slots.Count
+        PcieFree   = @($slots | Where-Object { [int]$_.CurrentUsage -eq 3 }).Count
+        MemTotal   = if ($array -and $array.MemoryDevices) { [int]$array.MemoryDevices } else { 0 }
+        MemUsed    = $sticks
+        MemMaxGB   = if ($array -and $array.MaxCapacityEx) { [math]::Round([int64]$array.MaxCapacityEx / 1MB) } else { 0 }
+    }
+}
+
 function Get-MachineInfo {
     $cpu = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
     $cs  = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
@@ -177,6 +314,8 @@ function Get-MachineInfo {
         RamGB   = if ($cs)  { [math]::Round($cs.TotalPhysicalMemory / 1GB) } else { 0 }
         Memory  = (Get-MemoryInfo)
         Gpus    = (Get-GpuInfo)
+        Disks   = (Get-DiskInfo)
+        Slots   = (Get-SlotInfo)
         Uptime  = (Get-Uptime)
     }
 }

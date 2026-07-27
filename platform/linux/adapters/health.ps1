@@ -233,6 +233,134 @@ function Get-MemoryInfo {
     }
 }
 
+# Physical drives via lsblk — no root needed, unlike the SMBIOS-based memory detail.
+#
+#   ROTA (rotational)  1 = spinning platter (HDD), 0 = solid state. This is the kernel's own
+#                      answer, straight from /sys/block/*/queue/rotational — the exact
+#                      equivalent of Windows' MediaType, and just as authoritative.
+#   TRAN (transport)   nvme / sata / usb — the interface, which with ROTA is what really
+#                      separates a modern M.2 from an old 2.5" SATA drive.
+#   -b -P              bytes, and KEY="value" output that parses without column guessing.
+#
+# Free space is attributed via PKNAME (a partition's parent disk), so a drive's figure is the
+# sum of its own mounted partitions rather than a whole-machine total.
+function Get-DiskInfo {
+    if (-not (Get-Command lsblk -ErrorAction SilentlyContinue)) { return @() }
+
+    $rows = @(lsblk -b -P -o NAME,TYPE,ROTA,SIZE,MODEL,TRAN,MOUNTPOINT,FSAVAIL,PKNAME 2>/dev/null)
+    if (-not $rows) { return @() }
+
+    $parse = {
+        param($line)
+        $h = @{}
+        foreach ($m in [regex]::Matches($line, '(\w+)="([^"]*)"')) { $h[$m.Groups[1].Value] = $m.Groups[2].Value }
+        return $h
+    }
+
+    $disks = @(); $freeByDisk = @{}; $mountsByDisk = @{}
+    foreach ($line in $rows) {
+        $r = & $parse $line
+        if ($r.TYPE -eq 'disk') { $disks += , $r; continue }
+        # A mounted partition contributes its free space to its parent disk.
+        if ($r.MOUNTPOINT -and $r.PKNAME) {
+            $avail = 0
+            if ("$($r.FSAVAIL)" -match '^\d+$') { $avail = [int64]$r.FSAVAIL }
+            $freeByDisk[$r.PKNAME]   = [int64]($freeByDisk[$r.PKNAME]) + $avail
+            $mountsByDisk[$r.PKNAME] = @($mountsByDisk[$r.PKNAME]) + $r.MOUNTPOINT | Where-Object { $_ }
+        }
+    }
+
+    $out = foreach ($d in $disks) {
+        # Skip things that are not real drives: loopbacks, ram disks, optical, device-mapper.
+        if ($d.NAME -match '^(loop|ram|sr|dm-|zram)') { continue }
+
+        $media = if ($d.ROTA -eq '1') { 'HDD' } elseif ($d.ROTA -eq '0') { 'SSD' } else { 'unknown' }
+        $bus   = if ($d.TRAN) { $d.TRAN.ToUpper() } else { $null }
+        # Same inference (and same caveat) as the Windows adapter: NVMe ships as M.2, and a
+        # SATA SSD is a 2.5" drive. A spinning disk gets no guessed size.
+        $form  = if ($bus -eq 'NVME') { 'M.2' } elseif ($bus -eq 'SATA' -and $media -eq 'SSD') { '2.5"' } else { $null }
+
+        [pscustomobject]@{
+            Id         = $d.NAME
+            Name       = if ($d.MODEL) { ($d.MODEL -replace '\s+', ' ').Trim() } else { $d.NAME }
+            Media      = $media
+            Bus        = if ($bus -eq 'NVME') { 'NVMe' } else { $bus }
+            Rpm        = 0          # needs smartctl + root; not worth a password for a status line
+            FormFactor = $form
+            SizeBytes  = if ("$($d.SIZE)" -match '^\d+$') { [int64]$d.SIZE } else { 0 }
+            FreeBytes  = if ($freeByDisk.ContainsKey($d.NAME)) { [int64]$freeByDisk[$d.NAME] } else { 0 }
+            Letters    = (@($mountsByDisk[$d.NAME]) -join ' ')
+            External   = ($bus -eq 'USB')
+            Healthy    = $true      # SMART needs root; claiming health we cannot see would lie
+            # The drive carrying / — the one you care about first.
+            System     = ((@($mountsByDisk[$d.NAME]) -contains '/'))
+        }
+    }
+    # Boot drive, then other internal drives (biggest first), then anything unpluggable.
+    return @($out | Sort-Object -Property @{ Expression = 'External' },
+                                          @{ Expression = 'System'; Descending = $true },
+                                          @{ Expression = 'SizeBytes'; Descending = $true }, Id)
+}
+
+# Upgrade headroom from the motherboard, the same SMBIOS records Windows reads — here via
+# dmidecode, which means root. Types 8 (port connectors) and 9 (system slots); memory slots
+# come from Get-MemoryInfo, which already parses type 17.
+function Get-SlotInfo {
+    $plain = [pscustomobject]@{ Supported = $false; M2Total = 0; M2Used = 0; SataTotal = 0
+                                SataUsed = 0; PcieTotal = 0; PcieFree = 0; MemTotal = 0
+                                MemUsed = 0; MemMaxGB = 0 }
+    if (-not (Get-Command dmidecode -ErrorAction SilentlyContinue)) { return $plain }
+
+    $raw = if ((id -u) -eq '0') { dmidecode -t 8 -t 9 2>/dev/null }
+           elseif (Get-Command sudo -ErrorAction SilentlyContinue) { sudo -n dmidecode -t 8 -t 9 2>/dev/null }
+           else { $null }
+    if (-not $raw) { return $plain }
+
+    $m2 = 0; $sata = 0; $pcieTotal = 0; $pcieFree = 0
+    $desig = $null; $inSlot = $false; $usage = $null
+    foreach ($line in @($raw) + @('')) {
+        if ($line -match '^(Port Connector Information|System Slot Information)' -or $line -eq '') {
+            if ($desig) {
+                if ($inSlot) {
+                    $pcieTotal++
+                    if ($usage -match '(?i)available') { $pcieFree++ }
+                } else {
+                    if ($desig -match 'M\.?2' -and $desig -notmatch '(?i)wifi|wlan|cnvi|key.?e') { $m2++ }
+                    elseif ($desig -match '(?i)sata') {
+                        # Vendors label SATA in pairs ("SATA6G_12" = two ports).
+                        $tail = ($desig -split '[_-]')[-1]
+                        $digits = ($tail -replace '\D', '')
+                        $sata += if ($digits.Length -ge 1) { $digits.Length } else { 1 }
+                    }
+                }
+            }
+            $desig = $null; $usage = $null
+            $inSlot = ($line -match '^System Slot')
+            continue
+        }
+        switch -Regex ($line) {
+            '^\s*Internal Reference Designator:\s*(.+)$' { if (-not $desig) { $desig = $matches[1].Trim() } }
+            '^\s*Designation:\s*(.+)$'                   { $desig = $matches[1].Trim() }
+            '^\s*Current Usage:\s*(.+)$'                 { $usage = $matches[1].Trim() }
+        }
+    }
+
+    $mem = Get-MemoryInfo
+    $disks = @(Get-DiskInfo)
+    return [pscustomobject]@{
+        Supported = $true
+        M2Total   = $m2
+        M2Used    = @($disks | Where-Object { $_.Bus -eq 'NVMe' }).Count
+        SataTotal = $sata
+        SataUsed  = @($disks | Where-Object { $_.Bus -eq 'SATA' }).Count
+        PcieTotal = $pcieTotal
+        PcieFree  = $pcieFree
+        MemTotal  = if ($mem.Detail) { [int]$mem.SlotsTotal } else { 0 }
+        MemUsed   = if ($mem.Detail) { [int]$mem.Sticks } else { 0 }
+        MemMaxGB  = 0
+    }
+}
+
 function Get-MachineInfo {
     $cpuName = 'unknown'; $threads = 0; $cores = 0
     if (Test-Path /proc/cpuinfo) {
@@ -258,6 +386,8 @@ function Get-MachineInfo {
         RamGB   = $ramGB
         Memory  = (Get-MemoryInfo)
         Gpus    = (Get-GpuInfo)
+        Disks   = (Get-DiskInfo)
+        Slots   = (Get-SlotInfo)
         Uptime  = (Get-Uptime)
     }
 }

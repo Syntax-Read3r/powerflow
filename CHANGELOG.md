@@ -9,6 +9,47 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.12.0] - 2026-07-27
+
+### Added
+
+- 💾 **`pc-whoami` now reports your drives** — one row each, with what the drive *is*, how
+  big it is, and how much is left:
+
+  ```
+  Disk     Samsung SSD 970 EVO Plus 1TB · 932 GB · M.2 NVMe SSD · 131 GB free on C:
+  Disk     WD My Passport 25E1 · 1.8 TB · USB HDD · 686 GB free on E: · external
+  ```
+
+  SSD vs HDD comes from the OS itself (Windows `MediaType`; on Linux the kernel's
+  rotational flag), and the **interface** — NVMe / SATA / USB — is what actually separates a
+  modern M.2 from an old 2.5" SATA drive. A spinning disk shows its **RPM** when the drive
+  reports one. Form factor is *inferred from the bus and labelled as such* (NVMe ⇒ M.2,
+  SATA SSD ⇒ 2.5"), because `Get-PhysicalDisk.FormFactor` is blank on real hardware — there
+  is no API answer to read, and a spinning SATA disk could be 3.5" or 2.5" with no way to
+  tell, so it gets its RPM instead of a guess.
+
+  The boot drive leads, external drives are marked and sort last, free space is attributed
+  per drive (via partitions, not a machine-wide total), and a drive under 10% free earns a
+  warning pointing at `installed-apps`. Drives are keyed by device ID, never by name — this
+  machine has two identically-named NVMe SSDs that grouping by name would have merged.
+
+- 🔌 **Upgrade headroom, read from the motherboard.** How many ports and slots are actually
+  free, from the board's own SMBIOS records rather than a hardcoded database of models:
+
+  ```
+  Bays     M.2 2 of 4 free · SATA 6 of 6 free
+  Slots    PCIe 2 of 3 free · RAM 0 of 4 slots free (max 128 GB)
+  ```
+
+  M.2 sockets and SATA ports come from SMBIOS Type 8 port connectors — Wi-Fi/CNVi M.2 keys
+  are excluded (they take a radio, not a drive), and SATA connectors are counted from their
+  paired designators, since vendors label them `SATA6G_12` for ports 1 *and* 2. PCIe slots
+  come from Type 9, which carries a real Available/In-Use flag. Occupancy is counted from the
+  drives actually attached, because SMBIOS describes the board, not what is plugged into it.
+  On Linux this needs `dmidecode` (hence root, or `sudo -n` which never prompts) and says so
+  when it has no access; the drive list itself needs no root.
+
 ## [3.11.0] - 2026-07-27
 
 ### Added
