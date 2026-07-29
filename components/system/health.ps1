@@ -60,20 +60,25 @@ function Get-CpuCapRecord {
     pc-whoami -power     every power plan, caps decoded (no hex, no GUIDs)
     pc-whoami -crashes   hardware errors + bugchecks + dumps  (-export bundles them)
     pc-whoami -bios      firmware version, age, board model
+    pc-whoami -ram       what is holding your RAM, and kill it
     -days N              widen the stability window (default 7)
+    -min N               -ram threshold in GB (default 0.5)
 #>
 function pc-whoami {
     param(
         [switch]$power,
         [switch]$crashes,
         [switch]$bios,
+        [switch]$ram,
         [switch]$export,
-        [int]$days = 7
+        [int]$days = 7,
+        [double]$min = 0.5
     )
 
     if ($power)   { Show-PowerDetail;                       return }
     if ($crashes) { Show-CrashDetail -Days $days -Export:$export; return }
     if ($bios)    { Show-BiosDetail;                        return }
+    if ($ram)     { Show-RamDetail -MinGB $min;             return }
 
     $m    = Get-MachineInfo
     $snap = Get-PowerSnapshot
@@ -324,6 +329,106 @@ function Show-CrashDetail {
     Write-Host ""
 }
 
+# pc-whoami -ram — what is actually holding memory, and a way to stop it.
+#
+# Grouped by program, because one browser is dozens of processes: per-PID rows would show
+# "chrome 180 MB" forty times and bury the 7 GB answer. Killing therefore acts on the whole
+# group, which is what "close Chrome" means — and is stated plainly before it happens.
+function Show-RamDetail {
+    param([double]$MinGB = 0.5)
+
+    $minBytes = [int64]($MinGB * 1GB)
+    $rows = @(Get-ProcessMemoryUsage -MinBytes $minBytes)
+    $mem  = (Get-MachineInfo).Memory
+
+    Write-Host ""
+    Write-Host "🧠 MEMORY — programs using $MinGB GB or more" -ForegroundColor Cyan
+    Write-Host ""
+
+    if (-not $rows.Count) {
+        Write-Host "   ✨ Nothing is using $MinGB GB or more." -ForegroundColor Green
+        Write-Host "   Lower the bar with:  pc-whoami -ram -min 0.2" -ForegroundColor DarkGray
+        Write-Host ""
+        return
+    }
+
+    $w = ($rows.Name | Measure-Object -Maximum Length).Maximum + 2
+    foreach ($r in $rows) {
+        Write-Host ("   {0}" -f $r.Name.PadRight($w)) -NoNewline -ForegroundColor White
+        Write-Host ("{0,9}" -f (Format-DriveSize $r.Bytes)) -NoNewline -ForegroundColor Yellow
+        Write-Host ("{0,7}%" -f $r.Percent) -NoNewline -ForegroundColor DarkGray
+        if ($r.Count -gt 1) { Write-Host ("   {0} processes" -f $r.Count) -NoNewline -ForegroundColor DarkGray }
+        if ($r.Protected)   { Write-Host "   🔒 system-critical" -NoNewline -ForegroundColor DarkYellow }
+        if ($r.IsSelf)      { Write-Host "   ← this shell" -NoNewline -ForegroundColor DarkCyan }
+        Write-Host ""
+    }
+
+    $sum = ($rows | Measure-Object -Property Bytes -Sum).Sum
+    Write-Host ""
+    Write-Host ("   Listed: {0} of {1} GB installed" -f (Format-DriveSize $sum), $mem.TotalGB) -ForegroundColor DarkGray
+
+    # The picker is the ONLY way to kill from here, and it never opens unless there is a human
+    # at a terminal — a destructive prompt must not appear in a pipe, a script or CI.
+    $interactive = -not [Console]::IsOutputRedirected -and -not [Console]::IsInputRedirected `
+                   -and (Get-Command fzf -ErrorAction SilentlyContinue)
+    if (-not $interactive) {
+        Write-Host "   (run this in a terminal with fzf to close one of these)" -ForegroundColor DarkGray
+        Write-Host ""
+        return
+    }
+
+    Write-Host ""
+    $lines = $rows | ForEach-Object {
+        $tag = if ($_.Protected) { ' [system-critical]' } elseif ($_.IsSelf) { ' [this shell]' } else { '' }
+        "{0}`t{1}  ·  {2}  ·  {3} process(es){4}" -f $rows.IndexOf($_), $_.Name, (Format-DriveSize $_.Bytes), $_.Count, $tag
+    }
+    $sel = $lines | fzf --delimiter "`t" --with-nth 2 --reverse --border=rounded --height=60% `
+        --prompt="🧠 Close: " `
+        --header="Enter closes the selected program · Esc leaves everything running" --header-first `
+        --color="header:bold:cyan,prompt:bold:green,border:cyan"
+
+    if (-not $sel) { Write-Host "   Nothing closed." -ForegroundColor DarkGray; Write-Host ""; return }
+    Stop-RamHog -Entry $rows[[int](($sel -split "`t")[0])]
+}
+
+# Kill one group, with the two refusals that matter and a confirmation that names the cost.
+function Stop-RamHog {
+    param([Parameter(Mandatory)]$Entry)
+
+    Write-Host ""
+    if ($Entry.Protected) {
+        Write-Host "🔒 '$($Entry.Name)' is a system-critical process — PowerFlow will not kill it." -ForegroundColor Red
+        Write-Host "   Ending it would take Windows/Linux down instantly, not free memory." -ForegroundColor DarkGray
+        Write-Host ""
+        return
+    }
+    if ($Entry.IsSelf) {
+        Write-Host "🛑 That is the shell you are typing in — closing it would end this session." -ForegroundColor Red
+        Write-Host ""
+        return
+    }
+
+    Write-Host "🗑️  Close $($Entry.Name)?" -ForegroundColor Yellow
+    Write-Host "    $($Entry.Count) process(es) · $(Format-DriveSize $Entry.Bytes) · PIDs $($Entry.Pids -join ', ')" -ForegroundColor DarkGray
+    Write-Host "    ⚠️  This is a kill, not a polite close — unsaved work in it is lost." -ForegroundColor Red
+    if ((Read-Host "    Type the name to confirm") -ne $Entry.Name) {
+        Write-Host "❌ Nothing closed." -ForegroundColor Yellow; Write-Host ""; return
+    }
+
+    # Report per-PID: a group can partially fail (a process may exit on its own, or be owned by
+    # another user), and "closed 3 of 4" is the truth where a bare success message would not be.
+    $killed = 0; $failed = @()
+    foreach ($processId in $Entry.Pids) {
+        try { Stop-Process -Id $processId -Force -ErrorAction Stop; $killed++ }
+        catch { $failed += "$processId ($($_.Exception.Message -replace '\s+', ' '))" }
+    }
+
+    if ($killed) { Write-Host "✅ Closed $killed of $($Entry.Pids.Count) process(es) — $(Format-DriveSize $Entry.Bytes) should return." -ForegroundColor Green }
+    foreach ($f in $failed) { Write-Host "   ⚠️  could not close PID $f" -ForegroundColor Yellow }
+    if (-not $killed) { Write-Host "❌ Nothing was closed." -ForegroundColor Red }
+    Write-Host ""
+}
+
 function Show-BiosDetail {
     $fw = Get-FirmwareInfo
     Write-Host ""
@@ -451,5 +556,5 @@ function pc-cap {
 }
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
-Register-PFCommand -Name 'pc-whoami' -Section '🖥️ MACHINE HEALTH' -Synopsis 'vitals: power plan, CPU cap, HW errors, BIOS age' -Example 'pc-whoami -power · -crashes · -bios'
+Register-PFCommand -Name 'pc-whoami' -Section '🖥️ MACHINE HEALTH' -Synopsis 'vitals: CPU, GPU, RAM, drives, BIOS age, power, errors' -Example 'pc-whoami -ram · -power · -crashes · -bios'
 Register-PFCommand -Name 'pc-cap'    -Section '🖥️ MACHINE HEALTH' -Synopsis 'cap CPU speed; prior state recorded for safe undo' -Example 'pc-cap 85 · pc-cap restore'

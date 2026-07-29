@@ -306,6 +306,53 @@ function Get-DiskInfo {
                                           @{ Expression = 'SizeBytes'; Descending = $true }, Id)
 }
 
+# Processes you must never kill. PID 1 is the init system — killing it panics the kernel —
+# and kernel threads (kthreadd and its children) are not user processes at all; a kill signal
+# to them is meaningless at best.
+#
+# dbus-daemon and the systemd-* helpers are the Linux equivalent of Windows' svchost here:
+# they are session/service plumbing, they can accumulate real memory, and killing them breaks
+# the desktop or the service manager rather than freeing anything useful.
+$script:PF_ProtectedProcs = @(
+    'systemd', 'init', 'kthreadd', 'kernel', 'kworker', 'ksoftirqd', 'migration',
+    'dbus-daemon', 'dbus-broker', 'systemd-journald', 'systemd-logind', 'systemd-udevd',
+    'systemd-oomd', 'systemd-resolved'
+)
+
+# What is actually holding RAM, grouped by program. Same contract and same reasoning as the
+# Windows adapter: grouped because one browser is dozens of processes, and WorkingSet64 —
+# which PowerShell maps to RSS on Linux — because that is the resident physical memory.
+function Get-ProcessMemoryUsage {
+    param([int64]$MinBytes = 536870912)   # 0.5 GB
+
+    $total = 0
+    if (Test-Path /proc/meminfo) {
+        $mem = Get-Content /proc/meminfo | Where-Object { $_ -match '^MemTotal:\s*(\d+)' } | Select-Object -First 1
+        if ($mem -match '(\d+)') { $total = [int64]$matches[1] * 1024 }   # kB -> bytes
+    }
+
+    $procs = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.WorkingSet64 -gt 0 })
+    if (-not $procs) { return @() }
+
+    $out = foreach ($g in ($procs | Group-Object -Property ProcessName)) {
+        $bytes = ($g.Group | Measure-Object -Property WorkingSet64 -Sum).Sum
+        if ($bytes -lt $MinBytes) { continue }
+
+        $procPids = @($g.Group | Sort-Object WorkingSet64 -Descending | Select-Object -ExpandProperty Id)
+        [pscustomobject]@{
+            Name      = $g.Name
+            Bytes     = [int64]$bytes
+            Percent   = if ($total) { [math]::Round(100 * $bytes / $total, 1) } else { 0 }
+            Count     = $g.Count
+            Pids      = $procPids
+            # PID 1 is protected whatever it is called, not just by name.
+            Protected = (($g.Name -in $script:PF_ProtectedProcs) -or ($procPids -contains 1))
+            IsSelf    = ($procPids -contains $PID)
+        }
+    }
+    return @($out | Sort-Object Bytes -Descending)
+}
+
 # Upgrade headroom from the motherboard, the same SMBIOS records Windows reads — here via
 # dmidecode, which means root. Types 8 (port connectors) and 9 (system slots); memory slots
 # come from Get-MemoryInfo, which already parses type 17.

@@ -249,6 +249,57 @@ function Get-DiskInfo {
                                           @{ Expression = 'SizeBytes'; Descending = $true }, Id)
 }
 
+# Processes you must never kill. These are not "risky" — killing any of them takes Windows
+# down instantly (lsass/csrss/wininit trigger a bugcheck; smss/services take the session with
+# them). A memory tool that lists them next to a kill action, without saying so, is a trap.
+$script:PF_ProtectedProcs = @(
+    'System', 'Idle', 'Registry', 'Memory Compression', 'smss', 'csrss', 'wininit',
+    'winlogon', 'services', 'lsass', 'LsaIso', 'fontdrvhost', 'SgrmBroker',
+    # svchost is here for a different reason, and testing is what surfaced it: this machine
+    # runs 87 of them holding ~1 GB, so it sorts high in a memory list — right next to a kill
+    # action. svchost hosts nearly every Windows service; ending the group would take down
+    # networking, audio, update and more at once. It is never the right way to free RAM.
+    'svchost'
+)
+
+# What is actually holding RAM, grouped by program.
+#
+# GROUPED ON PURPOSE: modern browsers and Electron apps run dozens of processes, each well
+# under any sane threshold while the app as a whole holds several GB. Reporting per-PID would
+# show "chrome 180 MB" forty times and hide the 7 GB answer. The group carries its PIDs so a
+# kill can still act on the real processes.
+#
+# WorkingSet64 is the metric — the physical RAM the process currently occupies, which is what
+# "draining my RAM" means. It counts shared pages in each sharer, so group totals can slightly
+# overstate; private-only would understate just as badly by ignoring loaded images.
+function Get-ProcessMemoryUsage {
+    param([int64]$MinBytes = 536870912)   # 0.5 GB
+
+    $total = 0
+    $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+    if ($cs) { $total = [int64]$cs.TotalPhysicalMemory }
+
+    $procs = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.WorkingSet64 -gt 0 })
+    if (-not $procs) { return @() }
+
+    $out = foreach ($g in ($procs | Group-Object -Property ProcessName)) {
+        $bytes = ($g.Group | Measure-Object -Property WorkingSet64 -Sum).Sum
+        if ($bytes -lt $MinBytes) { continue }
+
+        [pscustomobject]@{
+            Name      = $g.Name
+            Bytes     = [int64]$bytes
+            Percent   = if ($total) { [math]::Round(100 * $bytes / $total, 1) } else { 0 }
+            Count     = $g.Count
+            Pids      = @($g.Group | Sort-Object WorkingSet64 -Descending | Select-Object -ExpandProperty Id)
+            Protected = ($g.Name -in $script:PF_ProtectedProcs)
+            # Killing the shell you are typing in is not a crash, but it is never intended.
+            IsSelf    = (@($g.Group | Select-Object -ExpandProperty Id) -contains $PID)
+        }
+    }
+    return @($out | Sort-Object Bytes -Descending)
+}
+
 # Upgrade headroom, straight from the motherboard's own SMBIOS records.
 #
 # WHERE EACH NUMBER COMES FROM (nothing here is a hardcoded board database):

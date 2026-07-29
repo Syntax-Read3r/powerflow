@@ -70,8 +70,11 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 
 ### 🖥️ Machine Health at a Glance
 
-- **`pc-whoami`**: power plan, CPU cap, hardware errors, crash dumps, BIOS age — one
-  screen, no hex, no GUIDs. Custom/OEM power plans get flagged
+- **`pc-whoami`**: CPU, GPU, RAM spec, drives, free ports/slots, BIOS age, power plan,
+  hardware errors — one screen, no hex, no GUIDs. Custom/OEM power plans get flagged
+- **`pc-whoami -ram`**: what is actually holding your memory, **grouped by program** (one
+  browser is 40 processes), and a guarded way to close it — system-critical processes and
+  your own shell are refused, and confirmation is the name typed back
 - **`pc-cap 85` / `pc-cap restore`**: cap CPU speed with **guaranteed restoration** —
   the prior state is recorded to disk before anything changes
 
@@ -116,7 +119,8 @@ perms ward-a       # permissions with every column explained
 changemode 775 dir # runs chmod 775, and tells you it did
 
 # Machine health
-pc-whoami          # power plan, CPU cap, hardware errors, BIOS age — one screen
+pc-whoami          # CPU, GPU, RAM, drives, BIOS age, power, errors — one screen
+pc-whoami -ram     # what is eating your RAM, grouped by program — and close it
 
 # Check for updates
 powerflow-update   # Full-tree update via the real installer
@@ -460,6 +464,7 @@ PowerFlow's versions live on as `del` and `mvf`.
 | `pc-whoami -power`   | Every power plan, caps decoded — no hex, no GUIDs |
 | `pc-whoami -crashes` | Hardware errors, bugchecks, dumps (`-export` bundles the evidence) |
 | `pc-whoami -bios`    | Firmware version, age, board model                |
+| `pc-whoami -ram`     | What is holding your RAM, grouped by program — and close it (`-min N` sets the GB threshold) |
 | `pc-cap 85`          | Cap CPU speed — prior state recorded for safe undo |
 | `pc-cap restore`     | Put back exactly what was recorded                |
 

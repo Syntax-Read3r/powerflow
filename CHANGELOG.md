@@ -9,6 +9,43 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.13.0] - 2026-07-27
+
+### Added
+
+- 🧠 **`pc-whoami -ram`** — what is actually holding your memory, and a way to close it:
+
+  ```
+  🧠 MEMORY — programs using 0.5 GB or more
+
+     Code                     6 GB   18.4%   48 processes
+     java                     5 GB   14.4%   8 processes
+     msedgewebview2           2 GB    4.9%   32 processes
+     svchost                  1 GB    3.3%   86 processes   🔒 system-critical
+     pwsh                   638 MB      2%   6 processes   ← this shell
+  ```
+
+  **Grouped by program, not by PID** — that is the whole point. VS Code runs 48 processes on
+  this machine, each far under any sane threshold while the app holds 6 GB; a per-process list
+  would print "Code 180 MB" forty-eight times and bury the answer. Rows show the share of
+  installed RAM and sort biggest-first. `-min N` moves the threshold (default 0.5 GB).
+
+  At a terminal with fzf it then offers a picker to close one. Three safeguards, because this
+  is a kill and not a polite close:
+
+  - **System-critical programs are refused outright.** Ending `lsass`, `csrss` or `wininit`
+    bugchecks Windows instantly; `svchost` is refused too — 86 processes holding ~1 GB sorts
+    it high in a memory list, right next to a kill action, and ending it takes down networking,
+    audio and update at once. On Linux, PID 1 is protected *whatever it is called*, along with
+    kernel threads and the systemd/dbus plumbing.
+  - **The shell you are typing in is refused**, and marked in the list.
+  - **Confirmation is the program's name typed back**, after showing the process count, the
+    memory and every PID — and the result reports per-PID ("Closed 3 of 4"), because a group
+    can partially fail when a process exits on its own or belongs to another user.
+
+  The picker never opens unless there is a human at a terminal — piped, scripted or CI runs
+  print the table and stop, so a destructive prompt can never appear where nothing can answer.
+
 ## [3.12.1] - 2026-07-27
 
 ### Changed
