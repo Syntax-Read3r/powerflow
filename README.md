@@ -73,8 +73,10 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 - **`pc-whoami`**: CPU, GPU, RAM spec, drives, free ports/slots, BIOS age, power plan,
   hardware errors — one screen, no hex, no GUIDs. Custom/OEM power plans get flagged
 - **`pc-whoami -ram`**: what is actually holding your memory, **grouped by program** (one
-  browser is 40 processes), and a guarded way to close it — system-critical processes and
-  your own shell are refused, and confirmation is the name typed back
+  browser is 40 processes). Read-only. **`--ram`** shows the inverse — everything below the bar
+- **`pc-whoami -ram java`**: that program's processes with **command lines**, so you can tell
+  eight javas apart. Enter closes one process (confirm with its PID), ctrl-a closes the whole
+  program (warned harder) — system-critical processes and your own shell are never killed
 - **`pc-cap 85` / `pc-cap restore`**: cap CPU speed with **guaranteed restoration** —
   the prior state is recorded to disk before anything changes
 
@@ -464,7 +466,9 @@ PowerFlow's versions live on as `del` and `mvf`.
 | `pc-whoami -power`   | Every power plan, caps decoded — no hex, no GUIDs |
 | `pc-whoami -crashes` | Hardware errors, bugchecks, dumps (`-export` bundles the evidence) |
 | `pc-whoami -bios`    | Firmware version, age, board model                |
-| `pc-whoami -ram`     | What is holding your RAM, grouped by program — and close it (`-min N` sets the GB threshold) |
+| `pc-whoami -ram`     | Programs using 0.5 GB or more, grouped (read-only; `-min N` sets the threshold) |
+| `pc-whoami --ram`    | The inverse — programs using **less** than the threshold |
+| `pc-whoami -ram java`| That program's processes with **command lines** — Enter closes one, ctrl-a closes all |
 | `pc-cap 85`          | Cap CPU speed — prior state recorded for safe undo |
 | `pc-cap restore`     | Put back exactly what was recorded                |
 

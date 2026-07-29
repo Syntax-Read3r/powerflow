@@ -300,6 +300,63 @@ function Get-ProcessMemoryUsage {
     return @($out | Sort-Object Bytes -Descending)
 }
 
+# One program, expanded into its individual processes.
+#
+# WHY THE COMMAND LINE IS THE POINT: eight rows all called "java" are useless. The whole
+# reason to drill into a group is to find out WHICH one is the hog, and only the command line
+# (or failing that, the image path) can tell them apart. Win32_Process is the only source for
+# it, so this is queried once and indexed by PID rather than per-process.
+#
+# CommandLine is null for processes owned by another user unless elevated. That is reported as
+# such — an empty column would read as "no arguments", which is a different and false claim.
+function Get-ProcessDetail {
+    param([Parameter(Mandatory)][string]$Name)
+
+    # EXACT match, deliberately not `Get-Process -Name $Name`: that parameter is
+    # wildcard-enabled, so '*' returned every process on the box (529 here) and handed a
+    # whole-session kill list to the caller. The component refuses patterns too; this keeps
+    # the adapter contract exact on its own, and identical to the Linux side.
+    $procs = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -eq $Name })
+    if (-not $procs) { return @() }
+
+    $total = 0
+    $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+    if ($cs) { $total = [int64]$cs.TotalPhysicalMemory }
+
+    $cmdByPid = @{}
+    try {
+        Get-CimInstance Win32_Process -ErrorAction Stop |
+            ForEach-Object { if ($_.CommandLine) { $cmdByPid[[int]$_.ProcessId] = [string]$_.CommandLine } }
+    } catch { }
+
+    $out = foreach ($p in $procs) {
+        $cmdline = if ($cmdByPid.ContainsKey([int]$p.Id)) { $cmdByPid[[int]$p.Id] } else { $null }
+        if (-not $cmdline) {
+            # Fall back to the image path; say plainly when even that is unreadable.
+            try { $cmdline = $p.Path } catch { $cmdline = $null }
+            if (-not $cmdline) { $cmdline = '(command line hidden — needs an elevated session)' }
+        }
+        # NOTE: computed BEFORE the hashtable. `Key = try {} catch {}` does not parse — try is
+        # a statement, not an expression, and inside a literal it breaks the whole file.
+        # StartTime/CPU throw for processes owned by another user.
+        $cpu = $null;  try { $cpu = [math]::Round($p.CPU, 0) } catch { }
+        $when = $null; try { $when = $p.StartTime }            catch { }
+
+        [pscustomobject]@{
+            Pid         = [int]$p.Id
+            Name        = $p.ProcessName
+            Bytes       = [int64]$p.WorkingSet64
+            Percent     = if ($total) { [math]::Round(100 * $p.WorkingSet64 / $total, 1) } else { 0 }
+            CpuSeconds  = $cpu
+            Started     = $when
+            CommandLine = ($cmdline -replace '\s+', ' ').Trim()
+            Protected   = ($p.ProcessName -in $script:PF_ProtectedProcs)
+            IsSelf      = ([int]$p.Id -eq $PID)
+        }
+    }
+    return @($out | Sort-Object Bytes -Descending)
+}
+
 # Upgrade headroom, straight from the motherboard's own SMBIOS records.
 #
 # WHERE EACH NUMBER COMES FROM (nothing here is a hardcoded board database):

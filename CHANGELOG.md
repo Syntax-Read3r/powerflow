@@ -9,6 +9,86 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.14.0] - 2026-07-29
+
+### Added
+
+- 🔍 **`pc-whoami -ram <name>`** — drill into one program and see its processes individually,
+  each with **its command line**. That is the whole point: eight rows all called `java` are
+  useless, and only the command line says which one is the runaway.
+
+  ```
+  🧠 java — 8 processes · 5 GB total
+
+     31284       1 GB   3.1%   up 2d 4h
+                 java -Xmx4g -jar build/libs/service.jar --port 8081
+     18220     742 MB   2.3%   up 6h 12m
+                 java -Didea.paths.selector=… gradle-daemon
+  ```
+
+  From here you can close things, with the scope you choose:
+  - **Enter** closes the selected **process**; the confirmation is that PID typed back —
+    specific to the one process, where a program name would be equally true of the others.
+  - **ctrl-a** closes the **whole program**, warned harder because the blast radius is every
+    window at once. Protected processes and your own shell are **filtered out** rather than
+    blocking the action, so "close all pwsh" closes the other shells and leaves yours running,
+    and it says so before you confirm. Results report per-PID ("Closed 6 of 8").
+
+- 🔎 **`pc-whoami --ram`** — the inverse: programs using **less** than the threshold. A double
+  dash means "below", a single dash means "at or above". The list is long by nature, so it is
+  sorted biggest-first, capped at 25, and the remainder is **counted** rather than silently
+  dropped. `--ram <name>` drills in exactly like `-ram <name>`.
+
+### Changed
+
+- 🧠 **The `-ram` overview is now read-only.** v3.13.0 let you close a whole program straight
+  from that list — one keystroke ended 48 VS Code processes, which is far too blunt to sit
+  against a list that long. Closing now lives only in `pc-whoami -ram <name>`, where you have
+  already seen every process and its command line before choosing.
+
+### Security
+
+- 🔒 **A wildcard could have turned the drill-in into a whole-session kill.** `Get-Process -Name`
+  is wildcard-enabled, so `pc-whoami -ram *` listed **all 529 processes** on the test machine —
+  **428 of them killable**, including `explorer`, `dwm` and the terminal itself — and `ctrl-a`
+  then offered to end them behind a confirmation of *"type the program name"*, where the program
+  name **is `*`**. One asterisk, the same character just typed as the argument. Patterns are now
+  refused with an explanation, and both adapters match the name **literally** so the contract
+  cannot glob even when called directly. (This also removes a crash: an unbalanced `[` threw a
+  terminating `WildcardPatternException` that `-ErrorAction SilentlyContinue` does not suppress.)
+
+### Fixed
+
+- 🐛 **`pc-whoami -ram java` used to crash.** With no positional parameter, `java` bound to
+  `[int]$days` and the command died with *"Cannot convert value 'java' to type System.Int32"*.
+  It now takes a program name. A second positional slot exists because PowerShell has no
+  double-dash switch syntax: it parses `--ram` as the literal string `"--ram"` and hands it to
+  position 0, which previously left `--ram java` with nowhere to put `java` (*"a positional
+  parameter cannot be found"*).
+- 🐛 **A recycled PID could have been killed.** Rows are captured before the picker and the
+  prompt, so a listed process could exit and the OS reuse its number in that window. Identity
+  (name **and** start time) is now re-verified immediately before every kill, in both the single
+  and group paths — a reused PID never has the original's start time.
+- 🐛 **Truncation made the drill-in useless in its main case.** Command lines were cut from the
+  head, and `java` processes share a long identical prefix (JVM path, `-classpath` blob) — so
+  eight genuinely different processes rendered as eight byte-identical rows, in exactly the
+  situation the view exists to solve. It now trims from the **middle**, keeping the tail where
+  the jar, main class and port live.
+- ⏱️ **Uptime was rounded up.** `[int]` rounds rather than truncates, so a process up 1d 18h
+  printed as `2d 18h`.
+- 🔢 **`ctrl-a` promised more than it does.** The header counted every row ("closes ALL 8") while
+  the action filters out system-critical processes and your own shell; it now states what will
+  actually be closed ("closes 6 of 8 — system-critical and this shell stay"). The success line
+  likewise reports only the memory of processes it **actually** closed, not the whole group's.
+- 🐧 **Linux session processes are protected**, for the same reason `svchost` is on Windows:
+  `Xorg`, `Xwayland`, `gnome-shell`, `plasmashell`, `kwin_*`, `mutter`, `sway`, `Hyprland` and
+  the display managers hold real memory, sort high in a memory list, and killing one takes the
+  desktop down rather than freeing anything.
+- ❓ **Two-word program names** (`Memory Compression` is a real one) were silently split by the
+  second positional slot; PowerFlow now shows the quoted form instead of reporting "not running".
+  A bare `pc-whoami java` — no `-ram` — used to print the full dashboard and ignore the word
+  typed; it now drills in.
+
 ## [3.13.0] - 2026-07-27
 
 ### Added

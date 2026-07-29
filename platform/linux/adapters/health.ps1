@@ -316,7 +316,13 @@ function Get-DiskInfo {
 $script:PF_ProtectedProcs = @(
     'systemd', 'init', 'kthreadd', 'kernel', 'kworker', 'ksoftirqd', 'migration',
     'dbus-daemon', 'dbus-broker', 'systemd-journald', 'systemd-logind', 'systemd-udevd',
-    'systemd-oomd', 'systemd-resolved'
+    'systemd-oomd', 'systemd-resolved',
+    # The session, for the same reason svchost is protected on Windows: these hold real memory
+    # so they sort high in a memory list, and ending one does not free anything — it takes the
+    # desktop down with every unsaved window on it. The display managers are here because
+    # killing them logs the session out immediately.
+    'Xorg', 'Xwayland', 'gnome-shell', 'gnome-session-b', 'plasmashell', 'kwin_x11',
+    'kwin_wayland', 'mutter', 'sway', 'Hyprland', 'lightdm', 'gdm3', 'gdm', 'sddm'
 )
 
 # What is actually holding RAM, grouped by program. Same contract and same reasoning as the
@@ -348,6 +354,62 @@ function Get-ProcessMemoryUsage {
             # PID 1 is protected whatever it is called, not just by name.
             Protected = (($g.Name -in $script:PF_ProtectedProcs) -or ($procPids -contains 1))
             IsSelf    = ($procPids -contains $PID)
+        }
+    }
+    return @($out | Sort-Object Bytes -Descending)
+}
+
+# One program, expanded into its individual processes. Same contract and same reasoning as the
+# Windows adapter: without the command line, eight rows called "java" are indistinguishable.
+#
+# /proc/<pid>/cmdline is NUL-separated (that is how argv is stored), so the separators are
+# turned back into spaces. It is readable for your own processes without root; another user's
+# is not, and that is reported rather than shown blank.
+function Get-ProcessDetail {
+    param([Parameter(Mandatory)][string]$Name)
+
+    # EXACT match, deliberately not `Get-Process -Name $Name`: that parameter is
+    # wildcard-enabled, so '*' would return every process and hand a whole-session kill list to
+    # the caller. The component refuses patterns too; this keeps the adapter contract exact on
+    # its own, and identical to the Windows side.
+    $procs = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -eq $Name })
+    if (-not $procs) { return @() }
+
+    $total = 0
+    if (Test-Path /proc/meminfo) {
+        $mem = Get-Content /proc/meminfo | Where-Object { $_ -match '^MemTotal:\s*(\d+)' } | Select-Object -First 1
+        if ($mem -match '(\d+)') { $total = [int64]$matches[1] * 1024 }
+    }
+
+    $out = foreach ($p in $procs) {
+        $cmdline = $null
+        $f = "/proc/$($p.Id)/cmdline"
+        if (Test-Path $f) {
+            try {
+                $raw = [IO.File]::ReadAllBytes($f)
+                if ($raw.Length) { $cmdline = ([Text.Encoding]::UTF8.GetString($raw) -replace "`0", ' ').Trim() }
+            } catch { }
+        }
+        if (-not $cmdline) {
+            try { $cmdline = $p.Path } catch { $cmdline = $null }
+            # An empty cmdline with a live PID is a kernel thread; say so rather than blank.
+            if (-not $cmdline) { $cmdline = '(kernel thread, or owned by another user)' }
+        }
+        # Computed BEFORE the hashtable: `Key = try {} catch {}` does not parse — try is a
+        # statement, not an expression. StartTime/CPU throw for another user's processes.
+        $cpu = $null;  try { $cpu = [math]::Round($p.CPU, 0) } catch { }
+        $when = $null; try { $when = $p.StartTime }            catch { }
+
+        [pscustomobject]@{
+            Pid         = [int]$p.Id
+            Name        = $p.ProcessName
+            Bytes       = [int64]$p.WorkingSet64
+            Percent     = if ($total) { [math]::Round(100 * $p.WorkingSet64 / $total, 1) } else { 0 }
+            CpuSeconds  = $cpu
+            Started     = $when
+            CommandLine = ($cmdline -replace '\s+', ' ').Trim()
+            Protected   = (($p.ProcessName -in $script:PF_ProtectedProcs) -or ([int]$p.Id -eq 1))
+            IsSelf      = ([int]$p.Id -eq $PID)
         }
     }
     return @($out | Sort-Object Bytes -Descending)

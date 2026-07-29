@@ -60,12 +60,26 @@ function Get-CpuCapRecord {
     pc-whoami -power     every power plan, caps decoded (no hex, no GUIDs)
     pc-whoami -crashes   hardware errors + bugchecks + dumps  (-export bundles them)
     pc-whoami -bios      firmware version, age, board model
-    pc-whoami -ram       what is holding your RAM, and kill it
+    pc-whoami -ram       programs using 0.5 GB or MORE, by program (read-only)
+    pc-whoami --ram      the inverse — programs using LESS than 0.5 GB
+    pc-whoami -ram java  that program's processes with command lines — and close one
+                         (--ram java works too; a named program shows all its processes)
     -days N              widen the stability window (default 7)
     -min N               -ram threshold in GB (default 0.5)
 #>
 function pc-whoami {
     param(
+        # TWO positional slots, both load-bearing:
+        #
+        #  position 0  the program name for `-ram java`. Without it "java" bound to the first
+        #              bare parameter — [int]$days — and died with "cannot convert to Int32".
+        #  position 1  the program name for `--ram java`. PowerShell has no double-dash switch
+        #              syntax: it parses `--ram` as the literal STRING "--ram" and hands it to
+        #              position 0, which then leaves "java" with nowhere to go ("a positional
+        #              parameter cannot be found"). Slot 1 catches it. No process can be called
+        #              "--ram", so reading that token as a flag is unambiguous.
+        [Parameter(Position = 0)][string]$name,
+        [Parameter(Position = 1)][string]$program,
         [switch]$power,
         [switch]$crashes,
         [switch]$bios,
@@ -75,10 +89,33 @@ function pc-whoami {
         [double]$min = 0.5
     )
 
+    # `--ram` means "the SMALL ones" — everything under the threshold, the inverse of `-ram`.
+    $under = $false
+    if ($name -eq '--ram') { $under = $true; $ram = $true; $name = $program; $program = '' }
+
+    # A bare name plainly means "drill into this program" — `pc-whoami java` used to print the
+    # whole dashboard and silently ignore the word typed.
+    if ($name -and -not ($power -or $crashes -or $bios -or $ram)) { $ram = $true }
+
+    # Two words means an unquoted program name ("Memory Compression" is a real one). Position 1
+    # would otherwise swallow the second word and we would report the first as "not running".
+    if ($ram -and $name -and $program) {
+        Write-Host ""
+        Write-Host "❓ Program names with a space need quoting:" -ForegroundColor Yellow
+        Write-Host "   pc-whoami -ram `"$name $program`"" -ForegroundColor Cyan
+        Write-Host ""
+        return
+    }
+
     if ($power)   { Show-PowerDetail;                       return }
     if ($crashes) { Show-CrashDetail -Days $days -Export:$export; return }
     if ($bios)    { Show-BiosDetail;                        return }
-    if ($ram)     { Show-RamDetail -MinGB $min;             return }
+    if ($ram)     {
+        # A named program shows ALL of its processes either way — the threshold is a property
+        # of the overview, not of one program's process list.
+        if ($name) { Show-RamProcesses -Name $name } else { Show-RamDetail -MinGB $min -Under:$under }
+        return
+    }
 
     $m    = Get-MachineInfo
     $snap = Get-PowerSnapshot
@@ -329,31 +366,57 @@ function Show-CrashDetail {
     Write-Host ""
 }
 
-# pc-whoami -ram — what is actually holding memory, and a way to stop it.
+# pc-whoami -ram — what is actually holding memory. READ-ONLY, on purpose.
 #
 # Grouped by program, because one browser is dozens of processes: per-PID rows would show
-# "chrome 180 MB" forty times and bury the 7 GB answer. Killing therefore acts on the whole
-# group, which is what "close Chrome" means — and is stated plainly before it happens.
+# "chrome 180 MB" forty times and bury the 7 GB answer.
+#
+# Nothing can be killed from here. An earlier build let you close a whole group, which meant
+# one keystroke ended 48 VS Code processes — far too blunt an action to sit against a list
+# this long. Killing lives in `pc-whoami -ram <name>`, where the scope is one program, every
+# process is shown with its command line, and exactly one PID goes at a time.
 function Show-RamDetail {
-    param([double]$MinGB = 0.5)
+    param([double]$MinGB = 0.5, [switch]$Under)
 
     $minBytes = [int64]($MinGB * 1GB)
-    $rows = @(Get-ProcessMemoryUsage -MinBytes $minBytes)
     $mem  = (Get-MachineInfo).Memory
 
+    if ($Under) {
+        # Everything BELOW the bar. Asking the adapter for a 1-byte floor and filtering here
+        # keeps one code path in the adapter; the floor of 1 also drops the zero-memory rows.
+        $rows = @(Get-ProcessMemoryUsage -MinBytes 1 | Where-Object { $_.Bytes -lt $minBytes })
+    } else {
+        $rows = @(Get-ProcessMemoryUsage -MinBytes $minBytes)
+    }
+
+    $headline = if ($Under) { "programs using LESS than $MinGB GB" } else { "programs using $MinGB GB or more" }
     Write-Host ""
-    Write-Host "🧠 MEMORY — programs using $MinGB GB or more" -ForegroundColor Cyan
+    Write-Host "🧠 MEMORY — $headline" -ForegroundColor Cyan
     Write-Host ""
 
     if (-not $rows.Count) {
-        Write-Host "   ✨ Nothing is using $MinGB GB or more." -ForegroundColor Green
-        Write-Host "   Lower the bar with:  pc-whoami -ram -min 0.2" -ForegroundColor DarkGray
+        if ($Under) {
+            Write-Host "   ✨ Everything running is using $MinGB GB or more." -ForegroundColor Green
+            Write-Host "   pc-whoami -ram   shows them" -ForegroundColor DarkGray
+        } else {
+            Write-Host "   ✨ Nothing is using $MinGB GB or more." -ForegroundColor Green
+            Write-Host "   pc-whoami --ram  shows what is below the bar" -ForegroundColor DarkGray
+        }
         Write-Host ""
         return
     }
 
-    $w = ($rows.Name | Measure-Object -Maximum Length).Maximum + 2
-    foreach ($r in $rows) {
+    # The under-the-bar list is long by nature (small programs are numerous). Biggest-first and
+    # capped, with the remainder counted rather than silently dropped.
+    $shown = $rows
+    $hidden = 0
+    if ($Under -and $rows.Count -gt 25) {
+        $shown  = $rows | Select-Object -First 25
+        $hidden = $rows.Count - 25
+    }
+
+    $w = ($shown.Name | Measure-Object -Maximum Length).Maximum + 2
+    foreach ($r in $shown) {
         Write-Host ("   {0}" -f $r.Name.PadRight($w)) -NoNewline -ForegroundColor White
         Write-Host ("{0,9}" -f (Format-DriveSize $r.Bytes)) -NoNewline -ForegroundColor Yellow
         Write-Host ("{0,7}%" -f $r.Percent) -NoNewline -ForegroundColor DarkGray
@@ -365,67 +428,246 @@ function Show-RamDetail {
 
     $sum = ($rows | Measure-Object -Property Bytes -Sum).Sum
     Write-Host ""
+    if ($hidden) { Write-Host "   …and $hidden more below $MinGB GB" -ForegroundColor DarkGray }
     Write-Host ("   Listed: {0} of {1} GB installed" -f (Format-DriveSize $sum), $mem.TotalGB) -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "   💡 pc-whoami -ram <name>   see that program's individual processes, and close one" -ForegroundColor DarkGray
+    Write-Host "      e.g.  pc-whoami -ram $($rows[0].Name)" -ForegroundColor DarkGray
+    if (-not $Under) { Write-Host "      pc-whoami --ram          the small ones, below $MinGB GB" -ForegroundColor DarkGray }
+    Write-Host ""
+}
 
-    # The picker is the ONLY way to kill from here, and it never opens unless there is a human
-    # at a terminal — a destructive prompt must not appear in a pipe, a script or CI.
+# ── one program, expanded ─────────────────────────────────────────────────────
+# This is the ONLY place a process can be killed.
+#
+# The overview deliberately cannot: its rows are whole programs, and "close Code" there would
+# have ended 48 processes on one keystroke — too blunt to offer against a list that long. Here
+# the scope is one named program, every process is shown with its command line, and the kill
+# takes exactly one PID. You have to know what you are ending before you can end it.
+function Show-RamProcesses {
+    param([Parameter(Mandatory)][string]$Name)
+
+    # PATTERNS ARE REFUSED, and this guard is the most important line in the file.
+    #
+    # Get-Process -Name is wildcard-enabled, so `pc-whoami -ram *` listed all 529 processes on
+    # this machine — 428 of them killable, including explorer, dwm and the terminal itself.
+    # ctrl-a would then have offered to end all of them behind a confirmation of "type the
+    # program name", where the program name IS '*' — a single asterisk, the same character
+    # just typed as the argument. That silently converts "scoped to one named program" into
+    # "the whole session", which is the exact invariant this feature is built on.
+    if ($Name -match '[\*\?\[\]]') {
+        Write-Host ""
+        Write-Host "🔒 pc-whoami -ram takes ONE program name, not a pattern." -ForegroundColor Red
+        Write-Host "   '$Name' would match many programs at once, and closing a match set is" -ForegroundColor DarkGray
+        Write-Host "   not something a single confirmation can meaningfully authorise." -ForegroundColor DarkGray
+        Write-Host "   Name the program:  pc-whoami -ram java" -ForegroundColor DarkGray
+        Write-Host "   Or see everything: pc-whoami -ram   ·   pc-whoami --ram" -ForegroundColor DarkGray
+        Write-Host ""
+        return
+    }
+
+    $procs = @(Get-ProcessDetail -Name $Name)
+    Write-Host ""
+    if (-not $procs.Count) {
+        Write-Host "🧠 Nothing called '$Name' is running." -ForegroundColor Yellow
+        Write-Host "   pc-whoami -ram   lists what is actually using memory" -ForegroundColor DarkGray
+        Write-Host ""
+        return
+    }
+
+    $sum = ($procs | Measure-Object -Property Bytes -Sum).Sum
+    Write-Host "🧠 $Name — $($procs.Count) process$(if ($procs.Count -ne 1) { 'es' }) · $(Format-DriveSize $sum) total" -ForegroundColor Cyan
+    Write-Host ""
+
+    foreach ($p in $procs) {
+        Write-Host ("   {0,-8}" -f $p.Pid) -NoNewline -ForegroundColor Green
+        Write-Host ("{0,9}" -f (Format-DriveSize $p.Bytes)) -NoNewline -ForegroundColor Yellow
+        Write-Host ("{0,6}%" -f $p.Percent) -NoNewline -ForegroundColor DarkGray
+        if ($null -ne $p.Started) {
+            Write-Host ("   up {0}" -f (Format-RamAge ((Get-Date) - $p.Started))) -NoNewline -ForegroundColor DarkGray
+        }
+        if ($p.Protected) { Write-Host "   🔒" -NoNewline -ForegroundColor DarkYellow }
+        if ($p.IsSelf)    { Write-Host "   ← this shell" -NoNewline -ForegroundColor DarkCyan }
+        Write-Host ""
+        # The command line is the reason this view exists — it is what tells eight javas apart.
+        Write-Host ("            {0}" -f (Format-RamTrim $p.CommandLine 150)) -ForegroundColor DarkGray
+    }
+
     $interactive = -not [Console]::IsOutputRedirected -and -not [Console]::IsInputRedirected `
                    -and (Get-Command fzf -ErrorAction SilentlyContinue)
     if (-not $interactive) {
+        Write-Host ""
         Write-Host "   (run this in a terminal with fzf to close one of these)" -ForegroundColor DarkGray
         Write-Host ""
         return
     }
 
     Write-Host ""
-    $lines = $rows | ForEach-Object {
+    # The header must count what ctrl-a will ACTUALLY close, not how many rows are on screen:
+    # Stop-RamGroup filters out protected processes and this shell, so "closes ALL 8" was a
+    # promise the action would not keep when two of the eight are untouchable.
+    $killable = @($procs | Where-Object { -not $_.Protected -and -not $_.IsSelf })
+    $lines = $procs | ForEach-Object {
         $tag = if ($_.Protected) { ' [system-critical]' } elseif ($_.IsSelf) { ' [this shell]' } else { '' }
-        "{0}`t{1}  ·  {2}  ·  {3} process(es){4}" -f $rows.IndexOf($_), $_.Name, (Format-DriveSize $_.Bytes), $_.Count, $tag
+        # Tag FIRST so it cannot fall off the right edge behind a long command line.
+        "{0}`t{1,-8} {2,9} {3} {4}" -f $procs.IndexOf($_), $_.Pid, (Format-DriveSize $_.Bytes),
+                                       $tag.PadRight(18), (Format-RamTrim $_.CommandLine 150)
     }
-    $sel = $lines | fzf --delimiter "`t" --with-nth 2 --reverse --border=rounded --height=60% `
-        --prompt="🧠 Close: " `
-        --header="Enter closes the selected program · Esc leaves everything running" --header-first `
-        --color="header:bold:cyan,prompt:bold:green,border:cyan"
+    $groupOffer = if ($killable.Count -eq $procs.Count) { "ctrl-a closes all $($procs.Count)" }
+                  elseif ($killable.Count)              { "ctrl-a closes $($killable.Count) of $($procs.Count) (system-critical and this shell stay)" }
+                  else                                  { "nothing here can be closed" }
+    # --expect gives one picker two verbs: close this process, or close the whole program.
+    # Killing the group is only offered HERE, where you have already seen every process and
+    # its command line — the same action from the overview would have been blind.
+    # --expect is passed UNCONDITIONALLY: without it fzf prints one line instead of two, and the
+    # $sel[0]=key / $sel[1]=row parsing below would silently read the row as the key. When
+    # nothing is killable the header says so and Stop-RamGroup refuses.
+    $sel = $lines | fzf --delimiter "`t" --with-nth 2 --expect=ctrl-a `
+        --reverse --border=rounded --height=60% `
+        --prompt="🧠 $Name : " `
+        --header="Enter closes the selected PROCESS · $groupOffer · Esc leaves everything running" `
+        --header-first --color="header:bold:cyan,prompt:bold:green,border:cyan"
 
     if (-not $sel) { Write-Host "   Nothing closed." -ForegroundColor DarkGray; Write-Host ""; return }
-    Stop-RamHog -Entry $rows[[int](($sel -split "`t")[0])]
+    $key = @($sel)[0]           # '' for Enter, 'ctrl-a' for the group
+    $row = @($sel)[1]
+    if (-not $row) { Write-Host "   Nothing closed." -ForegroundColor DarkGray; Write-Host ""; return }
+
+    if ($key -eq 'ctrl-a') { Stop-RamGroup -Name $Name -Processes $procs }
+    else                   { Stop-RamProcess -Process $procs[[int](($row -split "`t")[0])] }
 }
 
-# Kill one group, with the two refusals that matter and a confirmation that names the cost.
-function Stop-RamHog {
-    param([Parameter(Mandatory)]$Entry)
+# Kill EVERY process of one program. Offered only from the drill-in, and warned harder than a
+# single kill because the blast radius is the whole application: closing all of Code or java
+# loses unsaved work everywhere at once, not in one window.
+function Stop-RamGroup {
+    param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)]$Processes)
+
+    # The two refusals still apply, but per-process: the group is filtered rather than
+    # rejected, so "close all pwsh" closes the other shells and leaves yours running.
+    $skipProtected = @($Processes | Where-Object Protected)
+    $skipSelf      = @($Processes | Where-Object { $_.IsSelf -and -not $_.Protected })
+    $targets       = @($Processes | Where-Object { -not $_.Protected -and -not $_.IsSelf })
 
     Write-Host ""
-    if ($Entry.Protected) {
-        Write-Host "🔒 '$($Entry.Name)' is a system-critical process — PowerFlow will not kill it." -ForegroundColor Red
-        Write-Host "   Ending it would take Windows/Linux down instantly, not free memory." -ForegroundColor DarkGray
+    if (-not $targets.Count) {
+        Write-Host "🔒 Nothing in '$Name' can be closed — every process is system-critical or is this shell." -ForegroundColor Red
         Write-Host ""
         return
     }
-    if ($Entry.IsSelf) {
+
+    $sum = ($targets | Measure-Object -Property Bytes -Sum).Sum
+    Write-Host "🗑️  Close ALL $($targets.Count) '$Name' process$(if ($targets.Count -ne 1) { 'es' })?" -ForegroundColor Yellow
+    Write-Host "    $(Format-DriveSize $sum) · PIDs $(($targets.Pid | Select-Object -First 12) -join ', ')$(if ($targets.Count -gt 12) { ', …' })" -ForegroundColor DarkGray
+    Write-Host "    ⚠️  This ends the WHOLE program. Unsaved work in every one of these is lost." -ForegroundColor Red
+    foreach ($s in $skipProtected) { Write-Host "    🔒 PID $($s.Pid) is system-critical and will be left running." -ForegroundColor DarkYellow }
+    foreach ($s in $skipSelf)      { Write-Host "    ← PID $($s.Pid) is this shell and will be left running." -ForegroundColor DarkCyan }
+
+    if ((Read-Host "    Type the program name to confirm") -ne $Name) {
+        Write-Host "❌ Nothing closed." -ForegroundColor Yellow; Write-Host ""; return
+    }
+
+    # Per-PID reporting: a group genuinely can partially fail — a process may exit on its own
+    # between listing and killing, or belong to another user. "Closed 6 of 8" is the truth.
+    #
+    # $freed accumulates only what was ACTUALLY closed. Reporting $sum here would claim the
+    # whole group's memory back even when half the kills failed.
+    $killed = 0; $freed = 0; $failed = @()
+    foreach ($p in $targets) {
+        # Same identity re-check as the single kill — this loop runs after the prompt.
+        if (-not (Test-RamStillSame -Row $p)) { $failed += "$($p.Pid) (exited before we got there)"; continue }
+        try { Stop-Process -Id $p.Pid -Force -ErrorAction Stop; $killed++; $freed += $p.Bytes }
+        catch { $failed += "$($p.Pid) ($($_.Exception.Message -replace '\s+', ' '))" }
+    }
+
+    if ($killed) { Write-Host "✅ Closed $killed of $($targets.Count) — $(Format-DriveSize $freed) should return." -ForegroundColor Green }
+    foreach ($f in $failed) { Write-Host "   ⚠️  could not close PID $f" -ForegroundColor Yellow }
+    if (-not $killed) { Write-Host "❌ Nothing was closed." -ForegroundColor Red }
+    Write-Host ""
+}
+
+function Format-RamAge {
+    param([TimeSpan]$Span)
+    # Floor, not [int]: [int] ROUNDS, so 1d 18h printed as "2d 18h" — an uptime that reads
+    # older than it is. A negative span (clock skew) is not a duration worth showing.
+    if ($Span.Ticks -lt 0)      { return '' }
+    if ($Span.TotalDays -ge 1)  { return ('{0}d {1}h' -f [int][math]::Floor($Span.TotalDays), $Span.Hours) }
+    if ($Span.TotalHours -ge 1) { return ('{0}h {1}m' -f [int][math]::Floor($Span.TotalHours), $Span.Minutes) }
+    return ('{0}m' -f [int][math]::Floor($Span.TotalMinutes))
+}
+
+# Trim from the MIDDLE, keeping both ends.
+#
+# Head-truncation defeated the entire point of the drill-in: java command lines share a long
+# identical prefix (the JVM path and -classpath blob), so cutting the tail rendered eight
+# genuinely different processes as eight byte-identical rows — in exactly the case this view
+# exists to solve. The distinguishing part (the jar, the main class, the port) lives at the END.
+function Format-RamTrim {
+    param([string]$Text, [int]$Max = 120)
+    if (-not $Text) { return '' }
+    if ($Max -lt 8) { $Max = 8 }              # below this a middle-ellipsis says nothing
+    if ($Text.Length -le $Max) { return $Text }
+    $head = [int]($Max * 0.45)
+    $tail = $Max - $head - 1
+    return $Text.Substring(0, $head) + '…' + $Text.Substring($Text.Length - $tail)
+}
+
+# Is the PID still the process we listed?
+#
+# Rows are captured before the picker and before the confirmation prompt — seconds can pass. If
+# the listed process exits in that window and the OS reuses its number, `Stop-Process -Id` would
+# force-kill an unrelated program. Name plus start time settles it: a recycled PID never has the
+# original's start time. StartTime throws for some other-user processes, hence the guard.
+function Test-RamStillSame {
+    param([Parameter(Mandatory)]$Row)
+    $live = Get-Process -Id $Row.Pid -ErrorAction SilentlyContinue
+    if (-not $live) { return $false }
+    if ($live.ProcessName -ne $Row.Name) { return $false }
+    if ($null -ne $Row.Started) {
+        try { if ($live.StartTime -ne $Row.Started) { return $false } } catch { }
+    }
+    return $true
+}
+
+# Kill ONE process, with the two refusals that matter and a confirmation naming the cost.
+function Stop-RamProcess {
+    param([Parameter(Mandatory)]$Process)
+
+    Write-Host ""
+    if ($Process.Protected) {
+        Write-Host "🔒 '$($Process.Name)' is a system-critical process — PowerFlow will not kill it." -ForegroundColor Red
+        Write-Host "   Ending it would take the machine down instantly, not free memory." -ForegroundColor DarkGray
+        Write-Host ""
+        return
+    }
+    if ($Process.IsSelf) {
         Write-Host "🛑 That is the shell you are typing in — closing it would end this session." -ForegroundColor Red
         Write-Host ""
         return
     }
 
-    Write-Host "🗑️  Close $($Entry.Name)?" -ForegroundColor Yellow
-    Write-Host "    $($Entry.Count) process(es) · $(Format-DriveSize $Entry.Bytes) · PIDs $($Entry.Pids -join ', ')" -ForegroundColor DarkGray
+    Write-Host "🗑️  Close PID $($Process.Pid) ($($Process.Name))?" -ForegroundColor Yellow
+    Write-Host "    $(Format-DriveSize $Process.Bytes) · $(Format-RamTrim $Process.CommandLine 150)" -ForegroundColor DarkGray
     Write-Host "    ⚠️  This is a kill, not a polite close — unsaved work in it is lost." -ForegroundColor Red
-    if ((Read-Host "    Type the name to confirm") -ne $Entry.Name) {
+    # The PID is the confirmation: it is specific to the one process being ended, where a
+    # program name would be equally true of the seven others left running.
+    if ((Read-Host "    Type the PID to confirm") -ne "$($Process.Pid)") {
         Write-Host "❌ Nothing closed." -ForegroundColor Yellow; Write-Host ""; return
     }
 
-    # Report per-PID: a group can partially fail (a process may exit on its own, or be owned by
-    # another user), and "closed 3 of 4" is the truth where a bare success message would not be.
-    $killed = 0; $failed = @()
-    foreach ($processId in $Entry.Pids) {
-        try { Stop-Process -Id $processId -Force -ErrorAction Stop; $killed++ }
-        catch { $failed += "$processId ($($_.Exception.Message -replace '\s+', ' '))" }
+    # Re-check identity AFTER the prompt: the process may have exited while it was on screen,
+    # and killing a recycled PID would hit something the user never saw.
+    if (-not (Test-RamStillSame -Row $Process)) {
+        Write-Host "⏭️  PID $($Process.Pid) is no longer that process — it exited. Nothing closed." -ForegroundColor Yellow
+        Write-Host ""; return
     }
 
-    if ($killed) { Write-Host "✅ Closed $killed of $($Entry.Pids.Count) process(es) — $(Format-DriveSize $Entry.Bytes) should return." -ForegroundColor Green }
-    foreach ($f in $failed) { Write-Host "   ⚠️  could not close PID $f" -ForegroundColor Yellow }
-    if (-not $killed) { Write-Host "❌ Nothing was closed." -ForegroundColor Red }
+    try {
+        Stop-Process -Id $Process.Pid -Force -ErrorAction Stop
+        Write-Host "✅ Closed PID $($Process.Pid) — $(Format-DriveSize $Process.Bytes) should return." -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Could not close PID $($Process.Pid): $($_.Exception.Message -replace '\s+', ' ')" -ForegroundColor Red
+    }
     Write-Host ""
 }
 
