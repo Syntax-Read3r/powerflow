@@ -60,10 +60,10 @@ function Get-CpuCapRecord {
     pc-whoami -power     every power plan, caps decoded (no hex, no GUIDs)
     pc-whoami -crashes   hardware errors + bugchecks + dumps  (-export bundles them)
     pc-whoami -bios      firmware version, age, board model
-    pc-whoami -ram       programs using 0.5 GB or MORE, by program (read-only)
-    pc-whoami --ram      the inverse — programs using LESS than 0.5 GB
+    pc-whoami -ram       the MAP: how much memory sits in each level (read-only)
+    pc-whoami -ram huge  one level: huge | large | medium | small | tiny
     pc-whoami -ram java  that program's processes with command lines — and close one
-                         (--ram java works too; a named program shows all its processes)
+    -min N               a custom cut-off in GB instead of a level
     -days N              widen the stability window (default 7)
     -min N               -ram threshold in GB (default 0.5)
 #>
@@ -89,9 +89,18 @@ function pc-whoami {
         [double]$min = 0.5
     )
 
-    # `--ram` means "the SMALL ones" — everything under the threshold, the inverse of `-ram`.
-    $under = $false
-    if ($name -eq '--ram') { $under = $true; $ram = $true; $name = $program; $program = '' }
+    # `--ram` was the "below the threshold" view in v3.14.0. The named levels say the same thing
+    # more precisely, so it is retired — but PowerShell binds it as a plain string, which would
+    # otherwise send it to the drill-in and report "nothing called '--ram' is running".
+    if ($name -eq '--ram') {
+        Write-Host ""
+        Write-Host "ℹ️  --ram has been replaced by named levels — they say the same thing, precisely:" -ForegroundColor Cyan
+        Write-Host "   pc-whoami -ram small    10 – 50 MB" -ForegroundColor DarkGray
+        Write-Host "   pc-whoami -ram tiny     under 10 MB" -ForegroundColor DarkGray
+        Write-Host "   pc-whoami -ram          the map of every level" -ForegroundColor DarkGray
+        Write-Host ""
+        return
+    }
 
     # A bare name plainly means "drill into this program" — `pc-whoami java` used to print the
     # whole dashboard and silently ignore the word typed.
@@ -111,9 +120,14 @@ function pc-whoami {
     if ($crashes) { Show-CrashDetail -Days $days -Export:$export; return }
     if ($bios)    { Show-BiosDetail;                        return }
     if ($ram)     {
-        # A named program shows ALL of its processes either way — the threshold is a property
-        # of the overview, not of one program's process list.
-        if ($name) { Show-RamProcesses -Name $name } else { Show-RamDetail -MinGB $min -Under:$under }
+        # Order matters: a LEVEL name wins over a program name. The level words (huge/large/
+        # medium/small/tiny) are reserved; a program called "tiny" is reachable by drilling in
+        # from its level, which is a fair trade for five memorable flags.
+        $lvl = Get-RamLevel $name
+        if     ($lvl)                    { Show-RamDetail -Level $lvl }
+        elseif ($name)                   { Show-RamProcesses -Name $name }
+        elseif ($PSBoundParameters.ContainsKey('min')) { Show-RamDetail -MinGB $min }
+        else                             { Show-RamIndex }   # no level, no name → the map
         return
     }
 
@@ -366,7 +380,67 @@ function Show-CrashDetail {
     Write-Host ""
 }
 
-# pc-whoami -ram — what is actually holding memory. READ-ONLY, on purpose.
+# ── memory levels ─────────────────────────────────────────────────────────────
+# Bands by MEMORY SCALE, not by equal counts — and that choice came from measuring the real
+# distribution rather than picking round numbers:
+#
+#   162 program groups on the machine this was designed against
+#   the top 5 groups (3% of the list) held 56% of all RAM; the top 20 held 84%
+#   76 groups were under 25 MB and held 2.6% between them
+#
+# Equal-count bands were tried first and are demonstrably wrong here: five slices of ~33 put a
+# 6 GB editor and an 86 MB helper in the same band (6,239 MB → 86 MB) while the bottom two
+# bands were sixty-odd entries under 18 MB — noise, not a level. Splitting by scale instead
+# keeps the levels people act on (huge, large) short enough to read at a glance, which is the
+# whole point: a short list is a small blast radius.
+$script:PF_RamLevels = @(
+    [pscustomobject]@{ Name = 'huge';   Min = 1GB;   Max = [int64]::MaxValue; Label = '1 GB and up'   }
+    [pscustomobject]@{ Name = 'large';  Min = 250MB; Max = 1GB;               Label = '250 MB – 1 GB' }
+    [pscustomobject]@{ Name = 'medium'; Min = 50MB;  Max = 250MB;             Label = '50 – 250 MB'   }
+    [pscustomobject]@{ Name = 'small';  Min = 10MB;  Max = 50MB;              Label = '10 – 50 MB'    }
+    [pscustomobject]@{ Name = 'tiny';   Min = 0;     Max = 10MB;              Label = 'under 10 MB'   }
+)
+
+function Get-RamLevel {
+    param([string]$Name)
+    if (-not $Name) { return $null }
+    return ($script:PF_RamLevels | Where-Object { $_.Name -eq $Name.ToLower() } | Select-Object -First 1)
+}
+
+# `pc-whoami -ram` with no level: the MAP, not a list.
+#
+# Listing every program at once was the thing to get away from — 162 rows is unreviewable, and
+# an unreviewable list is exactly what should not sit near a kill action. So the bare command
+# answers "where is my memory?" in five rows and names the flag that opens each one.
+function Show-RamIndex {
+    $all   = @(Get-ProcessMemoryUsage -MinBytes 0)
+    $inUse = ($all | Measure-Object -Property Bytes -Sum).Sum
+    $mem   = (Get-MachineInfo).Memory
+
+    Write-Host ""
+    Write-Host "🧠 MEMORY — $($all.Count) programs, $(Format-DriveSize $inUse) in use of $($mem.TotalGB) GB" -ForegroundColor Cyan
+    Write-Host ""
+
+    foreach ($lv in $script:PF_RamLevels) {
+        $rows = @($all | Where-Object { $_.Bytes -ge $lv.Min -and $_.Bytes -lt $lv.Max })
+        $sum  = ($rows | Measure-Object -Property Bytes -Sum).Sum
+        $share = if ($inUse) { [int](40 * $sum / $inUse) } else { 0 }
+
+        Write-Host ("   {0,-8}" -f $lv.Name) -NoNewline -ForegroundColor Green
+        Write-Host ("{0,-16}" -f $lv.Label) -NoNewline -ForegroundColor DarkGray
+        Write-Host ("{0,4} program{1}" -f $rows.Count, $(if ($rows.Count -eq 1) { ' ' } else { 's' })) -NoNewline -ForegroundColor White
+        Write-Host ("{0,10}   " -f (Format-DriveSize $sum)) -NoNewline -ForegroundColor Yellow
+        Write-Host ('█' * [math]::Min(24, $share)) -ForegroundColor DarkCyan
+    }
+
+    Write-Host ""
+    Write-Host "   pc-whoami -ram huge        open a level — start here, it is where the memory is" -ForegroundColor DarkGray
+    Write-Host "   pc-whoami -ram <program>   that program's processes, with command lines — and close one" -ForegroundColor DarkGray
+    Write-Host "   pc-whoami -ram -min 3      a custom cut-off, in GB" -ForegroundColor DarkGray
+    Write-Host ""
+}
+
+# pc-whoami -ram <level> — one band. READ-ONLY, on purpose.
 #
 # Grouped by program, because one browser is dozens of processes: per-PID rows would show
 # "chrome 180 MB" forty times and bury the 7 GB answer.
@@ -376,44 +450,38 @@ function Show-CrashDetail {
 # this long. Killing lives in `pc-whoami -ram <name>`, where the scope is one program, every
 # process is shown with its command line, and exactly one PID goes at a time.
 function Show-RamDetail {
-    param([double]$MinGB = 0.5, [switch]$Under)
+    param($Level, [double]$MinGB = 0)
 
-    $minBytes = [int64]($MinGB * 1GB)
-    $mem  = (Get-MachineInfo).Memory
+    $mem = (Get-MachineInfo).Memory
 
-    if ($Under) {
-        # Everything BELOW the bar. Asking the adapter for a 1-byte floor and filtering here
-        # keeps one code path in the adapter; the floor of 1 also drops the zero-memory rows.
-        $rows = @(Get-ProcessMemoryUsage -MinBytes 1 | Where-Object { $_.Bytes -lt $minBytes })
+    if ($Level) {
+        # Bounds are [Min, Max) — half-open on purpose, so a program of exactly 1 GB lands in
+        # 'huge' and in nothing else. Overlapping bands would double-count the totals.
+        $rows     = @(Get-ProcessMemoryUsage -MinBytes 0 | Where-Object { $_.Bytes -ge $Level.Min -and $_.Bytes -lt $Level.Max })
+        $headline = "$($Level.Name) — $($Level.Label)"
+        $empty    = "Nothing is in the '$($Level.Name)' range ($($Level.Label))."
     } else {
-        $rows = @(Get-ProcessMemoryUsage -MinBytes $minBytes)
+        $minBytes = [int64]($MinGB * 1GB)
+        $rows     = @(Get-ProcessMemoryUsage -MinBytes $minBytes)
+        $headline = "programs using $MinGB GB or more"
+        $empty    = "Nothing is using $MinGB GB or more."
     }
 
-    $headline = if ($Under) { "programs using LESS than $MinGB GB" } else { "programs using $MinGB GB or more" }
     Write-Host ""
     Write-Host "🧠 MEMORY — $headline" -ForegroundColor Cyan
     Write-Host ""
 
     if (-not $rows.Count) {
-        if ($Under) {
-            Write-Host "   ✨ Everything running is using $MinGB GB or more." -ForegroundColor Green
-            Write-Host "   pc-whoami -ram   shows them" -ForegroundColor DarkGray
-        } else {
-            Write-Host "   ✨ Nothing is using $MinGB GB or more." -ForegroundColor Green
-            Write-Host "   pc-whoami --ram  shows what is below the bar" -ForegroundColor DarkGray
-        }
+        Write-Host "   ✨ $empty" -ForegroundColor Green
+        Write-Host "   pc-whoami -ram   shows where your memory actually is" -ForegroundColor DarkGray
         Write-Host ""
         return
     }
 
-    # The under-the-bar list is long by nature (small programs are numerous). Biggest-first and
-    # capped, with the remainder counted rather than silently dropped.
-    $shown = $rows
-    $hidden = 0
-    if ($Under -and $rows.Count -gt 25) {
-        $shown  = $rows | Select-Object -First 25
-        $hidden = $rows.Count - 25
-    }
+    # The small levels are long by nature — there are simply many little programs. Biggest-first
+    # and capped, with the remainder COUNTED rather than silently dropped.
+    $shown = $rows; $hidden = 0
+    if ($rows.Count -gt 25) { $shown = $rows | Select-Object -First 25; $hidden = $rows.Count - 25 }
 
     $w = ($shown.Name | Measure-Object -Maximum Length).Maximum + 2
     foreach ($r in $shown) {
@@ -428,12 +496,14 @@ function Show-RamDetail {
 
     $sum = ($rows | Measure-Object -Property Bytes -Sum).Sum
     Write-Host ""
-    if ($hidden) { Write-Host "   …and $hidden more below $MinGB GB" -ForegroundColor DarkGray }
-    Write-Host ("   Listed: {0} of {1} GB installed" -f (Format-DriveSize $sum), $mem.TotalGB) -ForegroundColor DarkGray
+    if ($hidden) { Write-Host "   …and $hidden more in this level" -ForegroundColor DarkGray }
+    Write-Host ("   Level total: {0} of {1} GB installed" -f (Format-DriveSize $sum), $mem.TotalGB) -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "   💡 pc-whoami -ram <name>   see that program's individual processes, and close one" -ForegroundColor DarkGray
-    Write-Host "      e.g.  pc-whoami -ram $($rows[0].Name)" -ForegroundColor DarkGray
-    if (-not $Under) { Write-Host "      pc-whoami --ram          the small ones, below $MinGB GB" -ForegroundColor DarkGray }
+    # Prefer an example the hint's promise actually holds for — a protected row or this shell
+    # cannot be closed, so pointing at one would teach the wrong thing.
+    $eg = @($rows | Where-Object { -not $_.Protected -and -not $_.IsSelf })[0]
+    Write-Host "   💡 pc-whoami -ram <program>   its processes, with command lines — and close one" -ForegroundColor DarkGray
+    if ($eg) { Write-Host "      e.g.  pc-whoami -ram `"$($eg.Name)`"" -ForegroundColor DarkGray }
     Write-Host ""
 }
 
@@ -461,7 +531,7 @@ function Show-RamProcesses {
         Write-Host "   '$Name' would match many programs at once, and closing a match set is" -ForegroundColor DarkGray
         Write-Host "   not something a single confirmation can meaningfully authorise." -ForegroundColor DarkGray
         Write-Host "   Name the program:  pc-whoami -ram java" -ForegroundColor DarkGray
-        Write-Host "   Or see everything: pc-whoami -ram   ·   pc-whoami --ram" -ForegroundColor DarkGray
+        Write-Host "   Or see the map:    pc-whoami -ram" -ForegroundColor DarkGray
         Write-Host ""
         return
     }

@@ -9,6 +9,44 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.15.0] - 2026-07-29
+
+### Added
+
+- 🎚️ **Memory levels — `pc-whoami -ram` is now a map, not a list.** Listing every program at
+  once meant 167 rows, which is unreviewable; an unreviewable list is exactly what should not
+  sit near a kill action. The bare command now answers *"where is my memory?"* in five rows:
+
+  ```
+  🧠 MEMORY — 167 programs, 24 GB in use of 32 GB
+
+     huge    1 GB and up        5 programs     13 GB   ██████████████████████
+     large   250 MB – 1 GB     10 programs      6 GB   ██████████
+     medium  50 – 250 MB       28 programs      3 GB   █████
+     small   10 – 50 MB        69 programs      2 GB   ███
+     tiny    under 10 MB       55 programs    239 MB
+  ```
+
+  Then `pc-whoami -ram huge` opens that level — six rows, and it holds 13 of the 24 GB in use.
+
+  **The boundaries were measured, not guessed.** Equal-count bands were tried first and the
+  real distribution rules them out: memory is extremely concentrated — the top 5 program groups
+  (3% of the list) held 56% of all RAM, while 76 groups under 25 MB held 2.6% between them.
+  Five equal slices of ~33 would have put a 6 GB editor and an 86 MB helper in one band, and
+  left the bottom two bands as dozens of sub-18 MB entries. Scale bands keep the levels people
+  act on — `huge`, `large` — short enough to read at a glance, which is precisely what limits
+  blast radius. Levels are half-open `[min, max)` so every program lands in exactly one, and
+  the level totals reconcile to the whole population.
+
+  `-min N` remains as the custom cut-off in GB, for when a preset is not the cut you want.
+
+### Removed
+
+- 🔁 **`--ram` is retired**, one release after it shipped. The named levels say the same thing
+  more precisely: `-ram small` (10–50 MB) and `-ram tiny` (under 10 MB) replace "everything
+  below 0.5 GB", and two overlapping ways to ask one question is clutter. Running `--ram`
+  prints what to use instead rather than failing.
+
 ## [3.14.0] - 2026-07-29
 
 ### Added
