@@ -9,6 +9,31 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.16.1] - 2026-08-04
+
+### Fixed
+
+- 🧱 **`team-room` columns collided when an arm reason was long.** Reported from real output:
+  `no-repo-pathtask:Ready` and `armed-in-previous-boottask:Ready`. The arm slot was `{0,-9}`,
+  which — as with `Capacity test` in v3.16.0 — is a **minimum** width that .NET never
+  truncates, so a 12- or 22-character reason emitted no padding and ran straight into the next
+  column. Arm reasons are diagnostic strings, not column values, so the list now shows a short
+  tag (`disarmed`, `prev-boot`, `bad-stamp`, `no-repo`) and the **detail view keeps the full
+  reason**. Every column now carries an explicit trailing space, and `no task` was one
+  character wider than `task:Ready`, so the rows did not line up either.
+
+- 🕰️ **"0 live" beside a moving "ran 2m ago" read as a contradiction.** It was not one — a
+  disarmed connector still fires on schedule, and the wake script checks the arm stamp
+  *first* and returns `dormant-unarmed` without observing anything — but the list never said
+  so, and that explanation existed only in the detail view. A connector that fired while
+  disarmed is now labelled **`ticked 2m ago · no-op`**, and when any such room is listed the
+  legend explains why the timestamps move while nothing is live. An armed room, or one with a
+  live watcher, still reads a plain `ran 2m ago`.
+
+  *Both were found by the repo owner reading real output, not by the test suite — which had
+  no assertion that two adjacent columns stay separated. It has one now, over every arm
+  reason the adapters can emit plus an unknown future one.*
+
 ## [3.16.0] - 2026-08-04
 
 ### Added

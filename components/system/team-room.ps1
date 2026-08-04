@@ -44,6 +44,24 @@ function Format-TeamRoomAge {
     return ('{0}m ago' -f [int][math]::Floor($span.TotalMinutes))
 }
 
+# Arm reasons are diagnostic strings, not column values — 'armed-in-previous-boot' is 22
+# characters. A fixed-width slot is a MINIMUM width in .NET, never a truncation, so a long
+# reason emitted no padding and ran straight into the next column ('no-repo-pathtask:Ready').
+# The list gets a short tag; the detail view keeps the full reason, which is where you go
+# when you need to know exactly why.
+function Format-TeamRoomArmTag {
+    param($Room)
+    if ($Room.Armed) { return 'armed' }
+    switch ($Room.ArmReason) {
+        'never-armed-this-boot'  { 'disarmed' }
+        'armed-in-previous-boot' { 'prev-boot' }
+        'unreadable-arm-stamp'   { 'bad-stamp' }
+        'malformed-arm-stamp'    { 'bad-stamp' }
+        'no-repo-path'           { 'no-repo' }
+        default                  { if ("$($Room.ArmReason)".Length -gt 9) { "$($Room.ArmReason)".Substring(0, 8) + '…' } else { "$($Room.ArmReason)" } }
+    }
+}
+
 function Show-TeamRoomList {
     param($Rooms)
 
@@ -65,27 +83,39 @@ function Show-TeamRoomList {
         Write-Host ('  {0} ' -f $dot) -NoNewline -ForegroundColor $(if ($r.Live) { 'Green' } else { 'DarkGray' })
         Write-Host ($r.Name.PadRight($w)) -NoNewline -ForegroundColor $(if ($r.Live) { 'White' } else { 'DarkGray' })
 
-        # armed
-        if ($r.Armed) { Write-Host 'armed    ' -NoNewline -ForegroundColor Green }
-        else          { Write-Host ('{0,-9}' -f $r.ArmReason.Replace('never-armed-this-boot', 'disarmed')) -NoNewline -ForegroundColor DarkGray }
+        # armed — trailing space is explicit so a long tag can never touch the next column
+        $tag = Format-TeamRoomArmTag $r
+        Write-Host ('{0,-10} ' -f $tag) -NoNewline -ForegroundColor $(if ($r.Armed) { 'Green' } else { 'DarkGray' })
 
         # task
         if ($r.HasTask) {
             $tc = switch ($r.TaskState) { 'Running' { 'Yellow' } 'Disabled' { 'DarkGray' } default { 'White' } }
-            Write-Host ('task:{0,-9}' -f $r.TaskState) -NoNewline -ForegroundColor $tc
-        } else { Write-Host ('{0,-14}' -f 'no task') -NoNewline -ForegroundColor DarkGray }
+            Write-Host ('task:{0,-9} ' -f $r.TaskState) -NoNewline -ForegroundColor $tc
+        } else { Write-Host ('{0,-14} ' -f 'no task') -NoNewline -ForegroundColor DarkGray }   # 'task:' + 9 = 14
 
         # watchers
         $wc = @($r.Watchers).Count
-        if ($wc) { Write-Host ("{0} watcher{1}" -f $wc, $(if ($wc -eq 1) { '' } else { 's' })) -NoNewline -ForegroundColor Green }
-        else     { Write-Host 'no watcher' -NoNewline -ForegroundColor DarkGray }
+        if ($wc) { Write-Host ('{0,-11} ' -f ("$wc watcher$(if ($wc -eq 1) { '' } else { 's' })")) -NoNewline -ForegroundColor Green }
+        else     { Write-Host ('{0,-11} ' -f 'no watcher') -NoNewline -ForegroundColor DarkGray }
 
-        if ($r.TaskLastRun) { Write-Host ("   ran {0}" -f (Format-TeamRoomAge $r.TaskLastRun)) -NoNewline -ForegroundColor DarkGray }
+        # A disarmed connector STILL fires on its schedule — it just returns immediately.
+        # Showing a bare "ran 2m ago" beside "0 live" read as a contradiction; it is not one,
+        # but the list has to say so rather than leaving it to the detail view.
+        if ($r.TaskLastRun) {
+            $age = Format-TeamRoomAge $r.TaskLastRun
+            if ($r.Armed -or $wc) { Write-Host ("ran {0}" -f $age) -NoNewline -ForegroundColor DarkGray }
+            else                  { Write-Host ("ticked {0} · no-op" -f $age) -NoNewline -ForegroundColor DarkGray }
+        }
         Write-Host ''
     }
 
     Write-Host ''
     Write-Host '  ● live = something will actually happen · ○ = present but inert' -ForegroundColor DarkGray
+    if (@($Rooms | Where-Object { $_.TaskLastRun -and -not $_.Live }).Count) {
+        Write-Host '  "ticked" = the connector fired on schedule and did nothing: a disarmed room is' -ForegroundColor DarkGray
+        Write-Host '  checked first and returns dormant, so no agent is woken. That is why 0 are live' -ForegroundColor DarkGray
+        Write-Host '  while the times keep moving.' -ForegroundColor DarkGray
+    }
     Write-Host '  team-room <name>        one room in detail' -ForegroundColor DarkGray
     Write-Host '  team-room stop <name>   disarm it (reversible) · -All also stops watchers' -ForegroundColor DarkGray
     Write-Host '  team-room start <name>  re-arm a room that is already set up' -ForegroundColor DarkGray
@@ -98,10 +128,10 @@ function Show-TeamRoomDetail {
     Write-Host ''
     Write-Host "🤝 $($Room.Name)" -ForegroundColor Cyan
     Write-Host '──────────────────────────────────────────────────────────────' -ForegroundColor DarkGray
-    Write-Host ('  {0,-12}' -f 'Repo') -NoNewline -ForegroundColor DarkGray
+    Write-Host ('  {0,-12} ' -f 'Repo') -NoNewline -ForegroundColor DarkGray
     Write-Host $(if ($Room.RepoRoot) { $Room.RepoRoot } else { '(unknown — task has no config)' }) -ForegroundColor White
 
-    Write-Host ('  {0,-12}' -f 'Armed') -NoNewline -ForegroundColor DarkGray
+    Write-Host ('  {0,-12} ' -f 'Armed') -NoNewline -ForegroundColor DarkGray
     if ($Room.Armed) {
         Write-Host "yes — $($Room.ArmedAt) by $($Room.ArmedBy)" -ForegroundColor Green
     } else {
@@ -111,10 +141,10 @@ function Show-TeamRoomDetail {
         }
     }
 
-    Write-Host ('  {0,-12}' -f 'Connector') -NoNewline -ForegroundColor DarkGray
+    Write-Host ('  {0,-12} ' -f 'Connector') -NoNewline -ForegroundColor DarkGray
     if ($Room.HasTask) {
         Write-Host "$($Room.TaskName) — $($Room.TaskState)" -ForegroundColor White
-        Write-Host ('  {0,-12}' -f 'Last run') -NoNewline -ForegroundColor DarkGray
+        Write-Host ('  {0,-12} ' -f 'Last run') -NoNewline -ForegroundColor DarkGray
         Write-Host "$($Room.TaskLastRun) (result $($Room.TaskResult)) · next $($Room.TaskNextRun)" -ForegroundColor DarkGray
         if (-not $Room.Installed) {
             Write-Host '               ⚠️  no config dir — the teamchat CLI cannot status or uninstall this task' -ForegroundColor Yellow
@@ -123,7 +153,7 @@ function Show-TeamRoomDetail {
         Write-Host 'none registered' -ForegroundColor DarkGray
     }
 
-    Write-Host ('  {0,-12}' -f 'Watchers') -NoNewline -ForegroundColor DarkGray
+    Write-Host ('  {0,-12} ' -f 'Watchers') -NoNewline -ForegroundColor DarkGray
     if (@($Room.Watchers).Count) {
         Write-Host "$(@($Room.Watchers).Count) running" -ForegroundColor Green
         foreach ($wtch in @($Room.Watchers)) {
