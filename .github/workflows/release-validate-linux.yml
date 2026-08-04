@@ -328,17 +328,17 @@ jobs:
           Check "Get-PmxStableIds does not assign an automatic variable" ($fn -notmatch '\$matches\s*\+?=')
 
           # --- the parsers, against recorded output --------------------------------------
-          $script:SMART = '{"smartctl":{"exit_status":0},"device":{"protocol":"ATA"},"model_name":"SSD 4TB","serial_number":"003134","user_capacity":{"bytes":4000787030016},"smart_status":{"passed":true},"ata_smart_attributes":{"table":[{"id":197,"name":"Current_Pending_Sector","raw":{"value":12}}]}}'
+          $global:PF_SMART = '{"smartctl":{"exit_status":0},"device":{"protocol":"ATA"},"model_name":"SSD 4TB","serial_number":"003134","user_capacity":{"bytes":4000787030016},"smart_status":{"passed":true},"ata_smart_attributes":{"table":[{"id":197,"name":"Current_Pending_Sector","raw":{"value":12}}]}}'
           $s = Get-ProxmoxSmartInfo -DevicePath '/dev/sdg'
           Check "SMART parses"                    ($s.Available)
           Check "4TB capacity does not overflow"  ($s.CapacityBytes -eq 4000787030016)
           Check "ATA attribute read by id/name"   ($s.PendingSectors -eq 12)
-          $script:SMART = '{"smartctl":{"exit_status":2}}'
+          $global:PF_SMART = '{"smartctl":{"exit_status":2}}'
           Check "unopenable device is reported unavailable" (-not (Get-ProxmoxSmartInfo -DevicePath '/dev/sdg').Available)
-          $script:SMART = 'not json'
+          $global:PF_SMART = 'not json'
           Check "unparseable SMART is reported, not assumed healthy" (-not (Get-ProxmoxSmartInfo -DevicePath '/dev/sdg').Available)
 
-          $script:LSBLK = '{"blockdevices":[{"name":"/dev/sdg","kname":"/dev/sdg","path":"/dev/sdg","type":"disk","size":"4000787030016","model":"SSD 4TB","serial":"003134","rota":"0","ro":"0"},{"name":"/dev/zd0","kname":"/dev/zd0","type":"disk","size":"1"},{"name":"/dev/loop0","kname":"/dev/loop0","type":"disk","size":"1"}]}'
+          $global:PF_LSBLK = '{"blockdevices":[{"name":"/dev/sdg","kname":"/dev/sdg","path":"/dev/sdg","type":"disk","size":"4000787030016","model":"SSD 4TB","serial":"003134","rota":"0","ro":"0"},{"name":"/dev/zd0","kname":"/dev/zd0","type":"disk","size":"1"},{"name":"/dev/loop0","kname":"/dev/loop0","type":"disk","size":"1"}]}'
           $disks = @(Get-ProxmoxDisks)
           Check "Get-ProxmoxDisks returns the real disk" (@($disks | Where-Object Name -eq 'sdg').Count -eq 1)
           Check "zvols and loop devices excluded"        (-not @($disks | Where-Object { $_.Name -in @('zd0','loop0') }).Count)
