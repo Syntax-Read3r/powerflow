@@ -307,12 +307,12 @@ function git-release {
         '^minor'  { $candidates.minor }
         '^major'  { $candidates.major }
         '^custom' {
-            $input = Read-Host "📦 Version (X.Y.Z, without the v)"
-            if ($input -notmatch '^\d+\.\d+\.\d+$') {
+            $typedVersion = Read-Host "📦 Version (X.Y.Z, without the v)"
+            if ($typedVersion -notmatch '^\d+\.\d+\.\d+$') {
                 Write-Host "❌ Invalid format — use semantic versioning: X.Y.Z" -ForegroundColor Red
                 return
             }
-            $input
+            $typedVersion
         }
     }
 

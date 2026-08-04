@@ -116,6 +116,38 @@ jobs:
           }
           Write-Host "✅ components/ is platform-agnostic"
 
+      # PowerShell AUTOMATIC variables are not yours to use as locals. This class has now
+      # produced four separate bugs here, the worst of which shipped past a green test run:
+      # Get-PmxStableIds did `$matches = @()` and then ran `-match` in the loop, which
+      # rewrites $matches into a Hashtable of capture groups — so the next `$matches += $path`
+      # threw "A hash table can only be added to another hash table" and aborted EVERY pmx
+      # disk command on any host whose /dev/disk/by-id contains a *-partN link (i.e. all of
+      # them). Reading $matches straight after a -match is correct and stays allowed; what is
+      # banned is ASSIGNING to an automatic name.
+      - name: 🔤 No automatic variable used as a local
+        shell: pwsh
+        run: |
+          # Writable-but-reserved, plus the read-only ones (assigning those throws outright).
+          $auto = 'matches|args|input|error|host|this|foreach|switch|sender|event|eventArgs|' +
+                  'PSItem|ofs|profile|pwd|home|PSHome|pid|PSVersionTable|IsWindows|IsLinux|' +
+                  'IsMacOS|ShellId|ExecutionContext|PSCmdlet|PSBoundParameters|MyInvocation'
+          # `$name =` or `$name +=`, but NOT `$name -eq`/`==`, and never inside a comment.
+          $pattern = '(?<!\w)\$(' + $auto + ')\s*(\+)?=(?!=)'
+
+          $hits = Get-ChildItem components, platform, config, windows-only -Recurse -Filter *.ps1 -ErrorAction SilentlyContinue |
+                  Select-String -CaseSensitive:$false -Pattern $pattern |
+                  Where-Object { $_.Line -notmatch '^\s*#' } |
+                  Where-Object { $_.Line -notmatch '\$null\s*=' }   # $null = ... is the idiomatic discard
+
+          if ($hits) {
+            Write-Error "❌ an automatic variable is being assigned as a local — rename it:"
+            $hits | ForEach-Object { Write-Host "   $($_.RelativePath ?? $_.Path):$($_.LineNumber): $($_.Line.Trim())" }
+            Write-Host ""
+            Write-Host "   Reading `$matches immediately after a -match is fine. Assigning is not."
+            exit 1
+          }
+          Write-Host "✅ no automatic variable is shadowed by a local"
+
       # pwsh-h renders from the command registry. A user-facing command that exists
       # without a registration is invisible help — the exact drift that let 4 commands
       # vanish from the old hand-drawn menu and let `ls -t` stay documented as "tree
@@ -173,7 +205,7 @@ jobs:
           # Internal helpers may be platform-specific; the SHARED contract is what
           # components/ actually call, so check that every component call resolves.
           $calls = Get-ChildItem components, config -Recurse -Filter *.ps1 |
-                   Select-String -Pattern '\b(Copy-ToClipboard|Get-FromClipboard|Open-Path|Open-Editor|Open-Url|Test-Admin|Assert-Admin|Test-Dependency|Install-Dependency|Uninstall-Dependency|Test-PackageManager|Install-PackageManager|Get-PackageManagerName|Get-DependencyInstallHint|New-TerminalTab|Switch-TerminalTab|Close-TerminalTabAt|Send-TerminalKeys|Invoke-Shutdown|Stop-Shutdown|Add-PersistentPathEntry|Test-PersistentPathEntry|Get-PathScopeLabel|Get-StarshipConfigPath|Get-TerminalSettingsPath|Get-TempPath|Get-HomePath|Get-PowerFlowConfigPath|Invoke-PowerShellUpdate|Get-InstalledApplication|Uninstall-Application|Get-DiskHotspot|Measure-FolderSize|Move-ToTrash|Remove-PathPermanently|Test-TrashSupport|Test-ProtectedPath|Get-FileMode|Test-PermsSupported|Get-Umask|Set-Umask|Get-MachineInfo|Get-PowerSnapshot|Get-StabilityEvents|Get-FirmwareInfo|Set-CpuMaxState|Export-StabilityReport|Get-NerdFontName|Test-NerdFont|Install-NerdFont|Get-NerdFontInstructions|Get-NerdFontInstallHint|Get-LoginLaunchState|Enable-LoginLaunch|Disable-LoginLaunch|Test-SysConfigSupported|Get-SysConfigOptions|Get-SysConfigChoices|Set-SysConfig|Get-StartupEntry|Set-StartupEntryState|Remove-StartupEntry|Add-StartupEntry|Get-StartupFolderPath|Get-ProcessMemoryUsage|Get-ProcessDetail)\b' |
+                   Select-String -Pattern '\b(Copy-ToClipboard|Get-FromClipboard|Open-Path|Open-Editor|Open-Url|Test-Admin|Assert-Admin|Test-Dependency|Install-Dependency|Uninstall-Dependency|Test-PackageManager|Install-PackageManager|Get-PackageManagerName|Get-DependencyInstallHint|New-TerminalTab|Switch-TerminalTab|Close-TerminalTabAt|Send-TerminalKeys|Invoke-Shutdown|Stop-Shutdown|Add-PersistentPathEntry|Test-PersistentPathEntry|Get-PathScopeLabel|Get-StarshipConfigPath|Get-TerminalSettingsPath|Get-TempPath|Get-HomePath|Get-PowerFlowConfigPath|Invoke-PowerShellUpdate|Get-InstalledApplication|Uninstall-Application|Get-DiskHotspot|Measure-FolderSize|Move-ToTrash|Remove-PathPermanently|Test-TrashSupport|Test-ProtectedPath|Get-FileMode|Test-PermsSupported|Get-Umask|Set-Umask|Get-MachineInfo|Get-PowerSnapshot|Get-StabilityEvents|Get-FirmwareInfo|Set-CpuMaxState|Export-StabilityReport|Get-NerdFontName|Test-NerdFont|Install-NerdFont|Get-NerdFontInstructions|Get-NerdFontInstallHint|Get-LoginLaunchState|Enable-LoginLaunch|Disable-LoginLaunch|Test-SysConfigSupported|Get-SysConfigOptions|Get-SysConfigChoices|Set-SysConfig|Get-StartupEntry|Set-StartupEntryState|Remove-StartupEntry|Add-StartupEntry|Get-StartupFolderPath|Get-ProcessMemoryUsage|Get-ProcessDetail|Test-ProxmoxSupport|Get-ProxmoxNodeSummary|Get-ProxmoxDisks|Get-ProxmoxStorage|Get-ProxmoxZfsPools|Get-ProxmoxGuests|Get-ProxmoxUpdates|Get-ProxmoxSmartInfo|Get-ProxmoxSmartReport|Start-ProxmoxSmartTest|Get-ProxmoxDiskSafety|Invoke-ProxmoxCapacityProbe|Get-ProxmoxDiskEvidence|Test-TeamRoomSupport|Get-TeamRoomState|Set-TeamRoomArm|Set-TeamRoomTask|Stop-TeamRoomWatcher)\b' |
                    ForEach-Object { $_.Matches[0].Value } | Sort-Object -Unique
 
           $failed = $false

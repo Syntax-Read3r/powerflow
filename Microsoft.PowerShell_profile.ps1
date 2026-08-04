@@ -140,6 +140,8 @@ $_pf_components = @(
     "components\system\path.ps1"
     "components\system\apps.ps1"
     "components\system\health.ps1"
+    "components\system\proxmox.ps1"
+    "components\system\team-room.ps1"
     "components\system\fonts.ps1"
     "components\system\login.ps1"
     "components\system\sysconfig.ps1"

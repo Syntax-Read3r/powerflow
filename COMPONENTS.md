@@ -45,6 +45,20 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `adapters/sysconfig.ps1` | `Test-SysConfigSupported`, `Get-SysConfigOptions`, `Get-SysConfigChoices`, `Set-SysConfig` | `Set-TimeZone` / `Set-Culture` / `Rename-Computer` / W32Time, each applied for the user — machine-wide ones via a single UAC prompt (`Invoke-ElevatedCommand`). Four settings: keyboard is omitted because a Windows layout is an input-language tip, not a keymap. Validates a value against its own choices first (`Set-Culture` will otherwise write a bogus culture) | `localectl` / `timedatectl` / `hostnamectl`; a domain model (keyboard/timezone/locale/hostname/ntp) so new settings are one row. Keyboard detects vconsole vs X11 (`Get-KeyboardMode`) so Debian/Ubuntu work too |
 | `adapters/startup.ps1` | `Get-StartupEntry`, `Set-StartupEntryState`, `Remove-StartupEntry`, `Add-StartupEntry`, `Get-StartupFolderPath` | both Startup folders **and** the HKCU/HKLM `Run` keys, joined against `Explorer\StartupApproved` for each entry's REAL state (Task Manager disables by flag, not deletion). Disable writes the same flag; folder deletes go to the Recycle Bin | XDG autostart `.desktop` files (`~/.config/autostart`, `/etc/xdg/autostart`). `Hidden=true` is the analogue of StartupApproved. A system entry is shadow-copied into the user dir rather than edited — the package owns the original |
 | `adapters/health.ps1` | `Get-MachineInfo`, `Get-PowerSnapshot`, `Get-StabilityEvents`, `Get-FirmwareInfo`, `Set-CpuMaxState`, `Export-StabilityReport` — plus internal `Get-GpuInfo`, `Get-MemoryInfo`, `Get-DiskInfo`, `Get-SlotInfo`, `Format-HwVendor` (both platforms), plus contract `Get-ProcessMemoryUsage` (RAM by program, with system-critical + self flags) | `powercfg` (hex decoded, stock plans by GUID), WHEA/WER via `Get-WinEvent`, CIM, minidumps. **GPU:** `Win32_VideoController` filtered of virtual/streaming adapters, VRAM from the display-class registry (`AdapterRAM` is uint32 and wraps >4 GB; on an iGPU it reports shared memory, so only dedicated counts). **RAM:** `Win32_PhysicalMemory` using `SMBIOSMemoryType` (`MemoryType` is 0 on modern boards) + configured vs rated speed | cpufreq governor + `scaling_max_freq`, kernel MCE via `journalctl`, `/sys/class/dmi/id` (no root needed), `/var/crash`. **GPU:** `nvidia-smi` then `lspci -mm` (bracketed product name preferred); integrated vs discrete by PCI bus, not vendor — AMD ships APUs *and* cards; VRAM keyed by PCI slot via `Get-DrmVramBySlot`. **RAM:** `dmidecode -t 17` as root or `sudo -n` (never prompts), else size only with a reason |
+| `adapters/proxmox.ps1` | `Test-ProxmoxSupport`, `Get-ProxmoxNodeSummary`, `Get-ProxmoxDisks`, `Get-ProxmoxStorage`, `Get-ProxmoxZfsPools`, `Get-ProxmoxGuests`, `Get-ProxmoxUpdates`, `Get-ProxmoxSmartInfo`, `Get-ProxmoxSmartReport`, `Start-ProxmoxSmartTest`, `Get-ProxmoxDiskSafety`, `Get-ProxmoxDiskEvidence`, `Invoke-ProxmoxCapacityProbe` | **every function returns empty/`$null`** — Proxmox VE is a Debian-based hypervisor and does not exist on Windows. The stubs exist so the component loads and `pmx help` still works⁸ | `pvesh` for the node/guest/storage API, `lsblk -J` + `/dev/disk/by-id` for stable identity, `smartctl -j`, `zpool`, `journalctl -k`, `f3probe` for the capacity probe |
+| `adapters/team-room.ps1` | `Get-TeamRoomState`, `Set-TeamRoomArm`, `Set-TeamRoomTask`, `Stop-TeamRoomWatcher` — plus internal `Get-TeamRoomBootInstant`, `Get-TeamRoomArmState`, `Get-TeamRoomWatchers`, `Get-TeamRoomTasks`, `Get-TeamRoomStateRoots` | Scheduled Tasks (`TeamChat-<agent>-<repo>`) for the wake connector; `Win32_Process` command lines to find live `node teamchat-wait.js` watchers; `LastBootUpTime` for the boot instant | `/proc/<pid>/cmdline` for watchers (matched on the **script** name — they are all plain `node`), `/proc/uptime` for the boot instant. `Set-TeamRoomTask` **reports it cannot act**: the wake connector registers a Windows Scheduled Task and team-room ships no Linux equivalent — no cron job, no systemd timer⁹ |
+
+> ⁸ **A stub that lies is worse than a stub that is empty.** The Windows Proxmox adapter
+> returns `$false`/`@()`/`$null` and never guesses. `pmx` checks `Test-ProxmoxSupport`
+> *after* handling `help`, so the help text — the one thing that is useful on a laptop
+> while you are reading about the host — still prints, and every other verb says plainly
+> that this is not a Proxmox node rather than rendering an empty dashboard.
+>
+> ⁹ **A cross-platform contract may not fake the half it cannot do.** Both `team-room`
+> adapters expose `Set-TeamRoomTask`, because CI's parity check requires it; the Linux one
+> prints *why* and returns `$false`. Returning `$true` would have made `team-room start`
+> report success for a wake connector that was never installed — the exact class of
+> silent lie this command exists to eliminate.
 
 ### Command bindings — loaded **after** components
 
@@ -151,6 +165,8 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `components/system/path.ps1` | System | `set-path` |
 | `components/system/apps.ps1` | System | `installed-apps`, `i-a` (alias), `disk-big`, `d-b` (alias), `Get-SizeBands`, `Convert-ToBytes`, `Format-Size`, `Format-Age`, `Resolve-SizeRange`, `Show-SizeBandMenu`, `Show-AppPicker`, `Show-BandOverview`, `Invoke-AppAction` |
 | `components/system/health.ps1` | System | `pc-whoami` (+ `-power`, `-crashes [-export]`, `-bios`, `-ram [level|<name>|-min N]`, `-days N`), `Show-RamIndex` (the level map), `Show-RamDetail` (one level, read-only), `Show-RamProcesses` (drill-in with command lines), `Stop-RamProcess` (one PID), `Stop-RamGroup` (whole program, harder warning), `Format-DriveSize`, `pc-cap`⁷ — machine vitals + a CPU cap with guaranteed restoration. Design: [docs/plan/pc-whoami/](docs/plan/pc-whoami/README.md) |
+| `components/system/proxmox.ps1` | Linux | `pmx` (+ `disks`, `disk <sel> [smart\|test\|report\|capacity-test]`, `pools`/`storage`, `guests`, `guest <id>`, `updates`, `help`), `Show-PmxDashboard`, `Show-PmxDisks`, `Show-PmxDisk`, `Show-PmxSmart`, `Show-PmxPools`, `Show-PmxGuests`, `Show-PmxUpdates`, `Show-PmxEvidence`, `Write-PmxEvidenceBundle`, `Invoke-PmxSmartTest`, `Invoke-PmxCapacityTest`, `Resolve-PmxDisk` — one Proxmox command instead of eight remembered `pvesh`/`smartctl` invocations. **`pmx disk <sel> report`** answers "is this drive genuine?" from evidence (zero WWN, generic model, short/numeric serial, SMART refusal, size mismatch, reallocated/pending/uncorrectable sectors, kernel I/O errors) and `-Write` saves a portable bundle (report.md + raw SMART + kernel log + identity JSON, tarballed) for an RMA. Design: [docs/plan/proxmox/](docs/plan/proxmox/powerflow-pmx-v2.md) |
+| `components/system/team-room.ps1` | Both | `team-room` (+ `start <name>`, `stop <name>`, `list`, `help`, `-All`), `Show-TeamRoomList`, `Show-TeamRoomDetail`, `Invoke-TeamRoomAction`, `Format-TeamRoomAge` — **see and stop the agent watchers you started.** Reports all three independent states separately (wake connector · boot-scoped arm stamp · live watcher process) because any one of them alone does nothing¹⁰ |
 | `components/system/fonts.ps1` | System | `pwsh-font` — install the Nerd Font the prompt and `ls` need, then print the one manual terminal-config step. All OS work is in the fonts adapter |
 | `components/system/login.ps1` | System | `pwsh-autologin` (Linux) — toggle "start PowerFlow on login" without re-running the installer; writes the same guarded hook as `install.sh --auto-login`. `pwsh-exit` (Linux) — drop to bash without closing the SSH session (`exec pwsh` login shell has no bash to fall back to) |
 | `components/system/sysconfig.ps1` | Both | `pwsh-config`, `Complete-SysConfigChange` — one fzf-driven menu that **applies** OS settings (timezone/locale/hostname/time-sync, plus keyboard on Linux): systemd on Linux, native cmdlets on Windows. Replaces the Debian-only `dpkg-reconfigure`. Extensible: new settings are a row in the adapter |
@@ -162,6 +178,21 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 > ¹ **Rebound on Linux.** `platform/linux/bindings.ps1` removes these so the GNU
 > coreutils stay reachable. `rm` → **`del`**, `mv` → **`mvf`**; `cp`/`cat`/`mkdir`/
 > `touch`/`rmdir` defer entirely to the native tools.
+>
+> ¹⁰ **A team room is three separate things, and `team-room` refuses to merge them.** A
+> wake connector (a Scheduled Task) can be Ready while nothing is armed; an arm stamp can
+> be present but belong to a *previous boot*; a watcher process can be running with neither.
+> Collapsing these into one "on/off" is what made a room impossible to reason about — the
+> owner could not tell whether anything would actually happen, and so could not tell
+> whether stopping it had worked. The list shows all three per room and derives **Live**
+> from them; `Live` is the honest answer to "will an agent wake up?".
+>
+> The arm stamp is deliberately **boot-scoped**: it records the boot instant (now minus
+> uptime, so a clock change moves both together) and anything outside a 3-minute tolerance
+> reads as *disarmed*. Unreadable, malformed and previous-boot stamps all **fail closed**,
+> each with its own reason string. And `Stop-TeamRoomWatcher` re-verifies the process is
+> still a `teamchat-wait` before signalling — a PID confirmed by a human seconds ago can be
+> a different program by the time they answer.
 
 ---
 

@@ -79,6 +79,19 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
   program (warned harder) — system-critical processes and your own shell are never killed
 - **`pc-cap 85` / `pc-cap restore`**: cap CPU speed with **guaranteed restoration** —
   the prior state is recorded to disk before anything changes
+- **`team-room`**: every AI agent watcher on the machine, and whether it is actually
+  **live** — then `team-room stop <name>` ends it. Previously you could only ask the agent
+  to stop itself
+
+### ⚡ Proxmox Without the Incantations (Linux)
+
+- **`pmx`**: node, disks, ZFS pools, guests and pending updates — one command instead of
+  `pvesh` + `lsblk` + `smartctl` + `zpool` + `journalctl`
+- **`pmx disk sdg report`**: *is this drive genuine?* Zero WWN, a generic model string, a
+  six-digit serial, a drive that refuses SMART, a size that disagrees with itself, kernel
+  I/O errors — each is evidence, and the report says which fired and what it means
+- **`-Write`** saves the whole bundle (report, raw SMART, kernel log, stable IDs) so a
+  refund request is a file you attach, not a story you tell
 
 ### 🎨 Beautiful Interface
 
@@ -472,6 +485,25 @@ PowerFlow's versions live on as `del` and `mvf`.
 | `pc-whoami -ram java`| That program's processes with **command lines** — Enter closes one, ctrl-a closes all |
 | `pc-cap 85`          | Cap CPU speed — prior state recorded for safe undo |
 | `pc-cap restore`     | Put back exactly what was recorded                |
+| `team-room`          | Every agent watcher on this machine — which are **live**, and stop them |
+| `team-room stop <name>` | Stop a room: disarm it and end its watcher process |
+| `team-room start <name>`| Re-arm a room you previously set up (arm is boot-scoped) |
+
+### Proxmox VE (Linux)
+
+`pmx` is one command for the things you otherwise reach for `pvesh`, `lsblk`, `smartctl`,
+`zpool` and `journalctl` to answer. It runs **only on a Proxmox node** — everywhere else
+every verb but `help` says so plainly rather than rendering an empty dashboard.
+
+| Command                  | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `pmx`                    | Node dashboard: uptime, load, memory, storage, guests, updates |
+| `pmx disks`              | Every physical disk — model, size, SSD/HDD, what is using it |
+| `pmx disk sdg`           | One disk in full: stable IDs, SMART, and what would be destroyed |
+| `pmx disk sdg smart`     | The SMART report, decoded                       |
+| `pmx disk sdg report`    | **Is this drive genuine?** Evidence-based authenticity + health verdict |
+| `pmx disk sdg report -Write` | Save the evidence bundle (report, raw SMART, kernel log, IDs) for an RMA |
+| `pmx pools` / `pmx guests` / `pmx updates` | ZFS pools · VMs and containers · pending updates |
 
 ### Appearance & Login
 

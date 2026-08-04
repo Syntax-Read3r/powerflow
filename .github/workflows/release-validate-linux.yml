@@ -251,6 +251,101 @@ jobs:
           }
           Write-Host "✅ coreutils intact; PowerFlow features preserved as del/mvf"
 
+      # lsd's forced colour used to append an invisible ANSI reset after every filename.
+      # The listing looked correct, but a user's end-anchored grep silently found nothing.
+      - name: 🧪 PowerFlow ls stays pipeline-safe
+        shell: pwsh
+        run: |
+          . "$HOME/.config/powershell/Microsoft.PowerShell_profile.ps1"
+
+          $fixture = Join-Path ([IO.Path]::GetTempPath()) ("powerflow-ls-pipeline-" + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $fixture | Out-Null
+          $target = Join-Path $fixture 'pipeline-target-sdg'
+          # A directory is deliberately used: lsd colours its name and appends a reset
+          # after it under --color=always, so this test fails against the old behavior.
+          New-Item -ItemType Directory -Path $target | Out-Null
+
+          try {
+            $match = ls -l $fixture | grep -E 'pipeline-target-sdg$'
+            if ($LASTEXITCODE -ne 0 -or -not $match) {
+              Write-Error "❌ PowerFlow ls contaminated piped output; end-anchored grep missed the entry"
+              exit 1
+            }
+            # Says only what it proved. This step pipes, so it verifies the PIPED half:
+            # `--color=never --icon=never` would also pass it while destroying the
+            # interactive experience. Asserting the TTY half needs a pty (`script -qec …`
+            # then grep for an ESC byte) — worth adding, but do not let the message imply
+            # coverage that does not exist.
+            Write-Host "✅ ls emits plain text in pipelines (interactive colour not asserted here)"
+          } finally {
+            Remove-Item -LiteralPath $fixture -Recurse -Force
+          }
+
+      # The Proxmox adapter can only be exercised on a Proxmox node — which CI is not. But
+      # its PARSERS are pure once the tool output is in hand, so the external commands are
+      # shimmed as functions (pwsh resolves a function before a native binary) and the real
+      # adapter bodies run against recorded smartctl/lsblk output.
+      #
+      # Two total-failure bugs shipped past a green static-check suite and are pinned here:
+      #   1. Get-PmxStableIds assigned to $matches, an AUTOMATIC variable that the -match on
+      #      the next line rewrites into a Hashtable — "A hash table can only be added to
+      #      another hash table" aborted every pmx disk command.
+      #   2. Get-PmxBlockDescendants recursed on $null forever, because lsblk omits
+      #      "children" for every leaf and @($null) is a ONE-element array, not an empty one.
+      #      It ended in "call depth overflow" and killed Get-ProxmoxDisks outright.
+      # f3probe is never defined here, so the destructive path cannot run even by accident.
+      - name: 🧪 Proxmox adapter parsers survive real tool output
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $fail = 0
+          function Check($n, $c) { if ($c) { Write-Host "  ok: $n" } else { Write-Host "::error::$n"; $script:fail++ } }
+
+          # Load the profile exactly as a user does, so this tests the adapter AS INSTALLED
+          # rather than a path this workflow guessed at.
+          . "$HOME/.config/powershell/Microsoft.PowerShell_profile.ps1"
+          Check "the Proxmox adapter loaded" ([bool](Get-Command Get-PmxBlockDescendants -EA SilentlyContinue))
+
+          # Shims must come AFTER the profile so they win over any real binary. pwsh resolves
+          # a function before a native command, so `& smartctl` reaches these.
+          function smartctl { $global:LASTEXITCODE = 0; $global:PF_SMART -split "`n" }
+          function lsblk    { $global:LASTEXITCODE = 0; $global:PF_LSBLK -split "`n" }
+          function readlink { param($a,$b,$c) $global:LASTEXITCODE = 0; $c }
+          # pvesh needs no shim: Invoke-PmxPveshRequest short-circuits on Test-ProxmoxSupport,
+          # which is correctly false here (no /etc/pve), exercising the lsblk-only path.
+          Check "not detected as a Proxmox node" (-not (Test-ProxmoxSupport))
+
+          # --- 2. the recursion guard, on the exact shape lsblk really emits -------------
+          $leaf = '{"name":"/dev/sda1","type":"part"}' | ConvertFrom-Json
+          Check "no 'children' key does not recurse forever" (@(Get-PmxBlockDescendants $leaf).Count -eq 0)
+          $nested = '{"name":"/dev/sda","children":[{"name":"/dev/sda1","type":"part","children":[{"name":"/dev/mapper/x","type":"lvm"}]}]}' | ConvertFrom-Json
+          Check "still descends real nested children" (@(Get-PmxBlockDescendants $nested).Count -eq 2)
+          Check "no null leaks into the descendant list" (-not @(Get-PmxBlockDescendants $nested | Where-Object { $null -eq $_ }).Count)
+
+          # --- 1. the automatic-variable guard ------------------------------------------
+          $adapter = (Get-Command Get-PmxStableIds).ScriptBlock.File
+          $fn = [regex]::Match((Get-Content $adapter -Raw), 'function Get-PmxStableIds \{.+?\n\}', 'Singleline').Value
+          Check "Get-PmxStableIds does not assign an automatic variable" ($fn -notmatch '\$matches\s*\+?=')
+
+          # --- the parsers, against recorded output --------------------------------------
+          $script:SMART = '{"smartctl":{"exit_status":0},"device":{"protocol":"ATA"},"model_name":"SSD 4TB","serial_number":"003134","user_capacity":{"bytes":4000787030016},"smart_status":{"passed":true},"ata_smart_attributes":{"table":[{"id":197,"name":"Current_Pending_Sector","raw":{"value":12}}]}}'
+          $s = Get-ProxmoxSmartInfo -DevicePath '/dev/sdg'
+          Check "SMART parses"                    ($s.Available)
+          Check "4TB capacity does not overflow"  ($s.CapacityBytes -eq 4000787030016)
+          Check "ATA attribute read by id/name"   ($s.PendingSectors -eq 12)
+          $script:SMART = '{"smartctl":{"exit_status":2}}'
+          Check "unopenable device is reported unavailable" (-not (Get-ProxmoxSmartInfo -DevicePath '/dev/sdg').Available)
+          $script:SMART = 'not json'
+          Check "unparseable SMART is reported, not assumed healthy" (-not (Get-ProxmoxSmartInfo -DevicePath '/dev/sdg').Available)
+
+          $script:LSBLK = '{"blockdevices":[{"name":"/dev/sdg","kname":"/dev/sdg","path":"/dev/sdg","type":"disk","size":"4000787030016","model":"SSD 4TB","serial":"003134","rota":"0","ro":"0"},{"name":"/dev/zd0","kname":"/dev/zd0","type":"disk","size":"1"},{"name":"/dev/loop0","kname":"/dev/loop0","type":"disk","size":"1"}]}'
+          $disks = @(Get-ProxmoxDisks)
+          Check "Get-ProxmoxDisks returns the real disk" (@($disks | Where-Object Name -eq 'sdg').Count -eq 1)
+          Check "zvols and loop devices excluded"        (-not @($disks | Where-Object { $_.Name -in @('zd0','loop0') }).Count)
+
+          if ($fail) { Write-Error "❌ $fail Proxmox adapter check(s) failed"; exit 1 }
+          Write-Host "✅ Proxmox adapter parsers behave on recorded smartctl/lsblk output"
+
       # PowerFlow only loads when pwsh runs. --login-shell auto wires it into ~/.bashrc.
       # It MUST be idempotent, MUST NOT fire for non-interactive shells (scp/cron would
       # break), and MUST NOT be able to lock a user out if pwsh disappears.

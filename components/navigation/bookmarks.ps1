@@ -183,15 +183,15 @@ function Show-BookmarkList {
     Write-Host "   Enter number to navigate | 'c <name>' to create | 'd <name>' to delete | 'r <old> <new>' to rename | 'q' to quit" -ForegroundColor DarkGray
 
     while ($true) {
-        $input = Read-Host "`nChoice"
+        $answer = Read-Host "`nChoice"
 
-        if ($input -eq 'q') {
+        if ($answer -eq 'q') {
             break
         }
 
         # Handle navigation by number
-        if ($input -match '^\d+$') {
-            $choice = [int]$input - 1
+        if ($answer -match '^\d+$') {
+            $choice = [int]$answer - 1
             if ($choice -ge 0 -and $choice -lt $bookmarkArray.Count) {
                 $selectedBookmark = $bookmarkArray[$choice]
                 if (Test-Path $selectedBookmark.Path) {
@@ -206,13 +206,13 @@ function Show-BookmarkList {
             }
         }
         # Handle quick actions
-        elseif ($input -match '^c\s+(.+)$') {
+        elseif ($answer -match '^c\s+(.+)$') {
             Add-Bookmark $matches[1]
         }
-        elseif ($input -match '^d\s+(.+)$') {
+        elseif ($answer -match '^d\s+(.+)$') {
             Remove-Bookmark $matches[1]
         }
-        elseif ($input -match '^r\s+(\S+)\s+(\S+)$') {
+        elseif ($answer -match '^r\s+(\S+)\s+(\S+)$') {
             Rename-Bookmark $matches[1] $matches[2]
         }
         else {

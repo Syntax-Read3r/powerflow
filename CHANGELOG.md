@@ -9,6 +9,167 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.16.0] - 2026-08-04
+
+### Added
+
+- 🖥️ **`team-room` — see the agent watchers you started, and stop them.** Until now a team
+  room could only be shut down by *asking the agent to shut itself down*. If the agent was
+  not listening, was not running, or was the thing you wanted stopped, there was nothing to
+  type. `team-room` is the missing control.
+
+  ```
+  🖥️  TEAM ROOMS — 2 live of 5
+
+     ●  powerflow       armed · 1 watcher                      live
+     ●  zavoya          armed · connector Ready                live
+     ○  belief-index    connector Ready · not armed
+     ○  Hutano          connector Running · not armed
+     ⚠  Hutano-360      connector only — no config in this repo
+  ```
+
+  **A room is three independent things, and this command refuses to merge them:** a wake
+  connector (a Scheduled Task), a boot-scoped arm stamp, and a live `teamchat-wait` process.
+  Any one alone does nothing. Collapsing them into a single "on/off" is precisely why a room
+  was impossible to reason about — you could not tell whether anything would happen, and so
+  could not tell whether stopping it had worked. **Live** is the derived, honest answer to
+  *"will an agent actually wake up?"*, and the detail view shows all three states with the
+  reason for each.
+
+  `team-room stop <name>` disarms **and** ends the watcher. `team-room start <name>` re-arms
+  a room you set up earlier — arming is boot-scoped by design, so a room armed yesterday is
+  correctly inert today and has to be re-armed deliberately.
+
+  **Everything fails closed.** An unreadable stamp, a malformed stamp and a stamp from a
+  previous boot all read as *disarmed*, each with its own reason. Rooms whose scheduled task
+  exists but whose config does not are surfaced with a warning rather than hidden — an
+  invisible orphan is the state that started this. And `Stop-TeamRoomWatcher` re-verifies the
+  process is still a `teamchat-wait` immediately before signalling: PIDs are reused, and this
+  runs after a confirmation a human may have taken time over.
+
+- ⚡ **`pmx` — Proxmox VE as a PowerFlow command (Linux).** The node dashboard, physical
+  disks, ZFS pools, guests, pending updates and SMART, without remembering which of `pvesh`,
+  `lsblk -J`, `smartctl -j`, `zpool` or `journalctl -k` answers which question.
+
+  ```
+  pmx                     # node: uptime, load, memory, storage, guests, updates
+  pmx disks               # every physical disk, health, and what is using it
+  pmx disk sdg            # one disk in full — stable IDs, SMART, what would be destroyed
+  pmx disk sdg report     # is this drive genuine?
+  ```
+
+- 🔎 **`pmx disk <sel> report` — an evidence-based answer to "is this drive fake?"** Built
+  against a real counterfeit: a "4 TB SSD" whose model string was literally `SSD 4TB`, whose
+  serial was six digits, whose WWN was all zeros, and which dropped off the bus twice.
+
+  The report does not guess. It states which signals fired and what each means — zero WWN,
+  generic model, short/absent/numeric serial, a drive that refuses SMART, a size that
+  disagrees with itself, reallocated/pending/uncorrectable sectors, media errors, kernel I/O
+  errors. **`-Write` saves the bundle** (`report.md`, raw SMART, kernel log, identity JSON,
+  tarballed), because a refund request should be a file you attach, not a story you tell.
+
+### Fixed
+
+Six defects below were found by **executing** the Proxmox code rather than reading it. The
+component layer never touches an OS API — that is PowerFlow's architecture rule — so all 626
+lines of it run on Windows against a faked adapter; and the Linux adapter reaches the OS
+through `& smartctl` / `& lsblk`, which PowerShell resolves to a *function* before a binary,
+so its parsers run against recorded tool output. The first two were **total failures of the
+entire `pmx` subsystem on a real host**, and both had passed a green static-check suite.
+
+- 💥 **`pmx` could not list a disk at all — `$matches` was used as a local.** `Get-PmxStableIds`
+  did `$matches = @()` and then ran `-match` inside its loop. `$matches` is a PowerShell
+  **automatic** variable that every `-match` overwrites with a Hashtable of capture groups, so
+  the next `$matches += $path` threw *"A hash table can only be added to another hash table"*
+  and aborted `Get-ProxmoxDisks` — and with it `pmx`, `pmx disks`, `pmx disk <x>`, everything.
+  It fired on any host whose `/dev/disk/by-id` contains a `*-partN` link, which is all of them.
+- 💥 **`Get-PmxBlockDescendants` recursed forever.** `lsblk` omits `"children"` entirely for
+  every leaf partition and every unpartitioned disk, and **`@($null)` is a one-element array,
+  not an empty one** — so the loop ran once with `$child = $null`, recursed on `$null`, and
+  ended in *"The script failed due to call depth overflow"*. Same blast radius: every disk view.
+- 🏷️ **Every `pmx disk` view printed `Capacity testblocked`.** `'{0,-12}'` is a *minimum* width
+  and .NET never truncates, so the one label longer than 12 characters emitted no padding and
+  no separator. The format string now carries an explicit trailing space, so a long label
+  stays readable instead of merging into its value.
+- 📛 **The destructive prompt documented the wrong token.** Two user-facing strings promised
+  *"typed serial confirmation"* while the gate demands `DESTROY <by-id leaf>` — and the serial
+  was printed two lines above the prompt, so the wrong token was the one under the user's eyes.
+  A serial names a *product*; the by-id leaf names *this device*. The prose now matches.
+- ⌨️ **Pressing Enter to back out of the destructive prompt threw a raw .NET exception.**
+  `Read-Host` returns `''`, which a `[Parameter(Mandatory)][string]` refuses, so the most
+  likely way to abort produced `ParameterBindingValidationException` instead of the designed
+  refusal. It failed closed — but mid-destructive-flow it reads as a malfunction, and the
+  reflex when a tool looks broken is to run it again. Now it cancels and says so.
+- 🔐 **The last gate was culture-sensitive, not ordinal.** PowerShell's `-cne`/`-ceq` are
+  case-sensitive but *culture*-sensitive, and culture comparison gives zero weight to
+  characters like `U+00AD` soft hyphen and `U+200B` zero-width space — so a pasted phrase
+  containing one compared **equal** to the real one. Confirmed on pwsh 7.5 for three separate
+  zero-width characters. The phrase check and all five identity re-checks (serial, size,
+  major:minor, diskseq, WWN) now use `[StringComparison]::Ordinal`.
+- 🎨 **`ls` broke end-anchored pipelines on Linux.** PowerFlow forced `lsd`'s colour and icons
+  on unconditionally, so an invisible ANSI reset was appended after every filename. The
+  listing *looked* right — but `ls -l /dev/disk/by-id | grep -E 'sdg$'` found nothing, and
+  failed by reporting no such entry rather than by looking broken. Both call sites now pass
+  `--icon=auto --color=auto`: full decoration at an interactive prompt, plain text into a pipe
+  or a file, which is what GNU `ls` has always done. Covered by a Linux CI regression test
+  that lists a **directory** — lsd colours those, so the test genuinely fails on the old code.
+- 🧨 **The Proxmox capacity test could never run.** It asked the user to type one phrase and
+  the adapter compared against a different one, so the confirmation never matched and the
+  probe was unreachable. Both sides now use the same `DESTROY <by-id-leaf>`.
+- 🛡️ **The capacity test's identity guard always tripped.** The expected WWN was not passed
+  through, so the pre-flight re-check compared the disk's real WWN against nothing and
+  reported *identity changed* every time. Now passed — the guard protects instead of blocking.
+- 🐛 **`$matches` used as a local variable in two Proxmox renderers.** `$matches` is a
+  PowerShell *automatic* variable that every `-match` overwrites; the disk resolver and the
+  guest list were reading whatever the last regex had left behind. Renamed to `$hits`.
+- ✅ **CI could not see the Proxmox or team-room contracts.** The adapter-parity gate matches
+  contract names from a hardcoded list, so a function present on only one platform would have
+  shipped and exploded at runtime on the other. All 13 Proxmox and 4 team-room names added.
+- 🧹 Dead node lookup removed from `Get-ProxmoxUpdates`.
+- 🔒 `pmx help` now works **before** the Proxmox check, so the help text is readable on the
+  laptop you are reading about the host from.
+
+- 📄 **f3probe's own verdict was printed and thrown away.** `"Bad news: The device is a
+  counterfeit of type limbo"` and the *Usable* vs *Announced* size block are the artefacts the
+  whole refund workflow exists to produce; they are now captured and returned as `Output`,
+  matching `Start-ProxmoxSmartTest`. Also pinned `$PSNativeCommandUseErrorActionPreference`
+  for that call — a counterfeit exits 102, which is a *success* here, and a user whose session
+  sets `ErrorActionPreference = 'Stop'` would otherwise be told "device state is unknown"
+  about a probe that completed correctly.
+- 🧹 **The evidence bundle asserted `"Health":"UNKNOWN"` next to a `smart.txt` reporting
+  PASSED.** The disk list is fetched with `--skipsmart 1`, so Proxmox never runs smartctl for
+  it and returns the literals `UNKNOWN`/`N/A` for every disk, forever. Both fields had zero
+  consumers and are gone; real health comes from `Get-ProxmoxSmartInfo`.
+
+### Changed
+
+- 🛡️ **New CI gate: no automatic variable may be used as a local.** This class produced four
+  separate bugs in this repository, one of which shipped past a green test run. Assigning to
+  `$matches`, `$args`, `$input`, `$error`, `$host`, `$PID` and friends now fails the release;
+  *reading* `$matches` straight after a `-match` is correct and stays allowed. Two pre-existing
+  `$input = Read-Host` locals (in `git/release.ps1` and `navigation/bookmarks.ps1`) were
+  renamed so the gate can be strict.
+- 🧪 **New CI gate: the Proxmox adapter parsers run against recorded `smartctl`/`lsblk`
+  output.** CI is not a Proxmox node, but the parsers are pure once the tool output is in
+  hand, so the external commands are shimmed as functions and the real adapter bodies execute.
+  Both total-failure bugs above are pinned by name. `f3probe` is never defined there, so the
+  destructive path cannot run even by accident.
+- 📖 The `ls` pipeline CI check no longer claims to prove more than it does: it exercises the
+  piped path only, so its message now says exactly that.
+- `docs/proxmox.md` and the new design notes carry placeholder addresses only — no real host
+  IP appears in the repository. `docs/plan/proxmox/powerflow-pmx.md` is marked **superseded**,
+  since it still describes the serial-based confirmation that was deliberately replaced.
+
+### Known limits
+
+- `pmx guests` counts guests **cluster-wide** (`/cluster/resources`) while the dashboard's
+  storage line is node-scoped. Invisible on a single node, wrong on a cluster.
+- `pmx disk <dev>` enumerates disks three times and walks `/proc/*/mountinfo` for one
+  read-only view. Slow on a many-disk or LXC-heavy host, not incorrect.
+- `Get-PmxMountNamespaceCheck` compares a whole-disk `major:minor` against mountinfo's
+  *partition* `st_dev`, so it cannot fire; the case it would catch is already refused a line
+  earlier. It is redundant rather than fail-open — but it is not a safety layer.
+
 ## [3.15.0] - 2026-07-29
 
 ### Added

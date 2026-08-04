@@ -63,7 +63,9 @@ function ls {
         }
 
         Write-Host "🌳 Tree view (depth: $pfDepth)" -ForegroundColor DarkGray
-        & lsd --tree "--depth=$pfDepth" --group-dirs=first --icon=always --color=always @gnuArgs
+        # Let lsd detect the destination: keep icons/colour at an interactive prompt,
+        # but emit plain text when the listing feeds grep, a file, or another command.
+        & lsd --tree "--depth=$pfDepth" --group-dirs=first --icon=auto --color=auto @gnuArgs
         return
     }
 
@@ -72,7 +74,9 @@ function ls {
     # so the user's flags mean exactly what they mean on Linux — they just come out
     # prettier. If lsd is missing, fall through to the real ls so the flags STILL work.
     if (Get-Command lsd -ErrorAction SilentlyContinue) {
-        & lsd --group-dirs=first --icon=always --color=always @gnuArgs
+        # `always` leaves an ANSI reset after the filename. That invisible suffix makes
+        # end-anchored pipelines such as `ls -l ... | grep -E 'sdg$'` miss valid rows.
+        & lsd --group-dirs=first --icon=auto --color=auto @gnuArgs
         return
     }
 
