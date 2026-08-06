@@ -1,5 +1,19 @@
 # Resolved Issues
 
+## Issue 13 — `srv` exposes saved SSH endpoints before authentication
+
+**Files:** `components/network/server-privacy.ps1`, `components/network/servers.ps1`, network
+regressions, help registry, public documentation and release notes
+**Severity:** Medium
+**Description:** Saved usernames, hosts, addresses and ports were repeated in ordinary connect,
+list, picker, save, rename and removal output even though the operator had already supplied them
+when creating the alias.
+
+**Status:** Resolved — ordinary `srv` views now show alias and reachability only. The new
+`srv <name> info` path performs a non-mutating native SSH authentication probe and reveals the
+stored endpoint only after success; failed, cancelled and non-interactive probes fail closed.
+PowerFlow never reads or stores the password.
+
 ## Issue 1 — `gh-l-org` cannot parse selected organisation
 
 **File:** `components/github/browser.ps1`
@@ -84,3 +98,32 @@ VMID grammar rejected it later, producing inconsistent selection behavior.
 
 **Status:** Resolved — component and adapter now share the canonical 100–999999999 form with
 no leading zeroes, covered by the parser regression suite.
+
+## Issue 8 — Tagged PMX feature omitted planned release closure
+
+**Files:** `tests/proxmox/`, `README.md`, `docs/features.md`, `docs/troubleshooting.md`,
+`COMPONENTS.md`, `CHANGELOG.md`, `.github/workflows/release-*.yml`
+**Severity:** High
+**Description:** The PMX management implementation was tagged as v3.16.2 before its approved
+dedicated tests, CI wiring, canonical documentation, changelog/release notes, release-asset
+correction, issue closure, and plan status were completed. The failed tag was not published.
+
+**Status:** Resolved — v3.17.0 completed every Windows/Linux validation leg, including the
+previously failing Ubuntu 24.04 dependency path; the GitHub release was published with the
+complete generated notes and all six expected assets.
+
+## Issue 12 — Windows Nerd Font installation reports failure after succeeding
+
+**Files:** `platform/windows/adapters/fonts.ps1`, `platform/windows/adapters/packages.ps1`,
+`install.ps1`, `uninstall.ps1`, `tests/windows/`, Windows installation/troubleshooting docs
+**Severity:** Medium
+**Description:** Scoop installed and registered `FiraCode-NF-Mono`, but `Test-NerdFont`
+searched only for a spaced family label while Scoop uses filename-derived registry properties
+such as `FiraCodeNerdFontMono-Regular (TrueType)`. The false negative made the installer and
+`pwsh-font` claim installation failed; every failure hint also incorrectly blamed absent Scoop.
+
+**Status:** Resolved — detection normalizes both registry shapes; Scoop is an explicit,
+immediately activated Windows prerequisite; real command failures are retained; and interactive
+uninstall offers a separately warned/double-confirmed Scoop choice while `-Yes` always keeps it.
+Three responsibility-focused Windows regressions cover font/bootstrap behavior, uninstall
+safety, and an isolated `-NoDeps` install/uninstall round trip.

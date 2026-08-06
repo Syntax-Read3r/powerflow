@@ -129,6 +129,10 @@ jobs:
         shell: pwsh
         run: ./tests/proxmox/run.ps1
 
+      - name: 🔐 SRV alias-only display and authenticated info regression
+        shell: pwsh
+        run: ./tests/network/run.ps1
+
       - name: 🧪 Parse every .ps1 under pwsh on Linux
         shell: pwsh
         run: |

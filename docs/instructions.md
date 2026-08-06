@@ -233,6 +233,30 @@ dependency, read `components/core/dependencies.ps1` first.**
 - Update `docs/installed-packages.md` in the same response whenever a tool is added
   or removed.
 
+### 5c. Windows Scoop Prerequisite
+
+- Scoop is a required Windows prerequisite for PowerFlow and must be verified or installed
+  before managed dependencies are installed, including when optional tools are skipped.
+- A newly installed Scoop shim must be activated in the current PowerShell process so the
+  same installer run can use it.
+- PowerFlow uninstall keeps Scoop by default, including with `-Yes`. An interactive uninstall
+  may offer to remove it, but only as a separate opt-in. After the user answers yes, explain
+  that all Scoop-managed applications, buckets, shims and unrelated workflows are affected,
+  then retain Scoop's own final confirmation.
+- This file must be updated whenever a new rule is given.
+
+### 5d. Saved SSH Endpoint Display Privacy
+
+- Treat the username, hostname/address and port stored by `srv` as sensitive display data.
+- Bare `srv`, `srv list`, the picker, ordinary connect/save/delete/rename output, and error
+  messages show only the saved server name and online/no-ssh/offline state.
+- Reveal a saved endpoint only through explicit `srv <name> info`, and only after the SSH
+  client reports successful authentication. Never store, intercept, echo or log the password.
+- PowerFlow must not introduce an askpass/password-capture helper merely to rewrite OpenSSH's
+  own password prompt. OpenSSH remains responsible for credential entry and may display its
+  native authentication prompt.
+- This file must be updated whenever a new rule is given.
+
 ### 5a. Automatic Planning for Comprehensive Tasks
 
 **When asked to perform a comprehensive task:**

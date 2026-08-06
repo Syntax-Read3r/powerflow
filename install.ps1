@@ -14,7 +14,8 @@
 .PARAMETER Yes
     Assume yes; no prompts (CI-safe).
 .PARAMETER NoDeps
-    Install PowerFlow only; skip starship/fzf/zoxide/lsd.
+    Skip managed tools and the Nerd Font. On Windows, Scoop is still verified or installed
+    because it is a PowerFlow prerequisite rather than an optional dependency.
 .PARAMETER Prefix
     Directory holding the PowerFlow source to install from. When omitted, the
     source is downloaded from GitHub.
@@ -232,9 +233,9 @@ if (Test-Path $uninstallSrc) {
     $installedFiles.Add($uninstallDst)
 }
 
-# ── Dependencies ──────────────────────────────────────────────────────────────
-# Load the platform's packages adapter and use it, rather than hardcoding Scoop
-# here — this is why the adapter layer exists.
+# ── Windows prerequisite + managed dependencies ──────────────────────────────
+# Scoop is a Windows prerequisite, not a removable PowerFlow-owned tool. Load the
+# platform adapter rather than hardcoding its bootstrap implementation here.
 $dependencies = @()
 
 # WHO OWNS EACH TOOL, ACROSS RE-INSTALLS.
@@ -261,18 +262,38 @@ if ($alreadyInstalled) {
     }
 }
 
+. (Join-Path $profileDir "platform/$Platform/adapters/packages.ps1")
+
+if ($Platform -eq 'windows') {
+    Write-Host ""
+    Write-Host "📦 Checking Windows prerequisite..." -ForegroundColor Yellow
+    if (Test-PackageManager) {
+        Write-Host "   ✅ Scoop (already present)" -ForegroundColor DarkGray
+    } else {
+        Write-Host "   Installing Scoop..." -ForegroundColor DarkGray
+        if (-not (Install-PackageManager) -or -not (Test-PackageManager)) {
+            Write-Host "   ❌ Scoop is required by PowerFlow and could not be installed." -ForegroundColor Red
+            Write-Host "      Retry in a new PowerShell window, or visit https://scoop.sh" -ForegroundColor DarkGray
+            exit 1
+        }
+        Write-Host "   ✅ Scoop installed and active" -ForegroundColor Green
+    }
+}
+
 if (-not $NoDeps) {
     Write-Host ""
     Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
 
-    . (Join-Path $profileDir "platform/$Platform/adapters/packages.ps1")
     if ($Platform -eq 'linux') {
         . (Join-Path $profileDir "platform/$Platform/adapters/locations.ps1")
     }
 
     if (-not (Test-PackageManager)) {
         Write-Host "   Setting up package manager..." -ForegroundColor DarkGray
-        Install-PackageManager | Out-Null
+        if (-not (Install-PackageManager)) {
+            Write-Host "   ❌ No usable package manager — dependency installation cannot continue." -ForegroundColor Red
+            exit 1
+        }
     }
 
     foreach ($tool in @('starship', 'fzf', 'zoxide', 'lsd', 'git')) {

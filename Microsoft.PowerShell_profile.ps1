@@ -157,6 +157,8 @@ $_pf_components = @(
     "components\system\sysconfig.ps1"
     "components\system\startup.ps1"
 
+    # Saved SSH endpoints have a separate privacy/invocation boundary before the router.
+    "components\network\server-privacy.ps1"
     "components\network\servers.ps1"
 )
 foreach ($_c in $_pf_components) {

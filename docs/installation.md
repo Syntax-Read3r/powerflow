@@ -59,8 +59,11 @@ if (-not (Test-Path $profileDir)) {
 Invoke-RestMethod -Uri "https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/Microsoft.PowerShell_profile.ps1" -OutFile $PROFILE
 ```
 
-### Step 2: Install Dependencies
-PowerFlow will automatically install these on first run, but you can pre-install:
+### Step 2: Windows Prerequisite and Dependencies
+
+Scoop is PowerFlow's Windows prerequisite. The main installer verifies or installs it before
+anything else and activates its shim in the current PowerShell process. It then installs the
+managed tools and font below. Manual pre-installation is optional:
 
 ```powershell
 # Install Scoop (package manager)
@@ -70,9 +73,9 @@ Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
 # Install core tools
 scoop install starship fzf zoxide lsd git
 
-# Install FiraCode Nerd Font
+# Install FiraCode Nerd Font Mono
 scoop bucket add nerd-fonts
-scoop install FiraCode-NF
+scoop install FiraCode-NF-Mono
 ```
 
 ### Step 3: Reload Profile
@@ -91,7 +94,7 @@ scoop install FiraCode-NF
 1. Open Windows Terminal
 2. Press `Ctrl + ,` (Settings)
 3. Go to your PowerShell profile → Appearance
-4. Set **Font face** to `FiraCode Nerd Font` or `FiraCode NF`
+4. Set **Font face** to `FiraCode Nerd Font Mono`
 5. Optionally set **Font size** to `11` or `12`
 6. Save settings
 
@@ -104,7 +107,7 @@ scoop install FiraCode-NF
             {
                 "name": "PowerShell",
                 "source": "Windows.Terminal.PowershellCore",
-                "fontFace": "FiraCode Nerd Font",
+                "fontFace": "FiraCode Nerd Font Mono",
                 "fontSize": 11
             }
         ]
@@ -127,7 +130,7 @@ Get-PowerFlowVersion
 pwsh-h          # Show help
 nav list        # Show bookmarks
 git-s           # Git status (in a Git repository)
-ls -t           # Tree view of current directory
+ls --tree       # Tree view of current directory (`ls -t` sorts by time)
 ```
 
 ---
@@ -143,8 +146,8 @@ Write-Host "🚀 📁 ✅ 🌿 💻 🔍 🎯 📦 🔄 ⚡"
 ```
 
 **If you see squares or missing characters:**
-1. Install FiraCode Nerd Font: `scoop install FiraCode-NF`
-2. Set terminal font to "FiraCode Nerd Font"
+1. Run `pwsh-font` (or manually: `scoop install FiraCode-NF-Mono`)
+2. Set terminal font to "FiraCode Nerd Font Mono"
 3. Restart Windows Terminal
 
 ### Color Scheme (Optional)
@@ -250,7 +253,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 **"Scoop not found" error**
 ```powershell
-# Solution: Install Scoop manually
+# Recovery: the PowerFlow installer normally installs this prerequisite automatically
 Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
 ```
 
@@ -258,8 +261,8 @@ Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
 ```powershell
 # Solution: Install and configure Nerd Font
 scoop bucket add nerd-fonts
-scoop install FiraCode-NF
-# Then set Windows Terminal font to "FiraCode Nerd Font"
+scoop install FiraCode-NF-Mono
+# Then set Windows Terminal font to "FiraCode Nerd Font Mono"
 ```
 
 **Profile loads slowly**
@@ -328,11 +331,19 @@ pwsh -NoProfile -File "$HOME\Documents\PowerShell\uninstall.ps1"
 Add `-Yes` to skip the confirmation, `-Purge` to also delete your bookmarks
 (`~/.nav_bookmarks.json`), which are kept by default.
 
+On Windows, interactive uninstall asks separately whether Scoop should also be removed.
+PowerFlow keeps Scoop by default, and `-Yes` **always keeps it**. If you answer yes, PowerFlow
+then explains the risk before continuing: Scoop's own removal uninstalls every Scoop-managed
+application and removes its buckets and shims, including tools unrelated to PowerFlow. Scoop
+retains its own final y/N confirmation.
+
 ### What it does
 
 - Removes only the files listed in `.powerflow-manifest.json`
 - Removes the dependencies **PowerFlow installed** (`starship`, `fzf`, `zoxide`, `lsd`) — and
   **keeps** any that were already on your machine before PowerFlow, `git` included
+- Keeps the shared Scoop prerequisite unless an interactive user separately opts in after the
+  risk warning and confirms again in Scoop's own uninstaller
 - Restores your original pre-PowerFlow profile if you had one
 - On Linux, removes the `~/.bashrc` login hook, and reverts your login shell to bash **before**
   removing pwsh, so you cannot be locked out

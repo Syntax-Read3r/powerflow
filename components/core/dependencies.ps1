@@ -3,7 +3,8 @@
 # ==============================================================================
 # Domain   : Core
 # File     : components/core/dependencies.ps1
-# Purpose  : Checks and installs required tools (Starship, fzf, zoxide, lsd, git) and PowerShell updates
+# Purpose  : Enforces the platform package-manager prerequisite, checks and installs
+#            required tools (Starship, fzf, zoxide, lsd, git), and checks PowerShell updates
 # Functions: Initialize-Dependencies, Check-PowerShellUpdates, Get-RequiredTools
 # Depends  : config/PowerFlow.settings.ps1
 #            Test-Dependency, Install-Dependency, Test-PackageManager,
@@ -28,7 +29,9 @@ function Initialize-Dependencies {
 
     Write-Host "🔍 Checking dependencies..." -ForegroundColor DarkGray
 
-    # Ensure a package manager exists (Scoop on Windows; the distro's on Linux)
+    # Ensure the platform prerequisite exists (Scoop on Windows; the distro's
+    # package manager on Linux). Scoop is shared infrastructure and is never
+    # removed by PowerFlow uninstall.
     if (-not (Test-PackageManager)) {
         $mgr = Get-PackageManagerName
         Write-Host "📦 Setting up package manager ($mgr)..." -ForegroundColor Yellow

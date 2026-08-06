@@ -9,7 +9,36 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [3.17.0] - Unreleased
+## [3.18.0] - Unreleased
+
+### Added
+
+- 🔐 **`srv <name> info` reveals a saved SSH endpoint only after successful SSH
+  authentication.** The authentication probe opens no remote shell, stores no password, and
+  keeps connection details hidden when authentication fails, is cancelled, or cannot run
+  interactively.
+
+### Changed
+
+- 🌐 **Normal `srv` use is now alias-first and endpoint-private.** Lists, picker rows,
+  connection handling, save/rename/remove messages, and reachability warnings identify a saved
+  server only by alias and live status. The native OpenSSH client still owns its credential
+  prompt and may display its own target while asking for a password.
+
+### Fixed
+
+- 🎨 **Windows no longer reports that FiraCode Nerd Font Mono failed after Scoop
+  successfully installed it.** Scoop registers filename-derived names such as
+  `FiraCodeNerdFontMono-Regular`, while PowerFlow looked only for the spaced family label.
+  Detection now normalizes both forms, `pwsh-font` preserves the real failed command when
+  something genuinely goes wrong, and a Windows regression covers the actual registry shape.
+- 🧰 **Scoop is now an explicit Windows prerequisite.** The installer verifies or bootstraps
+  it even under `-NoDeps`, activates its shim in the current process, and refuses to continue
+  dependency setup without it. Interactive uninstall asks separately whether to remove Scoop;
+  only after yes does it explain that every Scoop-managed application, bucket and shim is at
+  risk, and Scoop retains its own final confirmation. Automated `-Yes` always keeps Scoop.
+
+## [3.17.0] - 2026-08-06
 
 ### Added
 

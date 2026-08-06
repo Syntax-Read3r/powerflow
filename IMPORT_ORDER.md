@@ -82,6 +82,8 @@ Shared domain logic, loaded in dependency order:
 7. **terminal** — after navigation, so `open-nt` reports the correct current directory.
 8. **projects** — `create-next.ps1` reads DB settings from Stage 1.
 9. **system** — standalone; nothing depends on them.
+10. **network** — `server-privacy.ps1` before `servers.ps1`; the router delegates native SSH
+    argument construction and authenticated endpoint display to that privacy boundary.
 
 ## Stage 5 — Windows-only (`windows-only/*.ps1`)
 

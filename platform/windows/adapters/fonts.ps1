@@ -6,7 +6,7 @@
 # Purpose  : Install and detect the Nerd Font that Starship and lsd draw with
 # Contract : Get-NerdFontName, Test-NerdFont, Install-NerdFont,
 #            Uninstall-NerdFont, Get-NerdFontInstructions
-# Depends  : Scoop (the nerd-fonts bucket) — same package manager as the tools
+# Depends  : Scoop prerequisite via packages adapter (the nerd-fonts bucket)
 # ==============================================================================
 #
 # Same story as Linux: Starship and lsd draw with Nerd Font glyphs, and without the
@@ -23,6 +23,17 @@
 function Get-NerdFontName    { return 'FiraCode Nerd Font Mono' }
 function Get-NerdFontPackage { return 'FiraCode-NF-Mono' }
 
+$script:PF_NerdFontInstallError = $null
+
+function Test-NerdFontRegistryName {
+    param([AllowEmptyString()][string]$Name)
+    # Scoop registers filename-derived properties such as
+    # `FiraCodeNerdFontMono-Regular (TrueType)`, while other installers may use
+    # the human family label `FiraCode Nerd Font Mono`. Normalize both forms.
+    $normalized = $Name -replace '[^A-Za-z0-9]', ''
+    return ($normalized -like '*FiraCodeNerdFontMono*')
+}
+
 function Test-NerdFont {
     # A registered font appears as a value under the Fonts key — per-user (HKCU,
     # where Scoop puts it) or machine-wide (HKLM). Checking the registry detects the
@@ -35,22 +46,52 @@ function Test-NerdFont {
             # The MONO family specifically — a plain 'FiraCode Nerd Font' or '…Propo' is
             # the double-width variant that overlaps filenames, so matching it loosely
             # would report success and skip installing the Mono that fixes the problem.
-            if ($names | Where-Object { $_ -like '*FiraCode Nerd Font Mono*' }) { return $true }
+            if ($names | Where-Object { Test-NerdFontRegistryName "$_" }) { return $true }
         }
     }
     return $false
 }
 
 function Install-NerdFont {
+    $script:PF_NerdFontInstallError = $null
     if (Test-NerdFont) { return $true }
-    if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) { return $false }
+
+    # `pwsh-font` can be invoked outside the main installer. Scoop is an explicit
+    # Windows prerequisite, so reuse the packages adapter's bootstrap instead of
+    # telling the user to install it manually.
+    if (-not (Get-Command Test-PackageManager -ErrorAction SilentlyContinue) -or
+        -not (Get-Command Install-PackageManager -ErrorAction SilentlyContinue)) {
+        $script:PF_NerdFontInstallError = 'The Windows packages adapter is not loaded.'
+        return $false
+    }
+    if (-not (Test-PackageManager) -and -not (Install-PackageManager)) {
+        $script:PF_NerdFontInstallError = 'PowerFlow could not install its Scoop prerequisite.'
+        return $false
+    }
+    if (-not (Test-PackageManager)) {
+        $script:PF_NerdFontInstallError = 'Scoop is installed but is not callable in this PowerShell process.'
+        return $false
+    }
 
     # The nerd-fonts bucket is a git repo; adding it twice is harmless (Scoop just
-    # says it already exists). Suppress the noise either way.
-    scoop bucket add nerd-fonts *>$null
-    scoop install (Get-NerdFontPackage) *>$null
+    # says it already exists). Capture failures so the hint reports the real cause.
+    $bucketOutput = @(& scoop bucket add nerd-fonts 2>&1)
+    if (-not $?) {
+        $script:PF_NerdFontInstallError = "Could not add Scoop's nerd-fonts bucket: $($bucketOutput -join ' ')"
+        return $false
+    }
 
-    return (Test-NerdFont)
+    $installOutput = @(& scoop install (Get-NerdFontPackage) 2>&1)
+    if (-not $?) {
+        $script:PF_NerdFontInstallError = "Scoop could not install $(Get-NerdFontPackage): $($installOutput -join ' ')"
+        return $false
+    }
+
+    if (-not (Test-NerdFont)) {
+        $script:PF_NerdFontInstallError = 'Scoop completed, but Windows did not expose the expected Mono font registration.'
+        return $false
+    }
+    return $true
 }
 
 function Uninstall-NerdFont {
@@ -62,7 +103,10 @@ function Uninstall-NerdFont {
 # Recovery hint on install failure — the Scoop specifics live here, not in the
 # platform-agnostic component (which the architecture gate forbids from naming Scoop).
 function Get-NerdFontInstallHint {
-    return "Scoop is required. Then:  scoop bucket add nerd-fonts; scoop install $(Get-NerdFontPackage)"
+    if ($script:PF_NerdFontInstallError) {
+        return "$script:PF_NerdFontInstallError Run 'pwsh-font' again after correcting that error."
+    }
+    return "PowerFlow installs Scoop automatically. Manual recovery: scoop bucket add nerd-fonts; scoop install $(Get-NerdFontPackage)"
 }
 
 function Get-NerdFontInstructions {

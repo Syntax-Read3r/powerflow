@@ -113,11 +113,14 @@ Write-Host "🚀 📁 ✅ 🌿 💻 🔍 🎯 📦 🔄 ⚡"
 
 **Solutions:**
 
-**Step 1: Install FiraCode Nerd Font**
+**Step 1: Install FiraCode Nerd Font Mono**
 ```powershell
-# Via Scoop (recommended)
+# PowerFlow bootstraps Scoop and installs the exact Mono package
+pwsh-font
+
+# Manual recovery
 scoop bucket add nerd-fonts
-scoop install FiraCode-NF
+scoop install FiraCode-NF-Mono
 
 # Via winget
 winget install -e --id "DEVCOM.FiraCodeNerdFont"
@@ -129,7 +132,7 @@ winget install -e --id "DEVCOM.FiraCodeNerdFont"
 1. Open Windows Terminal
 2. Press `Ctrl + ,` (Settings)
 3. Go to PowerShell profile → Appearance
-4. Set **Font face** to `FiraCode Nerd Font` or `FiraCode NF`
+4. Set **Font face** to `FiraCode Nerd Font Mono`
 5. Save and restart terminal
 
 **Step 3: Verify Font Installation**
@@ -174,7 +177,8 @@ scoop : The term 'scoop' is not recognized
 
 **Solutions:**
 ```powershell
-# Install Scoop
+# Re-run the PowerFlow installer: Scoop is a required Windows prerequisite and
+# is bootstrapped automatically. Or use the same bootstrap manually:
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
 
@@ -184,6 +188,10 @@ $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";
 # Verify installation
 scoop --version
 ```
+
+If Scoop was installed in the current window but is still not found, open a new PowerShell
+window. PowerFlow's installer also activates `$HOME\scoop\shims` immediately so its own run
+does not require that restart.
 
 ### ❌ "fzf/starship/zoxide not found" Errors
 
@@ -438,7 +446,7 @@ code $wtSettings
 {
     "profiles": {
         "defaults": {
-            "fontFace": "FiraCode Nerd Font",
+            "fontFace": "FiraCode Nerd Font Mono",
             "fontSize": 11
         }
     }

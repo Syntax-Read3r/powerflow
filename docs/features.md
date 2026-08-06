@@ -59,6 +59,18 @@
 - **Self-healing capabilities** - Built-in recovery tools and diagnostic functions for troubleshooting
 - **Graceful degradation** - Fallback behaviors when optional dependencies are unavailable
 
+### 🌐 Private Saved SSH Connections
+
+- **Alias-first operation** - `srv`, `srv list`, picker rows, status messages, and normal
+  connection handling show saved server aliases and reachability without repeating usernames,
+  addresses, or ports
+- **Authenticated detail view** - `srv <name> info` performs a non-mutating SSH authentication
+  probe and reveals the saved endpoint only after it succeeds
+- **No credential handling** - Password entry stays inside native OpenSSH; PowerFlow neither
+  captures nor stores it, and failed or cancelled authentication keeps details hidden
+- **Unchanged native transport** - Direct connections still pass the exact saved port and
+  `user@host` arguments to `ssh`, without redefining or shadowing the client
+
 ### ⚙️ System Integration
 
 - **Windows Terminal optimization** - Enhanced tab management and terminal control functions

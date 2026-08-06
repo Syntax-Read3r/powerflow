@@ -63,10 +63,16 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 
 ### 🌐 Servers by Name, Not by IP
 
-- **`srv proxmox`** instead of `ssh you@192.168.1.50` — connections saved by name
-- **Live status in the picker**: `✅ online` · `🟡 host up, ssh not answering` ·
-  `⛔ offline · last seen Jul 17` — so you know to press the power button, not retry
+- **`srv proxmox`** connects using a saved alias without PowerFlow repeating its username,
+  address, or port in the normal UI
+- **Alias-only live status**: bare `srv` and `srv list` show the saved name plus `✅ online`,
+  `🟡 host up, ssh not answering`, or `⛔ offline · last seen Jul 17`
+- **Authenticated details**: `srv proxmox info` asks OpenSSH to authenticate first and reveals
+  the stored endpoint only when authentication succeeds; PowerFlow never reads the password
 - **Tested before saving**: `srv add` probes the SSH port first, catching typo'd IPs
+
+> OpenSSH owns the native credential prompt and may display its own `user@host` target while
+> asking for a password. PowerFlow does not intercept or store that credential.
 
 ### 🖥️ Machine Health at a Glance
 
@@ -101,7 +107,7 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 
 ### 🎨 Beautiful Interface
 
-- **FiraCode Nerd Font**: Auto-installed for perfect icon display
+- **FiraCode Nerd Font Mono**: Auto-installed for single-cell icon display
 - **Starship Prompt**: Cross-shell prompt with Git integration
 - **Color-Coded Output**: Consistent visual feedback throughout
 - **Auto-Update System**: Keeps PowerFlow current with latest features
@@ -208,7 +214,7 @@ shadows them. Its own versions are **`del`** and **`mvf`**.
 
 | | |
 |---|---|
-| **Windows** | PowerShell 5.1+ (7+ recommended) · Windows 10/11 or Server 2016+ |
+| **Windows** | PowerShell 5.1+ (7+ recommended) · Windows 10/11 or Server 2016+ · Scoop (installed automatically if missing) |
 | **Linux** | Any distro with apt / dnf / pacman / zypper / apk (PowerShell 7 is installed for you) |
 | **Both** | Internet connection, for dependency installation |
 
@@ -218,20 +224,22 @@ shadows them. Its own versions are **`del`** and **`mvf`**.
 
 PowerFlow automatically sets up your environment:
 
-1. **🎨 Installs FiraCode Nerd Font** - Scoop on Windows, direct download + `fc-cache`
+1. **🧰 Verifies the Windows prerequisite** - Scoop is installed automatically if missing
+   and activated in the current shell; Linux uses the distro package manager
+2. **🎨 Installs FiraCode Nerd Font Mono** - Scoop on Windows, direct download + `fc-cache`
    on Linux (re-run any time with `pwsh-font`)
-2. **📦 Installs Dependencies** - Starship, fzf, zoxide, lsd (Scoop / your distro's
+3. **📦 Installs Dependencies** - Starship, fzf, zoxide, lsd (Scoop / your distro's
    package manager)
-3. **🔖 Creates Default Bookmarks** - Quick access to common directories
-4. **🔄 Enables Auto-Updates** - Stay current with latest features
-5. **💡 Shows Setup Tips** - Points you at the one manual step: setting the terminal font
+4. **🔖 Creates Default Bookmarks** - Quick access to common directories
+5. **🔄 Enables Auto-Updates** - Stay current with latest features
+6. **💡 Shows Setup Tips** - Points you at the one manual step: setting the terminal font
 
 ### Final Setup Step
 
 **Configure Windows Terminal Font:**
 1. Open Windows Terminal → Settings (`Ctrl+,`)
 2. Go to your PowerShell profile → Appearance
-3. Set **Font face** to `FiraCode Nerd Font`
+3. Set **Font face** to `FiraCode Nerd Font Mono`
 4. Restart terminal and enjoy! 🎉
 
 ## 🎯 Quick Start Guide
@@ -599,14 +607,19 @@ week · turn off**. Piped/non-interactive shells get one quiet line, never a pro
 
 ### Auto-Installed Dependencies
 
-PowerFlow automatically installs these tools via Scoop:
+On Windows, **Scoop is a PowerFlow prerequisite** and is installed automatically when missing.
+Its shim is activated immediately so the same run can install:
 
 - **Starship**: Cross-shell prompt with Git integration
 - **fzf**: Fuzzy finder for interactive selection
 - **zoxide**: Smart directory navigation with learning
 - **lsd**: Modern ls replacement with icons
 - **git**: Version control system
-- **FiraCode Nerd Font**: Beautiful font with programming ligatures
+- **FiraCode Nerd Font Mono**: Single-cell prompt and file-list glyphs
+
+Uninstall keeps Scoop by default, even with `-Yes`. An interactive uninstall asks separately
+whether to remove it; answering yes first explains that Scoop removal affects every
+Scoop-managed application, bucket and shim, then Scoop asks for final confirmation.
 
 ### Customization
 
@@ -668,7 +681,7 @@ Get-Command starship, fzf, zoxide, lsd, git  # Check dependencies
 
 ### Common Issues
 
-**Icons show as squares?** → Install FiraCode Nerd Font and configure Windows Terminal  
+**Icons show as squares?** → Run `pwsh-font`, then select FiraCode Nerd Font Mono in Windows Terminal
 **Commands not found?** → Run PowerShell as Administrator for first setup  
 **Profile won't load?** → Check execution policy: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
 

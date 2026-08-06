@@ -222,3 +222,11 @@ jobs:
       - name: 🧪 PMX parser, routing, adapter, and mutation regressions
         shell: pwsh
         run: ./tests/proxmox/run.ps1
+
+      - name: 🎨 Scoop prerequisite and Windows Nerd Font regression
+        shell: pwsh
+        run: ./tests/windows/run.ps1
+
+      - name: 🔐 SRV alias-only display and authenticated info regression
+        shell: pwsh
+        run: ./tests/network/run.ps1

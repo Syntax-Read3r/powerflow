@@ -21,6 +21,10 @@
     Also remove user data (bookmarks).
 .PARAMETER KeepDeps
     Do not remove any dependencies, even ones PowerFlow installed.
+
+Scoop is kept by default, including under -Yes. On an interactive Windows uninstall,
+PowerFlow asks separately whether Scoop should also be removed. Answering yes displays
+the shared-package-manager risks before Scoop asks for final confirmation.
 #>
 
 param(
@@ -108,6 +112,26 @@ if (-not $Yes -and (Read-Host "Proceed? (y/n)") -ne 'y') {
     exit 0
 }
 
+# Scoop is a prerequisite but also shared infrastructure: it may now own tools the
+# user installed for completely unrelated work. Never infer permission from -Yes,
+# -Purge, or from removing PowerFlow-owned dependencies. Ask separately, show the
+# consequences only after opt-in, and leave Scoop's own final y/N gate intact.
+$removePackageManager = $false
+$packageAdapter = Join-Path $manifest.installRoot "platform/$($manifest.platform)/adapters/packages.ps1"
+if ($manifest.platform -eq 'windows' -and (Test-Path $packageAdapter)) {
+    . $packageAdapter
+    if (Test-PackageManager) {
+        if ($Yes -or [Console]::IsInputRedirected) {
+            Write-Host "📦 Scoop will be kept (automatic uninstall never removes the shared package manager)." -ForegroundColor Green
+        }
+        elseif (Confirm-PackageManagerRemoval) {
+            $removePackageManager = $true
+        } else {
+            Write-Host "✅ Scoop will be kept." -ForegroundColor Green
+        }
+    }
+}
+
 # ── 1. Remove dependencies FIRST (the adapters live in files we're about to delete)
 if ($removableTools.Count -gt 0) {
     Write-Host ""
@@ -135,6 +159,19 @@ if ($removableFonts.Count -gt 0) {
         Write-Host "✅ Removed the Nerd Font PowerFlow installed" -ForegroundColor Green
     } else {
         Write-Host "⚠️  Fonts adapter missing — remove the Nerd Font manually if you want it gone." -ForegroundColor Yellow
+    }
+}
+
+# ── Optional Scoop removal ───────────────────────────────────────────────────
+# Remove Scoop only after all PowerFlow-owned Scoop packages have had their normal
+# uninstall hooks, and before deleting the adapter that owns this platform action.
+if ($removePackageManager) {
+    Write-Host ""
+    Write-Host "📦 Handing off to Scoop's own uninstaller..." -ForegroundColor Yellow
+    if (Uninstall-PackageManager) {
+        Write-Host "✅ Scoop removed at your explicit request." -ForegroundColor Green
+    } else {
+        Write-Host "✅ Scoop was kept — its final confirmation was cancelled or removal did not complete." -ForegroundColor Green
     }
 }
 

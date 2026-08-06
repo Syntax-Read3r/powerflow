@@ -3,10 +3,11 @@
 # ==============================================================================
 # Domain   : Network
 # File     : components/network/servers.ps1
-# Purpose  : Named SSH connections with live online/offline status —
-#            `srv proxmox` instead of `ssh you@192.168.1.50`
-# Functions: srv, Test-ServerOnline, Get-PFServers, Save-PFServers
-# Depends  : Get-HomePath (locations adapter), fzf (optional), ssh (client)
+# Purpose  : Alias-only SSH server management with live online/offline status
+# Functions: srv, Test-ServerOnline, Get-PFServers, Save-PFServers,
+#            Get-PFServerStatuses, Format-PFServerStatus, Connect-PFServer,
+#            Show-PFServerPicker
+# Depends  : server-privacy.ps1, Get-HomePath (locations adapter), fzf (optional)
 # ==============================================================================
 #
 # THE STATUS CHECK IS A TCP PROBE OF THE SSH PORT, NOT A PING.
@@ -21,8 +22,8 @@
 # The middle state is the one a plain ping cannot see, and it changes what you do
 # next (restart sshd vs. walk to the power button).
 #
-# `ssh` itself is NEVER wrapped or shadowed — the same principle as the GNU
-# coreutils. srv is a launcher beside it, not a layer over it.
+# `ssh` itself is NEVER redefined or shadowed — the same principle as the GNU
+# coreutils. srv is a named launcher beside the native command.
 # ==============================================================================
 
 $script:PFServersFile = Join-Path (Get-HomePath) '.powerflow-servers.json'
@@ -129,8 +130,6 @@ function Connect-PFServer {
         return
     }
 
-    Write-Host "🔗 $Name → $($Server.user)@$($Server.host)$(if ([int]$Server.port -ne 22) { ":$($Server.port)" })" -ForegroundColor Cyan
-
     # Reaching this point means the caller saw it online (or chose to try anyway) —
     # record the sighting either way; a successful ssh will prove it shortly.
     $servers = Get-PFServers
@@ -139,7 +138,7 @@ function Connect-PFServer {
         Save-PFServers $servers
     }
 
-    & ssh -p ([int]$Server.port) "$($Server.user)@$($Server.host)"
+    Invoke-PFServerSsh -Server $Server | Out-Null
 }
 
 <#
@@ -148,6 +147,7 @@ function Connect-PFServer {
 .DESCRIPTION
     srv                          pick a server (fzf, online-first) and connect
     srv <name>                   connect by name; warns first if it looks offline
+    srv <name> info              authenticate, then show the saved SSH endpoint
     srv add <name> <user@host>   save a connection — tested before saving
     srv add <name> <user@host:2222>   non-standard port
     srv rm <name> [-f]           forget a connection
@@ -186,30 +186,30 @@ function srv {
                 return
             }
             if ($target -notmatch '^([^@\s]+)@([^@:\s]+)(?::(\d+))?$') {
-                Write-Host "❌ That is not user@host[:port]:  $target" -ForegroundColor Red
+                Write-Host '❌ Expected: user@host[:port].' -ForegroundColor Red
                 return
             }
             $user = $matches[1]; $addr = $matches[2]
             $port = if ($matches[3]) { [int]$matches[3] } else { 22 }
 
             if ($servers.ContainsKey($name) -and -not $f) {
-                Write-Host "❌ '$name' already exists → $($servers[$name].user)@$($servers[$name].host)" -ForegroundColor Red
-                Write-Host "   Replace it:  srv add $name $target -f" -ForegroundColor DarkGray
+                Write-Host "❌ '$name' already exists." -ForegroundColor Red
+                Write-Host "   Replace it:  srv add $name <user@host[:port]> -f" -ForegroundColor DarkGray
                 return
             }
 
             # THE PING TEST THE USER ASKED FOR — but probing the ssh port, which is
             # the thing that actually matters, with ICMP only as the tiebreaker.
-            Write-Host "🔎 Testing $addr`:$port ..." -ForegroundColor DarkGray
+            Write-Host "🔎 Testing SSH reachability for '$name' ..." -ForegroundColor DarkGray
             $state = Test-ServerOnline -TargetHost $addr -Port $port
 
             if ($state -ne 'online') {
                 $why = if ($state -eq 'no-ssh') {
-                    "the host answers ping, but nothing accepts connections on port $port (is sshd running?)"
+                    'the host answers ping, but its SSH service is not accepting connections'
                 } else {
                     "nothing answers at all — powered off, or the address is mistyped"
                 }
-                Write-Host "⚠️  $addr is not reachable: $why" -ForegroundColor Yellow
+                Write-Host "⚠️  '$name' is not reachable: $why" -ForegroundColor Yellow
 
                 # A dead address is EXACTLY what this test exists to catch — but a
                 # powered-off server is legitimate to save. Ask. Unless nobody can
@@ -233,7 +233,7 @@ function srv {
             }
             Save-PFServers $servers
             $badge = Format-PFServerStatus $state $servers[$name]
-            Write-Host "✅ Saved: $name → $user@$addr$(if ($port -ne 22) { ":$port" })   $badge" -ForegroundColor Green
+            Write-Host "✅ Saved: $name   $badge" -ForegroundColor Green
             Write-Host "   Connect any time:  srv $name" -ForegroundColor Cyan
             return
         }
@@ -249,7 +249,7 @@ function srv {
                     Write-Host "❌ Refusing to delete without confirmation on a piped stdin — use:  srv rm $name -f" -ForegroundColor Red
                     return
                 }
-                if ((Read-Host "Forget '$name' ($($servers[$name].user)@$($servers[$name].host))? [y/N]") -notin @('y', 'Y')) {
+                if ((Read-Host "Forget '$name'? [y/N]") -notin @('y', 'Y')) {
                     Write-Host "❌ Kept." -ForegroundColor Yellow
                     return
                 }
@@ -271,7 +271,7 @@ function srv {
                 return
             }
             if ($servers.ContainsKey($new)) {
-                Write-Host "❌ '$new' already exists → $($servers[$new].user)@$($servers[$new].host)" -ForegroundColor Red
+                Write-Host "❌ '$new' already exists." -ForegroundColor Red
                 return
             }
             if ($new -in @('add', 'rm', 'remove', 'rename', 'list', 'ls', 'help') -or $new -cnotmatch '^[a-z0-9][\w-]*$') {
@@ -299,7 +299,6 @@ function srv {
             foreach ($e in ($servers.GetEnumerator() | Sort-Object Key)) {
                 $s = $e.Value
                 Write-Host ("  {0}" -f $e.Key.PadRight($w)) -NoNewline -ForegroundColor Green
-                Write-Host ("{0}@{1}{2}  " -f $s.user, $s.host, $(if ([int]$s.port -ne 22) { ":$($s.port)" })) -NoNewline -ForegroundColor White
                 Write-Host (Format-PFServerStatus $statuses[$e.Key] $s) -ForegroundColor $(switch ($statuses[$e.Key]) { 'online' { 'Green' } 'no-ssh' { 'Yellow' } default { 'DarkGray' } })
             }
             Write-Host ""
@@ -316,6 +315,19 @@ function srv {
         }
         $s = $servers[$Command]
         $state = Test-ServerOnline -TargetHost $s.host -Port ([int]$s.port)
+
+        if ($Param1 -eq 'info') {
+            if ($Param2) {
+                Write-Host "❌ Usage:  srv $Command info" -ForegroundColor Red
+                return
+            }
+            Show-PFServerAuthenticatedInfo -Name $Command -Server $s -State $state
+            return
+        }
+        if ($Param1) {
+            Write-Host "❌ Unknown action '$Param1'. Use: srv $Command  or  srv $Command info" -ForegroundColor Red
+            return
+        }
 
         if ($state -ne 'online') {
             Write-Host "⛔ $Command looks $(if ($state -eq 'no-ssh') { 'up, but ssh is not answering' } else { 'offline' })." -ForegroundColor Yellow
@@ -361,8 +373,7 @@ function Show-PFServerPicker {
             Sort-Object { $rank[$statuses[$_.Key]] }, Key |
             ForEach-Object {
                 $s = $_.Value
-                "{0}`t{1}@{2}{3}`t{4}" -f $_.Key, $s.user, $s.host,
-                    $(if ([int]$s.port -ne 22) { ":$($s.port)" }), (Format-PFServerStatus $statuses[$_.Key] $s)
+                Format-PFServerPublicRow -Name $_.Key -State $statuses[$_.Key] -Server $s
             }
 
         # --expect makes fzf's FIRST output line the key that was pressed ('' = Enter),
@@ -382,7 +393,7 @@ function Show-PFServerPicker {
 
         switch ($key) {
             'ctrl-d' {
-                if ((Read-Host "🗑️  Forget '$name' ($($servers[$name].user)@$($servers[$name].host))? [y/N]") -in @('y', 'Y')) {
+                if ((Read-Host "🗑️  Forget '$name'? [y/N]") -in @('y', 'Y')) {
                     srv rm $name -f
                 }
                 continue   # back to the picker with fresh state
@@ -405,8 +416,9 @@ function Show-PFServerPicker {
 }
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
-Register-PFCommand -Name 'srv'        -Section '🌐 SSH SERVERS' -Synopsis 'picker: Enter connects, ctrl-d deletes, ctrl-r renames' -Example 'srv · srv proxmox'
+Register-PFCommand -Name 'srv'        -Section '🌐 SSH SERVERS' -Synopsis 'private alias/status picker; Enter connects' -Example 'srv · srv proxmox'
+Register-PFCommand -Name 'srv info'   -Section '🌐 SSH SERVERS' -Synopsis 'authenticate, then reveal one saved SSH endpoint' -Example 'srv proxmox info'
 Register-PFCommand -Name 'srv add'    -Section '🌐 SSH SERVERS' -Synopsis 'save a connection by name - tested before saving' -Example 'srv add proxmox you@192.168.1.50'
 Register-PFCommand -Name 'srv rm'     -Section '🌐 SSH SERVERS' -Synopsis 'forget a connection (-f skips the confirm)'
 Register-PFCommand -Name 'srv rename' -Section '🌐 SSH SERVERS' -Synopsis 'rename a server - history and status travel with it' -Example 'srv rename lab proxmox'
-Register-PFCommand -Name 'srv list'   -Section '🌐 SSH SERVERS' -Synopsis 'every server with online / ssh-down / offline status'
+Register-PFCommand -Name 'srv list'   -Section '🌐 SSH SERVERS' -Synopsis 'server aliases with online / ssh-down / offline status'

@@ -1,18 +1,5 @@
 # Current Issues
 
-## Issue 8 — Tagged PMX feature omitted planned release closure
-
-**Files:** `tests/proxmox/`, `README.md`, `docs/features.md`, `docs/troubleshooting.md`,
-`COMPONENTS.md`, `CHANGELOG.md`, `.github/workflows/release-*.yml`
-**Severity:** High
-**Description:** The PMX management implementation was tagged as v3.16.2 before its approved
-dedicated tests, CI wiring, canonical documentation, changelog/release notes, release-asset
-correction, issue closure, and plan status were completed. The failed tag is not a published
-release, but the next tag must not repeat the incomplete release preparation.
-
-**Status:** Open — implementation and local release closure complete; v3.17.0 tag, CI, and
-published-asset verification remain.
-
 ## Issue 9 — PowerShell 5.1 compatibility claim is not currently testable
 
 **Files:** `README.md`, `docs/installation.md`, repository PowerShell sources
