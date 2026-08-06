@@ -75,6 +75,10 @@ function Invoke-PmxVmCommand {
         'show'       { Show-PmxManagedVm -Arguments $rest }
         'status'     { Show-PmxManagedVm -Arguments $rest -StatusOnly }
         'next-id'    { Show-PmxNextVmId -Arguments $rest }
+        'network'    { Invoke-PmxVmNetworkCommand -Arguments $rest }
+        'net'        { Invoke-PmxVmNetworkCommand -Arguments $rest }
+        'nic'        { Show-PmxVmNetwork -Arguments $rest -View adapters }
+        'ip'         { Show-PmxVmNetwork -Arguments $rest -View addresses }
         'clone'      { Invoke-PmxVmClone -Arguments $rest }
         'start'      { Invoke-PmxVmStart -Arguments $rest }
         'shutdown'   { Invoke-PmxVmShutdown -Arguments $rest }

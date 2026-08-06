@@ -1,5 +1,21 @@
 # Resolved Issues
 
+## Issue 19 — PMX has no separated VM configuration and guest-runtime network layer
+
+**Files:** PMX network components/router/help, management adapters, and regressions
+**Severity:** Medium
+**Description:** PMX discovered host bridges but could not inspect configured VM adapters beside
+runtime interfaces, addresses, and stats reported from inside the VM. Without a source-separated
+model, a convenience view could incorrectly equate `net0` with `ens18`, guess among multiple
+addresses, expose Proxmox implementation vocabulary, or imply reachability that was never tested.
+
+**Status:** Resolved — componentized adapter/runtime models now match only by a valid unique MAC,
+rank an explicitly inferred primary address, preserve independent table/JSON sources, categorize
+agent failures, and keep the native read behind `--show-native`. Canonical `pmx vm network` routes,
+the `net`/`nic`/`ip` conveniences, all-VM continuation, help, and Windows/Linux regressions are in
+place; the final read-only real-host comparison remains an acceptance check rather than missing
+implementation.
+
 ## Issue 15 — `pmx help` omits required arguments and routed commands
 
 **Files:** `components/proxmox/help.ps1`, `components/proxmox/vm-read.ps1`,
@@ -156,3 +172,15 @@ immediately activated Windows prerequisite; real command failures are retained; 
 uninstall offers a separately warned/double-confirmed Scoop choice while `-Yes` always keeps it.
 Three responsibility-focused Windows regressions cover font/bootstrap behavior, uninstall
 safety, and an isolated `-NoDeps` install/uninstall round trip.
+
+## Issue 17 — PMX disk units and clone storage placement are ambiguous
+
+**Files:** `components/proxmox/`, PMX tests/help/documentation
+**Severity:** Medium
+**Description:** Virtual-disk output labelled binary values as GB/TB, concise growth was absent,
+and clone previews discarded the per-storage capacity information they had validated. This made
+human resize arithmetic ambiguous and left automation without an explicit placement contract.
+
+**Status:** Resolved — exact bytes now drive IEC display and growth arithmetic; disk roles and
+eligibility have a dedicated model; concise growth fails closed on ambiguity; clone plans expose
+per-disk placement/capacity and plan-versus-verified-result JSON; PMX help covers every grammar.

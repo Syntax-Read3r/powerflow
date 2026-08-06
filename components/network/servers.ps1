@@ -120,16 +120,6 @@ function Format-PFServerStatus {
 function Connect-PFServer {
     param([string]$Name, $Server)
 
-    if (-not (Get-Command ssh -ErrorAction SilentlyContinue)) {
-        Write-Host "❌ No ssh client on this machine." -ForegroundColor Red
-        if ($script:PowerFlowOS -eq 'windows') {
-            Write-Host "   Install it:  Settings → Optional features → OpenSSH Client" -ForegroundColor DarkGray
-        } else {
-            Write-Host "   Install it:  sudo apt install openssh-client" -ForegroundColor DarkGray
-        }
-        return
-    }
-
     # Reaching this point means the caller saw it online (or chose to try anyway) —
     # record the sighting either way; a successful ssh will prove it shortly.
     $servers = Get-PFServers
@@ -138,7 +128,27 @@ function Connect-PFServer {
         Save-PFServers $servers
     }
 
-    Invoke-PFServerSsh -Server $Server
+    Invoke-PFServerSsh -Name $Name -Server $Server
+    $connection = Get-PFPrivateSshSessionResult
+    if ($connection.Success) { return }
+
+    switch ($connection.FailureKind) {
+        'client-missing' {
+            Write-Host '❌ No SSH client is installed.' -ForegroundColor Red
+            if ($script:PowerFlowOS -eq 'windows') {
+                Write-Host '   Install it from Windows Optional Features, then retry.' -ForegroundColor DarkGray
+            }
+            else { Write-Host '   Install openssh-client, then retry.' -ForegroundColor DarkGray }
+        }
+        'prompt-unavailable' {
+            Write-Host "❌ Could not open the private password prompt for '$Name'." -ForegroundColor Red
+            Write-Host '   The saved connection details were kept private.' -ForegroundColor DarkGray
+        }
+        default {
+            Write-Host "❌ Could not connect to '$Name'." -ForegroundColor Red
+            Write-Host "   Check its status with: srv list" -ForegroundColor DarkGray
+        }
+    }
 }
 
 <#

@@ -15,7 +15,8 @@ function New-PmxManagementResult {
         $Data,
         [string]$ErrorMessage,
         $ExitCode,
-        [string]$NativeCommand
+        [string]$NativeCommand,
+        [string]$FailureKind = ''
     )
 
     return [pscustomobject]@{
@@ -24,6 +25,7 @@ function New-PmxManagementResult {
         Error         = $ErrorMessage
         ExitCode      = $ExitCode
         NativeCommand = $NativeCommand
+        FailureKind   = $FailureKind
     }
 }
 
@@ -108,6 +110,7 @@ function Resolve-PmxManagementAdapterConnection {
         Error   = ''
         Data    = [pscustomobject]@{
             Transport      = 'ssh'
+            Label          = "$(Get-PmxManagementConnectionValue $Connection 'Label')"
             Target         = $target
             Port           = $port
             TimeoutSeconds = $timeout
@@ -174,6 +177,7 @@ function New-PmxManagementQueryTokens {
         'vm-list'       { @() }
         'vm-config'     { @('Vmid', 'Node', 'Current') }
         'vm-status'     { @('Vmid', 'Node') }
+        'vm-guest-network' { @('Vmid', 'Node') }
         'next-id'       { @('Vmid') }
         'snapshot-list' { @('Vmid', 'Node') }
         default { return New-PmxManagementTokenResult $false @() "Unsupported Proxmox query operation '$Operation'." }
@@ -217,6 +221,15 @@ function New-PmxManagementQueryTokens {
             }
             $arguments += @('--output-format', 'json')
             return New-PmxManagementTokenResult $true $arguments ''
+        }
+        'vm-guest-network' {
+            $required = Get-PmxManagementRequiredParameter $Parameters 'Vmid'
+            if (-not $required.Success) { return New-PmxManagementTokenResult $false @() $required.Error }
+            $vmid = ConvertTo-PmxManagementVmid $required.Value
+            if ($null -eq $vmid) { return New-PmxManagementTokenResult $false @() "Parameter 'Vmid' must be from 100 through 999999999." }
+            $node = Get-PmxManagementNode $Parameters
+            if (-not $node.Success) { return New-PmxManagementTokenResult $false @() $node.Error }
+            return New-PmxManagementTokenResult $true @('qm', 'guest', 'cmd', $vmid, 'network-get-interfaces') ''
         }
         { $_ -in @('vm-config', 'vm-status', 'snapshot-list') } {
             $required = Get-PmxManagementRequiredParameter $Parameters 'Vmid'
@@ -378,10 +391,41 @@ function Format-PmxManagementNativeCommand {
     param($Connection, [string[]]$Tokens)
 
     if ($Connection.Transport -eq 'local') { return ($Tokens -join ' ') }
-    return (@(
-        'ssh', '-o', 'BatchMode=yes', '-o', "ConnectTimeout=$($Connection.TimeoutSeconds)",
-        '-p', "$($Connection.Port)", $Connection.Target
-    ) + $Tokens) -join ' '
+    $label = "$(Get-PmxManagementConnectionValue $Connection 'Label')"
+    if ($label -notmatch '^[a-z0-9][a-z0-9_-]{0,63}$') { $label = 'saved-server' }
+    return (@('ssh', $label, '--') + $Tokens) -join ' '
+}
+
+function Get-PmxManagementRemoteFailure {
+    param($Run)
+
+    $diagnostic = "$($Run.Error)".ToLowerInvariant()
+    if ($diagnostic -match 'permission denied|authentication failed|no supported authentication') {
+        return [pscustomobject]@{ Kind = 'authentication-required'; Message = 'SSH authentication is required.' }
+    }
+    if ($diagnostic -match 'host key verification failed|remote host identification has changed') {
+        return [pscustomobject]@{ Kind = 'host-key'; Message = 'SSH host-key verification failed.' }
+    }
+    if ($diagnostic -match 'timed out|connection refused|no route to host|could not resolve|name or service not known|network is unreachable') {
+        return [pscustomobject]@{ Kind = 'unreachable'; Message = 'The saved Proxmox server is unreachable over SSH.' }
+    }
+    return [pscustomobject]@{ Kind = 'connection-failed'; Message = 'The Proxmox SSH command did not complete.' }
+}
+
+function Get-PmxManagementVmAgentFailure {
+    param($Run)
+
+    $diagnostic = "$($Run.Error)".ToLowerInvariant()
+    if ($diagnostic -match 'timed out|timeout') {
+        return [pscustomobject]@{ Kind = 'timeout'; Message = 'The VM agent request timed out.' }
+    }
+    if ($diagnostic -match 'not supported|unsupported|unknown command|not been implemented') {
+        return [pscustomobject]@{ Kind = 'unsupported'; Message = 'VM agent network reporting is unsupported.' }
+    }
+    if ($diagnostic -match 'guest agent is not running|qemu guest agent is not running|guest-agent.*not running|not connected') {
+        return [pscustomobject]@{ Kind = 'agent-unavailable'; Message = 'The VM agent is unavailable.' }
+    }
+    return $null
 }
 
 function Invoke-PmxManagementNative {
@@ -460,8 +504,24 @@ function Invoke-ProxmoxManagementQuery {
 
     $run = Invoke-PmxManagementNative $resolved.Data $tokens.Tokens
     if (-not $run.Success) {
+        if ($resolved.Data.Transport -eq 'ssh') {
+            $failure = Get-PmxManagementRemoteFailure $run
+            if ($failure.Kind -ne 'connection-failed') {
+                return New-PmxManagementResult $false $null $failure.Message $run.ExitCode $run.NativeCommand $failure.Kind
+            }
+        }
+        if ($Operation.ToLowerInvariant() -eq 'vm-guest-network') {
+            $agentFailure = Get-PmxManagementVmAgentFailure $run
+            if ($agentFailure) {
+                return New-PmxManagementResult $false $null $agentFailure.Message $run.ExitCode $run.NativeCommand $agentFailure.Kind
+            }
+        }
+        if ($resolved.Data.Transport -eq 'ssh') {
+            $failure = Get-PmxManagementRemoteFailure $run
+            return New-PmxManagementResult $false $null $failure.Message $run.ExitCode $run.NativeCommand $failure.Kind
+        }
         $message = if ($run.Error) { $run.Error } else { "Proxmox query exited with code $($run.ExitCode)." }
-        return New-PmxManagementResult $false $null $message $run.ExitCode $run.NativeCommand
+        return New-PmxManagementResult $false $null $message $run.ExitCode $run.NativeCommand 'command-failed'
     }
     $json = $run.StdOut -join [Environment]::NewLine
     if (-not $json) {
@@ -472,7 +532,8 @@ function Invoke-ProxmoxManagementQuery {
     } catch {
         return New-PmxManagementResult $false $null 'Proxmox returned malformed JSON.' $run.ExitCode $run.NativeCommand
     }
-    return New-PmxManagementResult $true $data ($run.StdErr -join [Environment]::NewLine) $run.ExitCode $run.NativeCommand
+    $warning = if ($resolved.Data.Transport -eq 'ssh') { '' } else { $run.StdErr -join [Environment]::NewLine }
+    return New-PmxManagementResult $true $data $warning $run.ExitCode $run.NativeCommand
 }
 
 function Invoke-ProxmoxManagementChange {
@@ -494,8 +555,13 @@ function Invoke-ProxmoxManagementChange {
 
     $run = Invoke-PmxManagementNative $resolved.Data $tokens.Tokens
     if (-not $run.Success) {
+        if ($resolved.Data.Transport -eq 'ssh') {
+            $failure = Get-PmxManagementRemoteFailure $run
+            return New-PmxManagementResult $false $null $failure.Message $run.ExitCode $run.NativeCommand $failure.Kind
+        }
         $message = if ($run.Error) { $run.Error } else { "Proxmox change exited with code $($run.ExitCode)." }
-        return New-PmxManagementResult $false $null $message $run.ExitCode $run.NativeCommand
+        return New-PmxManagementResult $false $null $message $run.ExitCode $run.NativeCommand 'command-failed'
     }
-    return New-PmxManagementResult $true @($run.StdOut) ($run.StdErr -join [Environment]::NewLine) $run.ExitCode $run.NativeCommand
+    $warning = if ($resolved.Data.Transport -eq 'ssh') { '' } else { $run.StdErr -join [Environment]::NewLine }
+    return New-PmxManagementResult $true @($run.StdOut) $warning $run.ExitCode $run.NativeCommand
 }

@@ -132,7 +132,7 @@ function Show-PmxManagedNodeStatus {
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     if ($parsed.Options.Help) { Show-PmxTopicHelp 'node status'; return }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $result = Invoke-ProxmoxManagementQuery -Operation 'node-status' -Connection $session.Connection -Parameters @{ Node = $session.Node }
     if (-not $result.Success) { Write-Host "❌ $($result.Error)" -ForegroundColor Red; return }
     $mode = Get-PmxOutputMode -Options $parsed.Options -Config $session.Config

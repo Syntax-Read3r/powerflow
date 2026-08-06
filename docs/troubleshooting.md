@@ -617,11 +617,49 @@ pmx discover
 The alias must already exist in `srv`; PMX deliberately does not store an address, password,
 token, or private-key content of its own. Use `pmx config show` to inspect the active policy.
 
+### PMX says the saved Proxmox server is not connected
+
+PMX's remote query transport is non-interactive: it can use an SSH key or agent, but it will not
+open a password prompt from a dashboard command. For a password-only server, enter the remote
+PowerFlow session first and run PMX there:
+
+```powershell
+srv proxmox
+# after the Proxmox shell opens
+pmx
+```
+
+The local message deliberately shows only the saved alias. If a native SSH diagnostic containing
+`user@host` appears from `pmx`, report it as a privacy regression.
+
+### `srv <name>` cannot open its private password prompt
+
+PowerFlow fails closed instead of falling back to OpenSSH's endpoint-bearing native prompt. On
+Windows, confirm the .NET Framework compiler and OpenSSH Client Windows feature are present. On
+Linux, confirm `/dev/tty`, `stty`, and `openssh-client` are available. No password is retained when
+the helper cannot start or authentication is cancelled.
+
 ### A PMX change is cancelled in a pipeline or CI
 
 This is intentional. Amber operations require an interactive terminal so redirected input
 cannot answer a destructive prompt. Use `--dry-run` for automation that needs to validate and
 display a plan without changing Proxmox state. There is no non-interactive force switch.
+
+### `pmx vm ip` says the VM agent is unavailable
+
+`pmx vm ip <vm>` and `pmx vm net stats <vm>` read facts reported from inside a running VM. The
+VM must be running, the Proxmox agent channel must be enabled, and the VM-agent service must be
+installed and running inside its operating system. PowerFlow does not enable or install anything
+and does not fall back to ARP, DNS, DHCP leases, bridge tables, or network scans.
+
+Configured virtual hardware remains available without the agent:
+
+```powershell
+pmx vm nic <vm>
+```
+
+Use `pmx vm ip <vm> --show-native` only when troubleshooting the translated read. Normal output,
+JSON, and help deliberately use adapter/address language and do not expose the native command.
 
 ### VM name is ambiguous
 
@@ -632,8 +670,31 @@ VMID before a change.
 ### A disk will not grow
 
 `pmx disk grow` takes the requested final size and refuses shrinking, an unknown disk slot, a
-missing config digest, or changed VM state. After a successful virtual-disk resize, expand the
-partition/filesystem inside the guest separately; PMX does not guess the guest OS or layout.
+missing config digest, or changed VM state. Use the shortest form when exactly one eligible disk
+exists:
+
+```powershell
+pmx disk grow docker-host 100GiB --dry-run
+```
+
+If the VM has multiple eligible disks, PMX lists their slot, role, IEC size, storage, and backing
+and stops without invoking Proxmox. Retry explicitly:
+
+```powershell
+pmx disk grow docker-host scsi1 3TiB --dry-run
+pmx disk grow --vm docker-host --disk scsi1 --to 3TiB --dry-run
+```
+
+`Current`, `Target`, and `Growth` come from exact configured bytes. `Available` is the current
+Proxmox storage API value, not a promise about thin-pool allocation. After a successful resize,
+expand the partition/filesystem inside the guest separately; PMX does not guess its layout.
+
+### A clone preview lists more than one storage pool
+
+That is expected when the template's disks span storage pools. PMX uses `same-as-source`
+placement because this command has no target-storage selector: each cloned disk stays on its
+source pool. `Provisioned capacity` is configured virtual capacity, not currently allocated
+thin-pool blocks. PMX verifies each target pool independently.
 
 ### Linux install reports `starship failed`
 

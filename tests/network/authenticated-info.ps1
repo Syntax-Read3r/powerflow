@@ -18,16 +18,23 @@ try {
 
     $script:sshExit = 255
     $script:sshCalls = @()
-    function ssh {
-        $script:sshCalls += (, @($args))
-        $global:LASTEXITCODE = $script:sshExit
-        if ($script:sshExit -ne 0) { Write-Output 'fixture connection failed' }
+    $script:sshResult = $null
+    function Invoke-PFPrivateSshSession {
+        param([string]$Name, $Server, [switch]$AuthenticationOnly)
+        $script:sshCalls += [pscustomobject]@{ Name = $Name; Server = $Server; AuthenticationOnly = [bool]$AuthenticationOnly }
+        $script:sshResult = [pscustomobject]@{
+            Success = ($script:sshExit -eq 0)
+            FailureKind = if ($script:sshExit -eq 0) { '' } else { 'connection-failed' }
+            ExitCode = $script:sshExit
+        }
     }
+    function Get-PFPrivateSshSessionResult { return $script:sshResult }
 
     $failedText = ConvertTo-TestText @(& { srv lab info } 6>&1)
     Assert-PrivateEndpointAbsent $failedText
     Assert-True ($failedText -match 'details remain hidden') 'failed authentication says details remain hidden'
-    Assert-True (($script:sshCalls[0] -join '|') -eq '-p|22445|-o|LogLevel=ERROR|-o|RequestTTY=no|fixture-admin@endpoint.example.invalid|exit 0') 'authentication probe uses fixed native tokens'
+    Assert-True ($script:sshCalls[0].Name -eq 'lab' -and $script:sshCalls[0].AuthenticationOnly -and
+        $script:sshCalls[0].Server.user -eq 'fixture-admin') 'authentication probe crosses the private adapter boundary'
 
     $script:sshExit = 0
     $successText = ConvertTo-TestText @(& { srv lab info } 6>&1)

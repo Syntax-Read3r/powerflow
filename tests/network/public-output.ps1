@@ -21,11 +21,14 @@ try {
         $map=@{}; foreach($name in $Servers.Keys){$map[$name]='online'}; return $map
     }
     $script:sshCalls = @()
-    function ssh {
-        $script:sshCalls += (, @($args))
-        $global:LASTEXITCODE = 0
-        Write-Output 'REMOTE SESSION READY'
+    $script:sshResult = $null
+    function Invoke-PFPrivateSshSession {
+        param([string]$Name, $Server, [switch]$AuthenticationOnly)
+        $script:sshCalls += [pscustomobject]@{ Name = $Name; Server = $Server; AuthenticationOnly = [bool]$AuthenticationOnly }
+        if (-not $AuthenticationOnly) { Write-Output 'REMOTE SESSION READY' }
+        $script:sshResult = [pscustomobject]@{ Success = $true; FailureKind = ''; ExitCode = 0 }
     }
+    function Get-PFPrivateSshSessionResult { return $script:sshResult }
 
     $listText = ConvertTo-TestText @(& { srv list } 6>&1)
     Assert-PrivateEndpointAbsent $listText
@@ -38,7 +41,9 @@ try {
     $connectText = ConvertTo-TestText @(& { srv lab } 6>&1)
     Assert-PrivateEndpointAbsent $connectText
     Assert-True ($script:sshCalls.Count -eq 1) 'direct alias connects once'
-    Assert-True (($script:sshCalls[0] -join '|') -eq '-p|22445|fixture-admin@endpoint.example.invalid') 'native SSH receives exact stored target tokens'
+    Assert-True ($script:sshCalls[0].Name -eq 'lab' -and $script:sshCalls[0].Server.user -eq 'fixture-admin' -and
+        $script:sshCalls[0].Server.host -eq 'endpoint.example.invalid' -and $script:sshCalls[0].Server.port -eq 22445) `
+        'private adapter receives the alias and opaque saved server record'
     Assert-True ($connectText -match 'REMOTE SESSION READY') 'interactive SSH output remains attached instead of being discarded'
 
     $duplicateText = ConvertTo-TestText @(& { srv add lab replacement@replacement.example.invalid:22999 } 6>&1)

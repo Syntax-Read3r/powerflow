@@ -66,10 +66,11 @@
   addresses, or ports
 - **Authenticated detail view** - `srv <name> info` performs a non-mutating SSH authentication
   probe and reveals the saved endpoint only after it succeeds
-- **No credential handling** - Password entry stays inside native OpenSSH; PowerFlow neither
-  captures nor stores it, and failed or cancelled authentication keeps details hidden
-- **Unchanged native transport** - Direct connections still pass the exact saved port and
-  `user@host` arguments to `ssh`, without redefining or shadowing the client
+- **Private password prompt** - A platform askpass helper shows only `Password for '<alias>':`
+  and sends hidden input directly to OpenSSH. It never persists, logs, echoes, exports, or places
+  the password on a command line
+- **Attached native transport** - Successful direct sessions remain attached to the terminal;
+  failed and cancelled connections return categorized alias-only messages
 
 ### ⚙️ System Integration
 
@@ -84,18 +85,37 @@
   alias from Windows/Linux; PMX stores no credentials
 - **Structured discovery** - Nodes, VM-image storage, bridges, templates, VMs, VMIDs, virtual
   disks, power state, and snapshots come from allow-listed `pvesh` JSON queries
+- **Source-separated VM networking** - `pmx vm network <vm>` combines configured virtual
+  adapters with VM-reported interfaces and addresses without equating `net0` with `ens18`;
+  records match only through a unique normalized MAC address
+- **Goal-based network conveniences** - `pmx vm nic <vm>` shows adapters, `pmx vm ip <vm>`
+  shows addresses, and `pmx vm net stats <vm>` shows exact traffic counters; `-t`, `-j`, `-4`,
+  and `-6` provide strict short forms
+- **Honest address inference** - Primary candidates are ranked by family, scope, and a unique
+  adapter match, but never labelled as an SSH endpoint or claimed reachable
 - **Guarded changes** - Full template clones, CPU/memory changes, grow-only VM disks, start,
   graceful shutdown, and snapshot creation preview and require interactive confirmation
+- **Exact disk contracts** - Virtual disks retain configured byte counts, display unambiguous
+  IEC units, and derive boot/data roles from Proxmox boot configuration
+- **Concise, fail-closed growth** - `pmx disk grow <vm> <size>` selects automatically only for
+  a single eligible disk; multi-disk VMs require an explicit slot and receive copy-ready retries
+- **Visible clone placement** - Full-clone previews show source and target storage, configured
+  provisioned capacity, and current availability for every virtual disk
 - **State-race protection** - PMX re-reads identity/config after confirmation, uses Proxmox
   config digests where supported, and verifies the postcondition
 - **Executable help** - `pmx help` lists every routed operation with required arguments;
   `pmx help vm`, `pmx help disk`, `pmx help snapshot`, and action topics provide purpose,
   syntax, examples, native equivalents, and safety boundaries
 - **Educational output** - `--explain`, `--show-native`, `--dry-run`, `--json`, and
-  human-readable tables reveal what PowerFlow is doing
+  human-readable tables reveal what PowerFlow is doing without exposing the saved SSH endpoint
+- **Automation-safe clone JSON** - Clone output separates the requested plan from the verified
+  result and retains exact per-disk byte/storage fields
+- **Private disconnected state** - Remote SSH failures become alias-only state and actionable
+  `srv <alias>` guidance; native authentication diagnostics stay behind the adapter boundary
 - **Physical-disk evidence** - Local Linux views retain SMART, stable IDs, counterfeit-drive
   signals, RMA evidence bundles, and the destructive F3 safety gate
-- **Modular design** - Parsing, configuration, host views, physical disks, evidence, VM reads,
+- **Modular design** - Parsing, connection state, configuration, host views, physical disks,
+  evidence, VM reads, network configuration/runtime models, network rendering/orchestration,
   VM changes, snapshots, help, routing, and OS execution are separate components/adapters
 
 ### 🖥️ Terminal Tab Management

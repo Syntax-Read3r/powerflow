@@ -63,16 +63,17 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 
 ### 🌐 Servers by Name, Not by IP
 
-- **`srv proxmox`** connects using a saved alias without PowerFlow repeating its username,
-  address, or port in the normal UI
+- **`srv proxmox`** connects using a saved alias without repeating its username, address, or
+  port in the UI—including the password prompt and failed-authentication message
 - **Alias-only live status**: bare `srv` and `srv list` show the saved name plus `✅ online`,
   `🟡 host up, ssh not answering`, or `⛔ offline · last seen Jul 17`
-- **Authenticated details**: `srv proxmox info` asks OpenSSH to authenticate first and reveals
-  the stored endpoint only when authentication succeeds; PowerFlow never reads the password
+- **Authenticated details**: `srv proxmox info` authenticates first and reveals the stored
+  endpoint only when authentication succeeds
 - **Tested before saving**: `srv add` probes the SSH port first, catching typo'd IPs
 
-> OpenSSH owns the native credential prompt and may display its own `user@host` target while
-> asking for a password. PowerFlow does not intercept or store that credential.
+> A short-lived platform helper displays `Password for 'proxmox':` and passes the hidden input
+> directly to OpenSSH's askpass pipe. The password is never stored, logged, echoed, placed in an
+> environment variable, or added to a process command line.
 
 ### 🖥️ Machine Health at a Glance
 
@@ -96,6 +97,11 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 - **VM management from either side**: use local transport on Proxmox or a saved `srv` SSH
   alias from Windows/Linux for VM discovery, full clones, CPU/memory changes, disk growth,
   lifecycle actions, and snapshots
+- **Private connection state**: unavailable password-only remote management shows the saved alias
+  and directs you to `srv proxmox`; raw `user@host` SSH errors never reach the PMX dashboard
+- **VM networking in human terms**: `pmx vm network`, `pmx vm nic`, and `pmx vm ip` separate
+  configured adapters from addresses reported inside the VM; native Proxmox vocabulary stays
+  hidden unless you ask for `--show-native`
 - **Safe mutations**: every change previews, confirms in a real terminal, re-reads state,
   executes an allow-listed `qm` operation, verifies the result, and writes a secret-free audit
   record. `--dry-run` stops before execution
@@ -518,10 +524,18 @@ Proxmox node. VM management can run there too, or over SSH from Windows/Linux th
 | `pmx discover` / `pmx node status` / `pmx storage list` | Discover nodes, bridges, VM storage, templates and capacity |
 | `pmx vm list` / `pmx vm next-id` | Read VM inventory and authoritative VMIDs |
 | `pmx vm show <vm>` / `pmx vm status <vm>` | Inspect one VM by name or VMID |
-| `pmx vm clone --source <vm> --new-vmid auto --name <name> --dry-run` | Validate and preview an independent full clone |
+| `pmx vm network <vm>` / `pmx vm net <vm>` | Combine configured adapters, VM-reported addresses, agent state, and an inferred primary candidate |
+| `pmx vm network adapters <vm>` / `pmx vm nic <vm>` | Show virtual adapter model, bridge, MAC, firewall, VLAN, and link configuration |
+| `pmx vm network addresses <vm>` / `pmx vm ip <vm>` | Show addresses reported from inside a running VM; use `-4` or `-6` to filter |
+| `pmx vm network stats <vm>` / `pmx vm net stats <vm>` | Show exact receive/transmit counters reported by the VM agent |
+| `pmx vm network list` / `pmx vm net list` | Summarize adapters, addresses, and agent state across QEMU VMs |
+| `pmx vm clone --source <vm> --new-vmid auto --name <name> --dry-run` | Preview a full clone with per-disk storage placement and capacity |
 | `pmx vm cpu set <vm> --cores <number>` | Guarded CPU allocation change |
 | `pmx vm memory set <vm> --size <size>` | Guarded memory allocation change |
-| `pmx disk list --vm <vm>` / `pmx disk grow --vm <vm> --disk <slot> --to <size>` | Inspect or safely grow virtual disks; never shrink |
+| `pmx disk list --vm <vm>` | List IEC size, boot/data role, storage, and backing identity |
+| `pmx disk grow <vm> <size>` | Grow automatically only when exactly one eligible disk exists |
+| `pmx disk grow <vm> <slot> <size>` | Grow an explicitly selected disk to a final size; never shrink |
+| `pmx disk grow --vm <vm> --disk <slot> --to <size>` | Script-friendly explicit disk growth |
 | `pmx vm start <vm>` / `pmx vm shutdown <vm>` | Guarded start and graceful shutdown |
 | `pmx snapshot list --vm <vm>` / `pmx snapshot create --vm <vm> --name <name>` | Inspect and create named VM snapshots |
 | `pmx disks`              | Every physical disk — model, size, SSD/HDD, what is using it |
@@ -531,10 +545,15 @@ Proxmox node. VM management can run there too, or over SSH from Windows/Linux th
 | `pmx disk sdg report -Write` | Save the evidence bundle (report, raw SMART, kernel log, IDs) for an RMA |
 | `pmx pools` / `pmx guests` / `pmx updates` | ZFS pools · VMs and containers · pending updates |
 
-Run `pmx help` for the full surface or a topic such as `pmx help disk grow`. Mutations accept
-`--dry-run` and `--show-native`; read views accept `--json` or `--table` where documented.
+Run `pmx help` for the full surface or a topic such as `pmx help vm network`. Mutations accept
+`--dry-run` and `--show-native`; network reads also accept `-j`/`-t` and address-family
+shortcuts `-4`/`-6` where documented.
 Commands already under `pmx vm` take the VM name or VMID directly; `--vm` is reserved for
 cross-resource commands such as `pmx disk` and `pmx snapshot`.
+
+PMX uses `KiB`/`MiB`/`GiB`/`TiB` for binary sizes. Resize arithmetic always uses exact
+configured bytes, never the decorative table. If a VM has multiple eligible disks, the concise
+growth form lists them and stops; it never guesses which disk is the system disk.
 
 ### Appearance & Login
 

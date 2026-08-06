@@ -5,8 +5,8 @@
 # File     : components/proxmox/vm-change.ps1
 # Purpose  : Preview, confirm, revalidate, execute, and verify approved VM changes
 # Functions: Invoke-PmxVmClone, Invoke-PmxVmCpuSet, Invoke-PmxVmMemorySet,
-#            Invoke-PmxVmDiskGrow, Invoke-PmxVmStart, Invoke-PmxVmShutdown
-# Depends  : shared.ps1, config.ps1, vm-read.ps1, management adapter
+#            Invoke-PmxVmStart, Invoke-PmxVmShutdown
+# Depends  : shared.ps1, config.ps1, vm-read.ps1, clone-plan.ps1, management adapter
 # ==============================================================================
 
 function Get-PmxDesiredVmConfig {
@@ -69,7 +69,7 @@ function Invoke-PmxAmberMutation {
     if ($dryRun) {
         Write-PmxAuditRecord -Operation $Operation -Target $Session.Connection.Label -Outcome 'dry-run' `
             -Message 'validated preview only' -VmId $VmId -DryRun -Config $Session.Config
-        return [pscustomobject]@{ Success = $true; Executed = $false; DryRun = $true; Error = '' }
+        return [pscustomobject]@{ Success = $true; Executed = $false; DryRun = $true; Error = ''; Verification = $null }
     }
     if (-not $confirmed) {
         Write-Host '  ⛔ Cancelled — no Proxmox state was changed.' -ForegroundColor Yellow
@@ -110,45 +110,7 @@ function Invoke-PmxAmberMutation {
     Write-Host "✅ $($verified.Message)" -ForegroundColor Green
     Write-PmxAuditRecord -Operation $Operation -Target $Session.Connection.Label -Outcome 'verified' `
         -Message $verified.Message -VmId $VmId -Config $Session.Config
-    return [pscustomobject]@{ Success = $true; Executed = $true; Error = ''; Result = $result }
-}
-
-function Get-PmxCloneCapacityCheck {
-    param(
-        [Parameter(Mandatory)]$Session,
-        [Parameter(Mandatory)]$SourceDetails
-    )
-
-    if (-not $SourceDetails.Disks.Count) {
-        return [pscustomobject]@{ Success = $false; Error = 'the source has no sized VM disk to clone' }
-    }
-    $storageNode = if ($SourceDetails.Vm -and $SourceDetails.Vm.Node) { "$($SourceDetails.Vm.Node)" } else { "$($Session.Node)" }
-    $storageResult = Invoke-ProxmoxManagementQuery -Operation 'storage-list' -Connection $Session.Connection `
-        -Parameters @{ Node = $storageNode }
-    if (-not $storageResult.Success) {
-        return [pscustomobject]@{ Success = $false; Error = "could not verify target storage: $($storageResult.Error)" }
-    }
-
-    foreach ($group in @($SourceDetails.Disks | Group-Object Storage)) {
-        if (-not $group.Name -or @($group.Group | Where-Object SizeBytes -le 0).Count) {
-            return [pscustomobject]@{ Success = $false; Error = 'could not determine every source disk size and storage' }
-        }
-        $row = @($storageResult.Data | Where-Object { "$(Get-PmxObjectProperty $_ 'storage' '')" -ceq "$($group.Name)" }) | Select-Object -First 1
-        if (-not $row) {
-            return [pscustomobject]@{ Success = $false; Error = "source storage '$($group.Name)' is not active for VM images" }
-        }
-        $enabled = (Get-PmxObjectProperty $row 'enabled' 1) -eq 1
-        $active = (Get-PmxObjectProperty $row 'active' 1) -eq 1
-        if (-not $enabled -or -not $active) {
-            return [pscustomobject]@{ Success = $false; Error = "source storage '$($group.Name)' is not active" }
-        }
-        $available = [long](Get-PmxObjectProperty $row 'avail' 0)
-        $needed = [long](($group.Group | Measure-Object SizeBytes -Sum).Sum)
-        if ($available -lt $needed) {
-            return [pscustomobject]@{ Success = $false; Error = "storage '$($group.Name)' has $(Format-PmxBytes $available) available; a full clone needs at least $(Format-PmxBytes $needed)" }
-        }
-    }
-    return [pscustomobject]@{ Success = $true; Error = '' }
+    return [pscustomobject]@{ Success = $true; Executed = $true; Error = ''; Result = $result; Verification = $verified }
 }
 
 function Invoke-PmxVmClone {
@@ -185,6 +147,9 @@ function Invoke-PmxVmClone {
 
     $session = Get-PmxManagementSession
     if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    $mode = Get-PmxOutputMode -Options $parsed.Options -Config $session.Config
+    if (-not $mode.Success) { Write-Host "❌ $($mode.Error)" -ForegroundColor Red; return }
+    $jsonMode = $mode.Mode -eq 'json'
     $source = Resolve-PmxManagedVm -Selector "$($parsed.Options.Source)" -Session $session
     if (-not $source.Success) { Write-Host "❌ $($source.Error)" -ForegroundColor Red; return }
     if (-not $source.Vm.Template) { Write-Host '❌ Clone source must be a Proxmox template.' -ForegroundColor Red; return }
@@ -212,8 +177,9 @@ function Invoke-PmxVmClone {
 
     $sourceDetails = Get-PmxManagedVmDetails -Session $session -Vm $source.Vm
     if (-not $sourceDetails.Success) { Write-Host "❌ $($sourceDetails.Error)" -ForegroundColor Red; return }
-    $capacity = Get-PmxCloneCapacityCheck -Session $session -SourceDetails $sourceDetails
-    if (-not $capacity.Success) { Write-Host "❌ $($capacity.Error)" -ForegroundColor Red; return }
+    $planned = New-PmxClonePlan -Session $session -SourceDetails $sourceDetails -TargetVmId $newVmid -TargetName "$($parsed.Options.Name)"
+    if (-not $planned.Success) { Write-Host "❌ $($planned.Error)" -ForegroundColor Red; return }
+    $clonePlan = $planned.Plan
 
     $parameters = @{ SourceVmid = $source.Vm.VmId; NewVmid = $newVmid; Name = "$($parsed.Options.Name)"; Full = $true }
     $sourceSnapshot = $source.Vm
@@ -232,8 +198,11 @@ function Invoke-PmxVmClone {
         if (-not $stillFree.Success) { return [pscustomobject]@{ Success = $false; Error = 'the target VMID became unavailable after confirmation' } }
         $freshDetails = Get-PmxManagedVmDetails -Session $session -Vm $freshSource.Vm
         if (-not $freshDetails.Success) { return [pscustomobject]@{ Success = $false; Error = $freshDetails.Error } }
-        $freshCapacity = Get-PmxCloneCapacityCheck -Session $session -SourceDetails $freshDetails
-        if (-not $freshCapacity.Success) { return $freshCapacity }
+        $freshPlanResult = New-PmxClonePlan -Session $session -SourceDetails $freshDetails -TargetVmId $newVmid -TargetName "$($parsed.Options.Name)"
+        if (-not $freshPlanResult.Success) { return $freshPlanResult }
+        if (-not (Test-PmxClonePlanIdentity -Expected $clonePlan -Actual $freshPlanResult.Plan)) {
+            return [pscustomobject]@{ Success = $false; Error = 'clone disk placement, size, or storage capacity changed after confirmation' }
+        }
         return [pscustomobject]@{ Success = $true; Error = ''; Parameters = $parameters }
     }.GetNewClosure()
     $verify = {
@@ -241,7 +210,7 @@ function Invoke-PmxVmClone {
         if (-not $target.Success -or -not [string]::Equals($target.Vm.Name, "$($parsed.Options.Name)", [StringComparison]::Ordinal)) {
             return [pscustomobject]@{ Success = $false; Error = "VMID $newVmid was not returned with the expected name" }
         }
-        return [pscustomobject]@{ Success = $true; Error = ''; Message = "Cloned template $($sourceSnapshot.VmId) to VM $newVmid ($($parsed.Options.Name))." }
+        return [pscustomobject]@{ Success = $true; Error = ''; Message = "Cloned template $($sourceSnapshot.VmId) to VM $newVmid ($($parsed.Options.Name))."; Data = $target.Vm }
     }.GetNewClosure()
     $fields = [ordered]@{
         'Source VMID' = $source.Vm.VmId
@@ -250,9 +219,21 @@ function Invoke-PmxVmClone {
         'New VMID'    = $newVmid
         'New name'    = $parsed.Options.Name
         'Clone type'  = 'Full, independent copy'
+        'Placement'   = $clonePlan.PlacementPolicy
+        'Provisioned capacity' = $clonePlan.ProvisionedDisplay
     }
-    $null = Invoke-PmxAmberMutation -Session $session -Operation 'vm-clone' -Parameters $parameters `
-        -Title 'CLONE VM' -Fields $fields -Options $parsed.Options -Revalidate $revalidate -Verify $verify -VmId "$newVmid"
+    $warnings = @()
+    if ($session.Config.Explain -or $parsed.Options.ContainsKey('Explain')) {
+        $warnings += 'Placement is same-as-source for every disk; no target-storage override is requested.'
+        $warnings += 'Provisioned capacity is configured virtual capacity, not allocated thin-pool blocks.'
+    }
+    if (-not $jsonMode) { Show-PmxClonePlacement -Plan $clonePlan }
+    $mutation = Invoke-PmxAmberMutation -Session $session -Operation 'vm-clone' -Parameters $parameters `
+        -Title 'CLONE VM' -Fields $fields -Warnings $warnings -Options $parsed.Options -Revalidate $revalidate -Verify $verify -VmId "$newVmid"
+    if ($jsonMode -and $mutation) {
+        $verifiedTarget = if ($mutation.Verification -and $mutation.Verification.Data) { $mutation.Verification.Data } else { $null }
+        Write-PmxJson (ConvertTo-PmxCloneContract -Plan $clonePlan -Mutation $mutation -VerifiedTarget $verifiedTarget)
+    }
 }
 
 function Get-PmxSetInvocation {
@@ -370,60 +351,6 @@ function Invoke-PmxVmMemorySet {
     $fields = [ordered]@{ VM = "$($snapshot.VmId) $($snapshot.Name)"; Current = "$(Format-PmxBytes ($current * 1MB)) ($current MiB)"; Requested = "$($size.Canonical) ($($size.MiB) MiB)" }
     $null = Invoke-PmxAmberMutation -Session $session -Operation 'vm-set-memory' -Parameters $parameters `
         -Title 'CHANGE VM MEMORY' -Fields $fields -Warnings $warnings -Options $parsed.Options -Revalidate $revalidate -Verify $verify -VmId "$($snapshot.VmId)"
-}
-
-function Invoke-PmxVmDiskGrow {
-    param([object[]]$Arguments = @())
-
-    if (@($Arguments | Where-Object { "$_" -eq '--help' }).Count) { Show-PmxTopicHelp 'disk grow'; return }
-    $parsed = ConvertFrom-PmxArguments -Arguments $Arguments `
-        -ValueOptions @{ 'vm' = 'Vm'; 'disk' = 'Disk'; 'to' = 'Target' } `
-        -SwitchOptions (Get-PmxGlobalSwitchMap) -MaxPositionals 0
-    if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
-    foreach ($required in @('Vm', 'Disk', 'Target')) { if (-not $parsed.Options.ContainsKey($required)) { Write-Host "❌ --vm, --disk, and --to are required." -ForegroundColor Red; return } }
-    if ("$($parsed.Options.Disk)" -cnotmatch '^(ide|sata|scsi|virtio)[0-9]+$') { Write-Host '❌ --disk must name an exact Proxmox VM disk such as scsi0.' -ForegroundColor Red; return }
-    $target = ConvertFrom-PmxSize -Value "$($parsed.Options.Target)" -Kind disk
-    if (-not $target.Success) { Write-Host "❌ $($target.Error)" -ForegroundColor Red; return }
-    $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
-    $resolved = Resolve-PmxManagedVm -Selector "$($parsed.Options.Vm)" -Session $session
-    if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
-    if ($resolved.Vm.Template) { Write-Host '❌ Clone the template before growing a virtual disk.' -ForegroundColor Red; return }
-    $desired = Get-PmxDesiredVmConfig -Session $session -Vm $resolved.Vm
-    if (-not $desired.Success) { Write-Host "❌ $($desired.Error)" -ForegroundColor Red; return }
-    $disks = @(Get-PmxVirtualDisksFromConfig -Config $desired.Config)
-    $disk = @($disks | Where-Object Disk -ceq "$($parsed.Options.Disk)")
-    if ($disk.Count -ne 1 -or $disk[0].SizeBytes -le 0) { Write-Host "❌ Disk '$($parsed.Options.Disk)' was not found with a trustworthy size." -ForegroundColor Red; return }
-    $disk = $disk[0]
-    if ($target.Bytes -lt $disk.SizeBytes) { Write-Host '❌ Virtual disks cannot be shrunk; choose a target larger than the current size.' -ForegroundColor Red; return }
-    if ($target.Bytes -eq $disk.SizeBytes) { Write-Host "✅ $($disk.Disk) is already $($target.Canonical); nothing changed." -ForegroundColor Green; return }
-    $delta = $target.Bytes - $disk.SizeBytes
-    if ($delta % 1MB -ne 0) { Write-Host '❌ The requested growth cannot be represented exactly in MiB.' -ForegroundColor Red; return }
-    $nativeDelta = if ($delta % 1GB -eq 0) { "+$([long]($delta / 1GB))G" } else { "+$([long]($delta / 1MB))M" }
-    $digest = Get-PmxConfigDigest $desired.Config
-    if (-not $digest) { Write-Host '❌ Proxmox did not return a configuration digest; refusing a race-prone resize.' -ForegroundColor Red; return }
-    $parameters = @{ Vmid = $resolved.Vm.VmId; Disk = $disk.Disk; Size = $nativeDelta; Digest = $digest }
-    $snapshot = $resolved.Vm; $backing = $disk.Backing; $currentBytes = $disk.SizeBytes
-    $revalidate = {
-        $freshVm = Resolve-PmxManagedVm -Selector "$($snapshot.VmId)" -Session $session
-        if (-not $freshVm.Success -or -not (Test-PmxVmSnapshotIdentity $snapshot $freshVm.Vm)) { return [pscustomobject]@{ Success = $false; Error = 'VM identity changed after confirmation' } }
-        $freshConfig = Get-PmxDesiredVmConfig -Session $session -Vm $freshVm.Vm
-        if (-not $freshConfig.Success) { return [pscustomobject]@{ Success = $false; Error = $freshConfig.Error } }
-        $freshDisk = @(Get-PmxVirtualDisksFromConfig -Config $freshConfig.Config | Where-Object Disk -ceq $disk.Disk)
-        $freshDigest = Get-PmxConfigDigest $freshConfig.Config
-        if ($freshDisk.Count -ne 1 -or $freshDisk[0].SizeBytes -ne $currentBytes -or $freshDisk[0].Backing -cne $backing -or $freshDigest -cne $digest) { return [pscustomobject]@{ Success = $false; Error = 'VM disk identity, size, or configuration changed after confirmation' } }
-        return [pscustomobject]@{ Success = $true; Error = ''; Parameters = @{ Vmid = $snapshot.VmId; Disk = $disk.Disk; Size = $nativeDelta; Digest = $freshDigest } }
-    }.GetNewClosure()
-    $verify = {
-        $freshConfig = Get-PmxDesiredVmConfig -Session $session -Vm $snapshot
-        $freshDisk = if ($freshConfig.Success) { @(Get-PmxVirtualDisksFromConfig -Config $freshConfig.Config | Where-Object Disk -ceq $disk.Disk) } else { @() }
-        if ($freshDisk.Count -ne 1 -or $freshDisk[0].SizeBytes -lt $target.Bytes) { return [pscustomobject]@{ Success = $false; Error = 'the target disk size was not returned' } }
-        return [pscustomobject]@{ Success = $true; Error = ''; Message = "VM $($snapshot.VmId) disk $($disk.Disk) grew to $(Format-PmxBytes $freshDisk[0].SizeBytes)." }
-    }.GetNewClosure()
-    $fields = [ordered]@{ VM = "$($snapshot.VmId) $($snapshot.Name)"; Disk = $disk.Disk; Current = Format-PmxBytes $disk.SizeBytes; Target = $target.Canonical; Growth = Format-PmxBytes $delta }
-    $warnings = @('This enlarges the virtual disk only.', 'It does not enlarge the partition or filesystem inside the guest.')
-    $null = Invoke-PmxAmberMutation -Session $session -Operation 'vm-disk-grow' -Parameters $parameters `
-        -Title 'GROW VM DISK' -Fields $fields -Warnings $warnings -Options $parsed.Options -Revalidate $revalidate -Verify $verify -VmId "$($snapshot.VmId)"
 }
 
 function Get-PmxLifecycleInvocation {

@@ -9,6 +9,7 @@ function Get-PmxAdapterTokenFixture {
     $fixture['version'] = @(New-PmxManagementQueryTokens version @{}).Tokens
     $fixture['node-status'] = @(New-PmxManagementQueryTokens node-status @{ Node = 'pve1' }).Tokens
     $fixture['vm-config'] = @(New-PmxManagementQueryTokens vm-config @{ Vmid = 101; Node = 'pve1'; Current = $false }).Tokens
+    $fixture['vm-guest-network'] = @(New-PmxManagementQueryTokens vm-guest-network @{ Vmid = 101; Node = 'pve1' }).Tokens
     $fixture['snapshot-list'] = @(New-PmxManagementQueryTokens snapshot-list @{ Vmid = 101; Node = 'pve1' }).Tokens
     $fixture['clone'] = @(New-PmxManagementChangeTokens vm-clone @{ SourceVmid = 9000; NewVmid = 101; Name = 'app-01'; Full = $true }).Tokens
     $fixture['cpu'] = @(New-PmxManagementChangeTokens vm-set-cpu @{ Vmid = 101; Cores = 4; Digest = $digest }).Tokens
@@ -32,11 +33,14 @@ Assert-PmxEqual @('qm', 'disk', 'resize', '101', 'scsi0', '+16G', '--digest', ('
     'Disk-growth token sequence is incorrect.'
 Assert-PmxEqual @('pvesh', 'get', '/nodes/pve1/qemu/101/config', '--output-format', 'json') $linux['vm-config'] `
     'Desired VM config query should not include --current.'
+Assert-PmxEqual @('qm', 'guest', 'cmd', '101', 'network-get-interfaces') $linux['vm-guest-network'] `
+    'VM-agent network query token sequence is incorrect.'
 
 . $linuxPath
 foreach ($bad in @(
     (New-PmxManagementQueryTokens node-status @{ Node = 'pve1;id' }),
     (New-PmxManagementQueryTokens vm-list @{ Command = 'id' }),
+    (New-PmxManagementQueryTokens vm-guest-network @{ Vmid = '101;id'; Node = 'pve1' }),
     (New-PmxManagementChangeTokens vm-clone @{ SourceVmid = 9000; NewVmid = 101; Name = 'app;id'; Full = $true }),
     (New-PmxManagementChangeTokens vm-disk-grow @{ Vmid = 101; Disk = 'scsi0;id'; Size = '+1G' }),
     (New-PmxManagementChangeTokens snapshot-create @{ Vmid = 101; Name = "snap`nname" }),
@@ -44,4 +48,8 @@ foreach ($bad in @(
 )) {
     Assert-PmxTest (-not $bad.Success) 'Management adapter accepted an unexpected or hostile operation/value.'
 }
+$agentUnavailable = Get-PmxManagementVmAgentFailure ([pscustomobject]@{ Error = 'QEMU guest agent is not running' })
+$agentTimeout = Get-PmxManagementVmAgentFailure ([pscustomobject]@{ Error = 'guest agent command timed out' })
+Assert-PmxTest ($agentUnavailable.Kind -ceq 'agent-unavailable' -and $agentTimeout.Kind -ceq 'timeout') `
+    'VM-agent adapter failures were not categorized safely.'
 Write-PmxTestPass 'allow-listed local/SSH adapter token contract and hostile-input rejection'

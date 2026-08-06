@@ -3,16 +3,16 @@
 # ==============================================================================
 # Domain   : Network
 # File     : components/network/server-privacy.ps1
-# Purpose  : Keep saved SSH endpoints out of ordinary UI, construct native SSH
-#            tokens centrally, and reveal details only after authentication
+# Purpose  : Keep saved SSH endpoints out of ordinary UI, delegate private SSH
+#            sessions to platform adapters, and reveal details after authentication
 # Functions: Get-PFServerTarget, Format-PFServerPublicRow, Invoke-PFServerSsh,
 #            Test-PFServerInteractiveAuth, Show-PFServerAuthenticatedInfo
-# Depends  : ssh (client); Format-PFServerStatus, Get-PFServers, Save-PFServers
-#            are resolved at runtime from components/network/servers.ps1
+# Depends  : Private SSH session adapter; Format-PFServerStatus,
+#            Get-PFServers and Save-PFServers resolve at runtime from servers.ps1
 # ==============================================================================
 
-# Endpoint construction belongs in one deliberately narrow place. It feeds native
-# argv and the authenticated info view only — never a list, picker, error, or banner.
+# Endpoint display construction belongs in one deliberately narrow place. It feeds
+# only the authenticated info view — never a list, picker, error, prompt, or banner.
 function Get-PFServerTarget {
     param([Parameter(Mandatory)]$Server)
     return "$($Server.user)@$($Server.host)"
@@ -29,29 +29,17 @@ function Format-PFServerPublicRow {
 
 function Invoke-PFServerSsh {
     param(
+        [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)]$Server,
         [switch]$AuthenticationOnly
     )
 
-    $sshArgs = @('-p', "$([int]$Server.port)")
-    if ($AuthenticationOnly) {
-        # A constant remote no-op proves SSH authentication without opening a shell
-        # or changing server state. Capture connection diagnostics so a failed info
-        # request does not disclose the saved endpoint through PowerFlow's output.
-        $sshArgs += @('-o', 'LogLevel=ERROR', '-o', 'RequestTTY=no')
-    }
-    $sshArgs += (Get-PFServerTarget $Server)
-
-    if ($AuthenticationOnly) {
-        $sshArgs += 'exit 0'
-        $null = @(& ssh @sshArgs 2>&1)
-        return ($LASTEXITCODE -eq 0)
-    }
-
-    # Keep the native process attached directly to the terminal. Piping this call
-    # (even to Out-Null) redirects the remote shell's streams and can leave an
-    # apparently successful password login with no usable session.
-    & ssh @sshArgs
+    # The adapter owns OpenSSH, askpass and endpoint-bearing argv. Components receive
+    # only a categorized result, so neither native prompts nor diagnostics can leak the
+    # saved target into PowerFlow output.
+    # Do not capture this invocation: the normal native session must remain directly
+    # attached to the terminal. Its adapter result is retrieved separately afterward.
+    Invoke-PFPrivateSshSession -Name $Name -Server $Server -AuthenticationOnly:$AuthenticationOnly
 }
 
 function Test-PFServerInteractiveAuth {
@@ -65,17 +53,23 @@ function Show-PFServerAuthenticatedInfo {
         [Parameter(Mandatory)][string]$State
     )
 
-    if (-not (Get-Command ssh -ErrorAction SilentlyContinue)) {
-        Write-Host '❌ No ssh client on this machine.' -ForegroundColor Red
-        return
-    }
     if (-not (Test-PFServerInteractiveAuth)) {
         Write-Host "❌ '$Name' info requires interactive SSH authentication; endpoint kept private." -ForegroundColor Red
         return
     }
 
     Write-Host "🔐 Authenticate to view '$Name' connection details." -ForegroundColor Cyan
-    if (-not (Invoke-PFServerSsh -Server $Server -AuthenticationOnly)) {
+    Invoke-PFServerSsh -Name $Name -Server $Server -AuthenticationOnly
+    $authentication = Get-PFPrivateSshSessionResult
+    if (-not $authentication.Success) {
+        if ($authentication.FailureKind -eq 'client-missing') {
+            Write-Host '❌ No SSH client is installed; connection details remain hidden.' -ForegroundColor Red
+            return
+        }
+        if ($authentication.FailureKind -eq 'prompt-unavailable') {
+            Write-Host '❌ The private password prompt is unavailable; connection details remain hidden.' -ForegroundColor Red
+            return
+        }
         Write-Host '❌ Authentication did not succeed; connection details remain hidden.' -ForegroundColor Yellow
         return
     }

@@ -80,6 +80,57 @@ function Get-PmxHelpTopics {
         Safety = 'Green. The returned ID is not reserved until clone succeeds.'
         Story = 'Ask reception for an available room number instead of guessing.'
     }
+    $topics['vm network'] = [pscustomobject]@{
+        Purpose = 'Show configured adapters, VM-reported addresses, agent status, and a primary address candidate.'
+        Syntax = @(
+            'pmx vm network <vmid|name> [--table|-t|--json|-j] [--ipv4|-4|--ipv6|-6] [--all|--include-loopback]',
+            'Short alias: pmx vm net <vmid|name>'
+        )
+        Example = @('pmx vm network docker-host', 'pmx vm net 102 -4')
+        Native = @('PowerFlow translates this into separate configured and VM-reported reads. Add --show-native to reveal those translations.')
+        Safety = 'Green. Read only; unavailable VM-agent data never triggers a fallback scan or configuration change.'
+        Story = 'See the virtual cable and the addresses inside the VM without pretending they are the same source.'
+    }
+    $topics['vm network adapters'] = [pscustomobject]@{
+        Purpose = 'Show virtual network hardware configured for one VM.'
+        Syntax = @('pmx vm network adapters <vmid|name> [--table|-t|--json|-j]', 'Short alias: pmx vm nic <vmid|name>')
+        Example = @('pmx vm network adapters 102', 'pmx vm nic docker-host -j')
+        Native = @('Add --show-native to reveal the translated Proxmox configuration read.')
+        Safety = 'Green. Read only and available for stopped VMs and templates.'
+        Story = 'Inspect the virtual network cards, bridges, MAC addresses, firewall flags, and VLANs Proxmox has configured.'
+    }
+    $topics['vm network addresses'] = [pscustomobject]@{
+        Purpose = 'Show addresses currently reported from inside one running VM.'
+        Syntax = @(
+            'pmx vm network addresses <vmid|name> [--table|-t|--json|-j] [--ipv4|-4|--ipv6|-6] [--all|--include-loopback]',
+            'Short alias: pmx vm ip <vmid|name>'
+        )
+        Example = @('pmx vm network addresses 102', 'pmx vm ip docker-host -4')
+        Native = @('Add --show-native to reveal the translated VM-agent read.')
+        Safety = 'Green. Read only; reports agent availability and never infers addresses from ARP, DNS, DHCP, or scans.'
+        Story = 'Ask the running VM which addresses it owns, then clearly label the best primary candidate as inferred.'
+    }
+    $topics['vm network stats'] = [pscustomobject]@{
+        Purpose = 'Show receive/transmit counters reported for a running VM network interface.'
+        Syntax = @('pmx vm network stats <vmid|name> [--table|-t|--json|-j]', 'Short alias: pmx vm net stats <vmid|name>')
+        Example = @('pmx vm network stats 102', 'pmx vm net stats docker-host -j')
+        Native = @('Add --show-native to reveal the translated VM-agent read.')
+        Safety = 'Green. Read only; missing counters remain unavailable rather than becoming zero.'
+        Story = 'Read exact packet/error/drop counters and IEC byte totals without changing the VM.'
+    }
+    $topics['vm network list'] = [pscustomobject]@{
+        Purpose = 'Summarize configured adapters, primary IPv4 addresses, and agent state across QEMU VMs.'
+        Syntax = @('pmx vm network list [--table|-t|--json|-j] [--ipv4|-4|--ipv6|-6] [--all|--include-loopback]', 'Short alias: pmx vm net list')
+        Example = @('pmx vm network list', 'pmx vm net list -j')
+        Native = @('Add --show-native in JSON mode to reveal each allow-listed translated read.')
+        Safety = 'Green. Read only; one unavailable VM agent does not abort the inventory.'
+        Story = 'Scan the VM network estate while preserving a visible status for every unavailable source.'
+    }
+    $topics['vm net'] = $topics['vm network']
+    $topics['vm nic'] = $topics['vm network adapters']
+    $topics['vm ip'] = $topics['vm network addresses']
+    $topics['vm net stats'] = $topics['vm network stats']
+    $topics['vm net list'] = $topics['vm network list']
     $topics['vm clone'] = [pscustomobject]@{
         Purpose = 'Create an independent VM from an existing template.'
         Syntax = @(
@@ -89,8 +140,8 @@ function Get-PmxHelpTopics {
         )
         Example = @('pmx vm clone --source debian-base --new-vmid auto --name docker-host --full --dry-run')
         Native = @('qm clone <source-vmid> <new-vmid> --name <name> --full 1')
-        Safety = 'Amber. Validates template/state/storage, previews, confirms, revalidates, executes, and verifies.'
-        Story = 'Copy one hotel room into a new, independently owned room number.'
+        Safety = 'Amber. Shows every source-to-target storage mapping and provisioned capacity, then validates, confirms, revalidates, executes, and verifies.'
+        Story = 'Copy one hotel room into a new, independently owned room number while showing which storage pool receives each disk.'
     }
     $topics['vm cpu set'] = [pscustomobject]@{
         Purpose = 'Set cores per socket for one VM.'
@@ -130,11 +181,15 @@ function Get-PmxHelpTopics {
     }
     $topics['disk grow'] = [pscustomobject]@{
         Purpose = 'Grow a VM disk to a requested final size.'
-        Syntax = @('pmx disk grow --vm <vmid|name> --disk <slot> --to <size> [--dry-run]')
-        Example = @('pmx disk grow --vm 102 --disk scsi0 --to 100GiB --dry-run')
+        Syntax = @(
+            'pmx disk grow <vmid|name> <size> [--dry-run]',
+            'pmx disk grow <vmid|name> <slot> <size> [--dry-run]',
+            'pmx disk grow --vm <vmid|name> --disk <slot> --to <size> [--dry-run]'
+        )
+        Example = @('pmx disk grow 102 100GiB --dry-run', 'pmx disk grow docker-host scsi1 3TiB --dry-run')
         Native = @('qm disk resize <vmid> <slot> +<calculated-delta> --digest <sha1>')
-        Safety = 'Amber. Never shrinks. Growing the guest partition/filesystem remains a separate in-guest step.'
-        Story = 'State the destination size; PowerFlow calculates the safe positive growth.'
+        Safety = 'Amber. Automatic selection is allowed only when exactly one eligible disk exists; multiple disks require an explicit slot. Never shrinks. Growing the guest partition/filesystem remains a separate in-guest step.'
+        Story = 'State the final IEC size. PowerFlow reads exact configured bytes, shows current storage availability, calculates the native positive delta, and refuses to guess between disks.'
     }
     $topics['vm start'] = [pscustomobject]@{
         Purpose = 'Start a stopped VM.'
@@ -174,6 +229,10 @@ function Get-PmxHelpTopics {
             'pmx vm [list] [--json|--table]',
             'pmx vm show|status <vmid|name> [--json|--table]',
             'pmx vm next-id [--json|--table]',
+            'pmx vm network <vm> [--json|--table]                       combined adapter/address view',
+            'pmx vm network adapters|addresses|stats <vm> [--json|--table]',
+            'pmx vm network list [--json|--table]',
+            'Short aliases: pmx vm net <vm> · pmx vm nic <vm> · pmx vm ip <vm>',
             'pmx vm clone --source <template> --new-vmid <number|auto> --name <dns-name> [--dry-run]',
             'pmx vm cpu set <vm> --cores <number> [--dry-run]',
             'pmx vm memory set <vm> --size <size> [--dry-run]',
@@ -201,6 +260,8 @@ function Get-PmxHelpTopics {
             'pmx disk <device> report [-Write]     evidence report/bundle',
             'pmx disk <device> capacity-test [-Destroy]',
             'pmx disk list --vm <vmid|name> [--json|--table]',
+            'pmx disk grow <vm> <size> [--dry-run]',
+            'pmx disk grow <vm> <slot> <size> [--dry-run]',
             'pmx disk grow --vm <vm> --disk <slot> --to <size> [--dry-run]'
         )
         Example = @('pmx disk sda', 'pmx disk list --vm 101', 'pmx help disk grow')
@@ -275,13 +336,20 @@ function Get-PmxHelpOverview {
             [pscustomobject]@{ Syntax = 'pmx vm show <name|vmid> [--json|--table]'; Description = 'configuration, disks, and current status' },
             [pscustomobject]@{ Syntax = 'pmx vm status <name|vmid> [--json|--table]'; Description = 'power and runtime status' },
             [pscustomobject]@{ Syntax = 'pmx vm next-id [--json|--table]'; Description = 'next authoritative available VMID' },
+            [pscustomobject]@{ Syntax = 'pmx vm network <name|vmid> [--json|--table]'; Description = 'combined adapters, VM addresses, agent state, and primary candidate; alias: pmx vm net' },
+            [pscustomobject]@{ Syntax = 'pmx vm network adapters <name|vmid> [--json|--table]'; Description = 'configured virtual adapters; alias: pmx vm nic' },
+            [pscustomobject]@{ Syntax = 'pmx vm network addresses <name|vmid> [--json|--table]'; Description = 'VM-reported addresses; alias: pmx vm ip' },
+            [pscustomobject]@{ Syntax = 'pmx vm network stats <name|vmid> [--json|--table]'; Description = 'VM-reported traffic counters; alias: pmx vm net stats' },
+            [pscustomobject]@{ Syntax = 'pmx vm network list [--json|--table]'; Description = 'network summary across QEMU VMs; alias: pmx vm net list' },
             [pscustomobject]@{ Syntax = 'pmx disk list --vm <name|vmid> [--json|--table]'; Description = 'virtual disks attached to one VM' }
         ) },
         [pscustomobject]@{ Title = 'GUARDED VM CHANGES'; Commands = @(
-            [pscustomobject]@{ Syntax = 'pmx vm clone --source <template> --new-vmid <number|auto> --name <dns-name> [--full] [--dry-run]'; Description = 'independent full clone' },
+            [pscustomobject]@{ Syntax = 'pmx vm clone --source <template> --new-vmid <number|auto> --name <dns-name> [--full] [--dry-run]'; Description = 'full clone with per-disk storage placement and capacity' },
             [pscustomobject]@{ Syntax = 'pmx vm cpu set <name|vmid> --cores <number> [--dry-run]'; Description = 'cores per socket; alias: pmx vm set-cpu' },
             [pscustomobject]@{ Syntax = 'pmx vm memory set <name|vmid> --size <size> [--dry-run]'; Description = 'memory in MiB/GiB/TiB; alias: pmx vm set-memory' },
-            [pscustomobject]@{ Syntax = 'pmx disk grow --vm <name|vmid> --disk <slot> --to <size> [--dry-run]'; Description = 'grow virtual disk to a final size; never shrink' },
+            [pscustomobject]@{ Syntax = 'pmx disk grow <name|vmid> <size> [--dry-run]'; Description = 'grow the only eligible virtual disk to a final IEC size' },
+            [pscustomobject]@{ Syntax = 'pmx disk grow <name|vmid> <slot> <size> [--dry-run]'; Description = 'grow an explicitly selected virtual disk' },
+            [pscustomobject]@{ Syntax = 'pmx disk grow --vm <name|vmid> --disk <slot> --to <size> [--dry-run]'; Description = 'script-friendly explicit virtual-disk growth' },
             [pscustomobject]@{ Syntax = 'pmx vm start <name|vmid> [--dry-run]'; Description = 'start a stopped VM' },
             [pscustomobject]@{ Syntax = 'pmx vm shutdown <name|vmid> [--dry-run]'; Description = 'request graceful ACPI shutdown' },
             [pscustomobject]@{ Syntax = 'pmx snapshot list --vm <name|vmid> [--json|--table]'; Description = 'list real snapshots' },
@@ -343,7 +411,7 @@ function Show-PmxHelp {
         Write-Host ''
     }
     Write-Host ''
-    Write-Host '  Detailed help: pmx help vm · pmx help vm start · pmx help disk · pmx help snapshot' -ForegroundColor DarkGray
-    Write-Host '  Educational options: --explain · --dry-run · --show-native · --json · --table' -ForegroundColor DarkGray
+    Write-Host '  Detailed help: pmx help vm · pmx help vm network · pmx help disk grow · pmx help snapshot' -ForegroundColor DarkGray
+    Write-Host '  Educational options: --explain · --dry-run · --show-native · --json/-j · --table/-t' -ForegroundColor DarkGray
     Write-Host ''
 }

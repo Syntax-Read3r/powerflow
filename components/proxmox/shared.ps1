@@ -4,19 +4,30 @@
 # Domain   : Proxmox
 # File     : components/proxmox/shared.ps1
 # Purpose  : Shared formatting, strict argument parsing, and safety helpers
-# Functions: Format-PmxBytes, Format-PmxUptime, Write-PmxField, Test-PmxReady,
+# Functions: Get-PmxObjectProperty, Format-PmxBytes, Format-PmxUptime,
+#            Write-PmxField, Test-PmxReady,
 #            ConvertTo-PmxDisplayText, ConvertFrom-PmxArguments,
 #            ConvertFrom-PmxSize, ConvertFrom-PmxProxmoxSize,
 #            Get-PmxOutputMode, Confirm-PmxAmberPlan
 # Depends  : Proxmox adapter contract (platform/<os>/adapters/proxmox.ps1)
 # ==============================================================================
 
+function Get-PmxObjectProperty {
+    param($Object, [Parameter(Mandatory)][string]$Name, $Default = $null)
+    if ($null -ne $Object -and $Object.PSObject.Properties.Name -contains $Name) {
+        return $Object.$Name
+    }
+    return $Default
+}
+
 function Format-PmxBytes {
     param([long]$Bytes)
-    if ($Bytes -ge 1TB) { return ('{0:N1} TB' -f ($Bytes / 1TB)) }
-    if ($Bytes -ge 1GB) { return ('{0:N1} GB' -f ($Bytes / 1GB)) }
-    if ($Bytes -ge 1MB) { return ('{0:N0} MB' -f ($Bytes / 1MB)) }
-    if ($Bytes -ge 1KB) { return ('{0:N0} KB' -f ($Bytes / 1KB)) }
+    # PowerShell's KB/MB/GB/TB constants are powers of 1024. Label them with IEC
+    # units so the display contract says exactly which arithmetic was used.
+    if ($Bytes -ge 1TB) { return $(if ($Bytes % 1TB -eq 0) { '{0:N0} TiB' -f ($Bytes / 1TB) } else { '{0:N1} TiB' -f ($Bytes / 1TB) }) }
+    if ($Bytes -ge 1GB) { return $(if ($Bytes % 1GB -eq 0) { '{0:N0} GiB' -f ($Bytes / 1GB) } else { '{0:N1} GiB' -f ($Bytes / 1GB) }) }
+    if ($Bytes -ge 1MB) { return ('{0:N0} MiB' -f ($Bytes / 1MB)) }
+    if ($Bytes -ge 1KB) { return ('{0:N0} KiB' -f ($Bytes / 1KB)) }
     return "$Bytes B"
 }
 
@@ -208,8 +219,8 @@ function ConvertFrom-PmxProxmoxSize {
     if ($text -notmatch '^([0-9]+(?:\.[0-9]+)?)([KMGT])(?:i?B)?$') {
         return [pscustomobject]@{ Success = $false; Bytes = 0L; Error = "unrecognised Proxmox size '$Value'" }
     }
-    $amount = 0.0
-    if (-not [double]::TryParse($matches[1], [Globalization.NumberStyles]::AllowDecimalPoint,
+    $amount = [decimal]0
+    if (-not [decimal]::TryParse($matches[1], [Globalization.NumberStyles]::AllowDecimalPoint,
         [Globalization.CultureInfo]::InvariantCulture, [ref]$amount)) {
         return [pscustomobject]@{ Success = $false; Bytes = 0L; Error = "unrecognised Proxmox size '$Value'" }
     }
@@ -222,6 +233,9 @@ function ConvertFrom-PmxProxmoxSize {
     $product = [decimal]$amount * [decimal]$multiplier
     if ($product -gt [long]::MaxValue) {
         return [pscustomobject]@{ Success = $false; Bytes = 0L; Error = "Proxmox size '$Value' is too large" }
+    }
+    if ($product % 1 -ne 0) {
+        return [pscustomobject]@{ Success = $false; Bytes = 0L; Error = "Proxmox size '$Value' does not resolve to a whole byte" }
     }
     return [pscustomobject]@{ Success = $true; Bytes = [long]$product; Error = '' }
 }

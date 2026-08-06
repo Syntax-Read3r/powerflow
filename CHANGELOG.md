@@ -9,7 +9,61 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [4.0.0] - Unreleased
+## [4.1.0] - Unreleased
+
+### Added
+
+- 🌐 **PMX now has a source-separated VM networking layer expressed in user goals.**
+  `pmx vm network <vm>` combines configured virtual adapters with interfaces and addresses
+  reported from inside the VM. Focused forms—`pmx vm nic <vm>`, `pmx vm ip <vm>`, and
+  `pmx vm net stats <vm>`—show hardware, addresses, or exact traffic counters, while
+  `pmx vm net list` summarizes the QEMU VM estate. Strict `-t`, `-j`, `-4`, and `-6`
+  conveniences are supported.
+- 🔎 **Network output matches sources only through a valid unique MAC address.** It never assumes
+  that `net0` is `ens18`, silently falls back to host/DNS/scan data, or calls an inferred primary
+  address an SSH endpoint. Stable JSON retains explicit nulls, exact counters, agent state, and
+  independent configured/VM-reported sources.
+- 💽 **Virtual-disk output is now an exact interface contract.** PMX keeps configured integer
+  bytes as the source of truth, labels binary values with `KiB`/`MiB`/`GiB`/`TiB`, and adds
+  boot/data role, boot priority, exact MiB/GiB values, and a stable display field without
+  removing the existing disk JSON properties. Boot roles come from Proxmox's modern boot order
+  or legacy `bootdisk`, never a guessed slot.
+- ⚡ **Disk growth now has concise, fail-closed syntax.** Use `pmx disk grow <vm> <size>` when a
+  VM has exactly one eligible disk, or `pmx disk grow <vm> <slot> <size>` when selecting one.
+  The original `--vm/--disk/--to` form remains for scripts. Multiple eligible disks produce a
+  role/size/storage/backing table and copy-ready retries without confirmation or mutation.
+- 📦 **Full-clone plans show storage placement per disk.** Previews include source and target
+  storage, provisioned virtual capacity, and current storage availability for every disk.
+  Clone JSON separates the requested plan from the verified result and retains exact byte fields.
+
+### Changed
+
+- 📖 **Native VM-agent vocabulary stays behind PowerFlow's translation layer.** Main help and
+  normal output teach `network`, `adapters`, `addresses`, and `stats`; the fixed native read is
+  revealed only by an explicit `--show-native` request. The implementation is split into four
+  responsibility-focused network components plus matching Windows/Linux adapter allow-lists.
+- 📖 **`pmx help` and `pmx help disk grow` document every accepted growth grammar and safety
+  rule.** Help explains final-size semantics, exact IEC arithmetic, automatic-selection limits,
+  storage availability, native delta calculation, and the separate guest filesystem step.
+- 🧩 **PMX disk work is split into responsibility-focused components.** `disk-model.ps1` owns
+  disk identity/role/size, `clone-plan.ps1` owns placement and clone contracts, and
+  `disk-grow.ps1` owns parsing and guarded growth. The existing adapter allow-list and shared
+  amber mutation boundary remain unchanged.
+
+### Fixed
+
+- 🔐 **`srv <name>` now keeps the saved SSH username and address out of password prompts.**
+  Matching Windows and Linux askpass adapters display only `Password for '<alias>':`, pass the
+  hidden value directly to OpenSSH, and keep successful interactive shells attached. Passwords
+  are never persisted, logged, echoed, exported, or placed on a process command line; failures
+  remain alias-only and fail closed if the private prompt cannot start.
+- ⚡ **Bare `pmx` now reports an alias-only disconnected state instead of printing raw SSH
+  authentication errors.** Remote query/change failures are categorized at the adapter boundary,
+  endpoint-bearing diagnostics are withheld, and `--show-native` previews use the saved alias.
+  Password-only users are directed to `srv <alias>` and then to run PMX inside that Proxmox
+  session.
+
+## [4.0.0] - 2026-08-06
 
 ### Changed
 

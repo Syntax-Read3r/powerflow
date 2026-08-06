@@ -10,6 +10,7 @@ $script:servers = @{
 function Get-PFServers { return $script:servers }
 
 . (Join-Path $PSScriptRoot '..' '..' 'components' 'proxmox' 'shared.ps1')
+. (Join-Path $PSScriptRoot '..' '..' 'components' 'proxmox' 'connection-state.ps1')
 . (Join-Path $PSScriptRoot '..' '..' 'components' 'proxmox' 'config.ps1')
 
 try {

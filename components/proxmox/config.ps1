@@ -364,12 +364,16 @@ function Get-PmxManagementSession {
     $probeSuccess = if ($probe -is [bool]) { [bool]$probe } else { [bool]$probe.Success }
     if (-not $probeSuccess) {
         $why = if ($probe -is [bool]) { 'Proxmox management transport is unavailable' } elseif ($probe.Error) { "$($probe.Error)" } else { 'Proxmox management transport is unavailable' }
-        return [pscustomobject]@{ Success = $false; Connection = $resolved.Connection; Config = $resolved.Config; Node = ''; Probe = $probe; Error = $why }
+        $kind = if ($probe -isnot [bool] -and $probe.FailureKind) { "$($probe.FailureKind)" } else { 'connection-failed' }
+        $safe = ConvertTo-PmxSessionFailure -Connection $resolved.Connection -ErrorMessage $why -FailureKind $kind
+        return [pscustomobject]@{ Success = $false; Connection = $resolved.Connection; Config = $resolved.Config; Node = ''; Probe = $probe; Error = $safe.Message; FailureKind = $safe.FailureKind }
     }
 
     $nodeResult = Resolve-PmxManagementNode -Connection $resolved.Connection -Config $resolved.Config
     if (-not $nodeResult.Success) {
-        return [pscustomobject]@{ Success = $false; Connection = $resolved.Connection; Config = $resolved.Config; Node = ''; Probe = $probe; Error = $nodeResult.Error }
+        $kind = if ($nodeResult.Result -and $nodeResult.Result.FailureKind) { "$($nodeResult.Result.FailureKind)" } else { '' }
+        $safe = ConvertTo-PmxSessionFailure -Connection $resolved.Connection -ErrorMessage $nodeResult.Error -FailureKind $kind
+        return [pscustomobject]@{ Success = $false; Connection = $resolved.Connection; Config = $resolved.Config; Node = ''; Probe = $probe; Error = $safe.Message; FailureKind = $safe.FailureKind }
     }
     $resolved.Connection.Node = $nodeResult.Node
     return [pscustomobject]@{
@@ -380,6 +384,7 @@ function Get-PmxManagementSession {
         Nodes      = $nodeResult.Nodes
         Probe      = $probe
         Error      = ''
+        FailureKind = ''
     }
 }
 

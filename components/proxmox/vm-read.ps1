@@ -5,19 +5,11 @@
 # File     : components/proxmox/vm-read.ps1
 # Purpose  : Resolve and render virtual machines, status, next IDs, and VM disks
 # Functions: Get-PmxManagedVmRows, Resolve-PmxManagedVm,
-#            Get-PmxManagedVmDetails, Get-PmxVirtualDisksFromConfig,
+#            Get-PmxManagedVmDetails,
 #            Show-PmxManagedVmList, Show-PmxManagedVm,
 #            Show-PmxNextVmId, Show-PmxManagedVmDisks
-# Depends  : shared.ps1, config.ps1, Proxmox management adapter
+# Depends  : shared.ps1, disk-model.ps1, config.ps1, Proxmox management adapter
 # ==============================================================================
-
-function Get-PmxObjectProperty {
-    param($Object, [Parameter(Mandatory)][string]$Name, $Default = $null)
-    if ($null -ne $Object -and $Object.PSObject.Properties.Name -contains $Name) {
-        return $Object.$Name
-    }
-    return $Default
-}
 
 function Get-PmxManagedVmRows {
     param([Parameter(Mandatory)]$Session)
@@ -73,35 +65,6 @@ function Resolve-PmxManagedVm {
         return [pscustomobject]@{ Success = $false; Vm = $null; Error = "VM name '$Selector' is ambiguous; use a VMID" }
     }
     return [pscustomobject]@{ Success = $false; Vm = $null; Error = "VM '$Selector' was not found" }
-}
-
-function Get-PmxVirtualDisksFromConfig {
-    param([Parameter(Mandatory)]$Config)
-
-    $disks = @()
-    foreach ($property in $Config.PSObject.Properties) {
-        if ($property.Name -notmatch '^(ide|sata|scsi|virtio)\d+$') { continue }
-        $raw = "$($property.Value)"
-        if ($raw -match '(^|,)media=cdrom(,|$)' -or $raw -match '(^|,)cloudinit(,|$)') { continue }
-        $sizeText = ''
-        $sizeBytes = 0L
-        if ($raw -match '(?:^|,)size=([^,]+)') {
-            $sizeText = $matches[1]
-            $parsedSize = ConvertFrom-PmxProxmoxSize $sizeText
-            if ($parsedSize.Success) { $sizeBytes = $parsedSize.Bytes }
-        }
-        $backing = ($raw -split ',')[0]
-        $storage = if ($backing -match '^([^:]+):') { $matches[1] } else { '' }
-        $disks += [pscustomobject]@{
-            Disk       = $property.Name
-            Storage    = ConvertTo-PmxDisplayText $storage
-            Backing    = ConvertTo-PmxDisplayText $backing
-            Size       = ConvertTo-PmxDisplayText $sizeText
-            SizeBytes  = $sizeBytes
-            Raw        = ConvertTo-PmxDisplayText $raw
-        }
-    }
-    return @($disks | Sort-Object Disk)
 }
 
 function Get-PmxManagedVmDetails {
@@ -227,7 +190,7 @@ function Show-PmxManagedVm {
         Write-PmxField 'Autostart' $(if ((Get-PmxObjectProperty $details.Config 'onboot' 0) -eq 1) { 'enabled' } else { 'disabled' })
         Write-PmxField 'Protection' $(if ((Get-PmxObjectProperty $details.Config 'protection' 0) -eq 1) { 'enabled' } else { 'disabled' })
         if ($details.Disks.Count) {
-            Write-PmxField 'Disks' (@($details.Disks | ForEach-Object { "$($_.Disk) $($_.Size)" }) -join ' · ')
+            Write-PmxField 'Disks' (@($details.Disks | ForEach-Object { "$($_.Disk) $($_.SizeDisplay)" }) -join ' · ')
         }
     }
     Write-Host ''
@@ -273,11 +236,6 @@ function Show-PmxManagedVmDisks {
     Write-Host "💽 VM DISKS — $($resolved.Vm.VmId) $((ConvertTo-PmxDisplayText $resolved.Vm.Name))" -ForegroundColor Cyan
     Write-Host '────────────────────────────────────────────────────────────────────────' -ForegroundColor DarkGray
     if (-not $details.Disks.Count) { Write-Host '  No resizable VM disks found.' -ForegroundColor DarkGray; return }
-    Write-Host ('  {0,-9} {1,10}  {2,-14} {3}' -f 'DISK', 'SIZE', 'STORAGE', 'BACKING') -ForegroundColor DarkGray
-    foreach ($disk in $details.Disks) {
-        Write-Host ('  {0,-9} {1,10}  {2,-14} {3}' -f $disk.Disk,
-            $(if ($disk.SizeBytes) { Format-PmxBytes $disk.SizeBytes } else { $disk.Size }),
-            $disk.Storage, $disk.Backing) -ForegroundColor White
-    }
+    Show-PmxVirtualDiskTable -Disks $details.Disks
     Write-Host ''
 }

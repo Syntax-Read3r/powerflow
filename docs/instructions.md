@@ -251,13 +251,17 @@ dependency, read `components/core/dependencies.ps1` first.**
 - Bare `srv`, `srv list`, the picker, ordinary connect/save/delete/rename output, and error
   messages show only the saved server name and online/no-ssh/offline state.
 - Reveal a saved endpoint only through explicit `srv <name> info`, and only after the SSH
-  client reports successful authentication. Never store, intercept, echo or log the password.
-- PowerFlow must not introduce an askpass/password-capture helper merely to rewrite OpenSSH's
-  own password prompt. OpenSSH remains responsible for credential entry and may display its
-  native authentication prompt.
-- Native interactive SSH sessions must remain directly attached to the terminal. Never pipe or
-  capture the normal connection call, including through `Out-Null`; only the fixed, no-shell
-  authentication probe used by `srv <name> info` may capture diagnostics.
+  client reports successful authentication.
+- Credential prompts identify a destination by saved alias only. Platform askpass helpers may
+  read hidden input directly from the controlling terminal and write it only to OpenSSH's
+  dedicated askpass pipe. Never persist, log, echo, export, return through PowerShell, or place
+  the password in environment variables or process arguments.
+- Native interactive SSH sessions must remain directly attached to the terminal. Invocation and
+  result retrieval are separate adapter calls so neither assignment nor `Out-Null` can redirect
+  the session. Native diagnostics are quiet; PowerFlow renders categorized alias-only failures.
+- Normal PMX output, including disconnected dashboards, errors, and `--show-native` previews,
+  never contains a saved SSH username, hostname/address, or port. Bare remote `pmx` directs a
+  password-only user to `srv <alias>` and then to run PMX inside that Proxmox session.
 - This file must be updated whenever a new rule is given.
 
 ### 5e. Executable PMX Help
@@ -273,6 +277,45 @@ dependency, read `components/core/dependencies.ps1` first.**
   `--vm` to identify the owning VM among their other resource arguments.
 - A dependency-free regression must compare the overview/topic catalog with the routed command
   inventory so future PMX commands cannot silently disappear from help.
+- This file must be updated whenever a new rule is given.
+
+### 5f. PMX Output Contracts and Concise Disk Growth
+
+- Treat PMX table and JSON output as public interface contracts. Source numeric values from the
+  Proxmox configuration/API; never parse a decorative table to perform a mutation.
+- Binary byte arithmetic must display IEC labels (`KiB`, `MiB`, `GiB`, `TiB`) and retain an exact
+  integer-byte field in machine-readable output.
+- Disk roles come from the configured modern boot order or legacy `bootdisk`; never guess that a
+  preferred slot is the system disk.
+- `pmx disk grow <vm> <size>` may infer a disk only when exactly one trustworthy growable disk
+  exists. Multiple disks must be listed and refused until the user supplies a slot.
+- Keep the complete named disk-growth form for scripts, and document every concise and named form
+  in both `pmx help` and `pmx help disk grow` with parser/help regression coverage.
+- Clone previews and JSON show placement per disk. Label summed configured virtual size as
+  provisioned capacity, not allocated data, especially on thin-provisioned storage.
+- This file must be updated whenever a new rule is given.
+
+### 5g. PMX VM Network Source Separation
+
+- VM network inspection is read-only. Configuration comes from the Proxmox VM config; runtime
+  interfaces and addresses come from QEMU Guest Agent. Keep them as separate records and sources.
+- Public commands and output describe user goals with `network`, `adapters`, `addresses`, and
+  `stats`. Keep Proxmox/QEMU terms such as `guest cmd` inside the translation layer and reveal the
+  translated native command only when the user explicitly supplies `--show-native`.
+- Keep the public hierarchy VM-centered: canonical commands live under `pmx vm network`, with only
+  the documented `pmx vm net`, `pmx vm nic`, and `pmx vm ip` conveniences. Do not advertise a
+  separate `pmx guest net` or root-level `pmx net` family.
+- Never assume a configured slot (`net0`) equals a guest interface (`ens18`). Match only through a
+  valid normalized MAC; show unmatched/ambiguous records without inventing a relationship.
+- Guest-agent read commands never enable the agent channel, install/start an in-guest service, or
+  fall back silently to ARP, neighbor, DHCP, DNS, bridge tables, or scans.
+- A primary address candidate is explicitly inferred from address-ranking policy. Never call it an
+  SSH endpoint or claim it is running, listening, connected, or reachable; ties remain multiple
+  candidates.
+- Keep VM/guest network commands distinct from future Proxmox host networking. Host bridges,
+  bonds, routes, physical NICs, and mutations require a separate command group/design.
+- Network JSON has stable schema/version/order, explicit nulls, categorized safe errors, and no
+  decorative output around the JSON document.
 - This file must be updated whenever a new rule is given.
 
 ### 5a. Automatic Planning for Comprehensive Tasks
