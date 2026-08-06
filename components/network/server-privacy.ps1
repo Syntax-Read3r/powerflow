@@ -48,8 +48,10 @@ function Invoke-PFServerSsh {
         return ($LASTEXITCODE -eq 0)
     }
 
+    # Keep the native process attached directly to the terminal. Piping this call
+    # (even to Out-Null) redirects the remote shell's streams and can leave an
+    # apparently successful password login with no usable session.
     & ssh @sshArgs
-    return $LASTEXITCODE
 }
 
 function Test-PFServerInteractiveAuth {

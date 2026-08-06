@@ -255,6 +255,9 @@ dependency, read `components/core/dependencies.ps1` first.**
 - PowerFlow must not introduce an askpass/password-capture helper merely to rewrite OpenSSH's
   own password prompt. OpenSSH remains responsible for credential entry and may display its
   native authentication prompt.
+- Native interactive SSH sessions must remain directly attached to the terminal. Never pipe or
+  capture the normal connection call, including through `Out-Null`; only the fixed, no-shell
+  authentication probe used by `srv <name> info` may capture diagnostics.
 - This file must be updated whenever a new rule is given.
 
 ### 5a. Automatic Planning for Comprehensive Tasks

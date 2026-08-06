@@ -9,7 +9,16 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [3.18.0] - Unreleased
+## [3.18.1] - Unreleased
+
+### Fixed
+
+- 🌐 **Interactive `srv` connections keep their terminal attached after password
+  authentication.** The SSH helper no longer pipes the native session into `Out-Null`, so the
+  remote shell remains visible and usable. The server picker also uses a taller layout and a
+  compact ASCII instruction line to prevent controls from wrapping into the server list.
+
+## [3.18.0] - 2026-08-06
 
 ### Added
 

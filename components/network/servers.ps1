@@ -138,7 +138,7 @@ function Connect-PFServer {
         Save-PFServers $servers
     }
 
-    Invoke-PFServerSsh -Server $Server | Out-Null
+    Invoke-PFServerSsh -Server $Server
 }
 
 <#
@@ -381,9 +381,9 @@ function Show-PFServerPicker {
         $out = @($lines | fzf `
             --expect=ctrl-d,ctrl-r `
             --delimiter "`t" `
-            --reverse --border=rounded --height=40% `
-            --prompt="🌐 Connect: " `
-            --header="Enter connect · ctrl-d delete · ctrl-r rename · Esc close" `
+            --reverse --border=rounded --height=60% --min-height=12 `
+            --prompt="Server: " `
+            --header="Enter: connect | Ctrl-D: delete | Ctrl-R: rename | Esc: close" `
             --header-first `
             --color="header:bold:cyan,prompt:bold:green,border:cyan")
 

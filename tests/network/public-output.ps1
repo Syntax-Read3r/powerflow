@@ -24,6 +24,7 @@ try {
     function ssh {
         $script:sshCalls += (, @($args))
         $global:LASTEXITCODE = 0
+        Write-Output 'REMOTE SESSION READY'
     }
 
     $listText = ConvertTo-TestText @(& { srv list } 6>&1)
@@ -38,6 +39,7 @@ try {
     Assert-PrivateEndpointAbsent $connectText
     Assert-True ($script:sshCalls.Count -eq 1) 'direct alias connects once'
     Assert-True (($script:sshCalls[0] -join '|') -eq '-p|22445|fixture-admin@endpoint.example.invalid') 'native SSH receives exact stored target tokens'
+    Assert-True ($connectText -match 'REMOTE SESSION READY') 'interactive SSH output remains attached instead of being discarded'
 
     $duplicateText = ConvertTo-TestText @(& { srv add lab replacement@replacement.example.invalid:22999 } 6>&1)
     Assert-PrivateEndpointAbsent $duplicateText @('fixture-admin','endpoint.example.invalid','22445','replacement','replacement.example.invalid','22999')

@@ -1,5 +1,20 @@
 # Resolved Issues
 
+## Issue 14 — `srv` password succeeds but the remote shell disappears
+
+**Files:** `components/network/server-privacy.ps1`, `components/network/servers.ps1`,
+`tests/network/public-output.ps1`
+**Severity:** High
+**Description:** The normal interactive SSH helper returned through a PowerShell pipeline so
+`Connect-PFServer` could discard its numeric exit code with `Out-Null`. That also redirected the
+native process streams, leaving password authentication with no visible or usable remote shell.
+The compact fzf window could additionally wrap its decorated controls into the server rows.
+
+**Status:** Resolved — the normal SSH invocation is terminal-attached and emits no synthetic
+exit-code object; only the no-shell authentication probe captures output. A regression now
+requires mock remote-session output to reach the caller. The picker uses a larger minimum height
+and a short ASCII header/prompt.
+
 ## Issue 13 — `srv` exposes saved SSH endpoints before authentication
 
 **Files:** `components/network/server-privacy.ps1`, `components/network/servers.ps1`, network

@@ -1,6 +1,6 @@
 # Saved SSH endpoints appeared before authentication
 
-**Status:** Fix applied — awaiting user confirmation.
+**Status:** Follow-up fix applied — awaiting user confirmation.
 
 ## Symptom
 
@@ -36,3 +36,13 @@ The network suite uses sentinel-only fixture endpoints and asserts that ordinary
 contain them. Separate tests verify exact native SSH argument tokens and both the success and
 failure sides of authenticated info. Windows and Linux release-validation workflows run the
 suite.
+
+## Follow-up: authenticated session produced no shell
+
+The first release piped `Invoke-PFServerSsh` into `Out-Null` to suppress its exit-code object.
+That pipeline also redirected the native interactive session. OpenSSH could read the password,
+but the resulting remote shell was not attached normally to the terminal.
+
+The interactive branch now invokes native SSH directly and emits no extra exit-code object. Only
+the authentication-only `srv <name> info` probe captures diagnostics. The regression mock writes
+a remote-shell marker and requires it to remain visible, preventing the pipeline from returning.
