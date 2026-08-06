@@ -592,6 +592,49 @@ Set-Content $PROFILE $safeProfile
 
 ---
 
+## ⚡ Proxmox / PMX Issues
+
+### PMX says no target is configured
+
+Host/disk commands must run on the Proxmox host. VM commands may instead use a saved `srv`
+alias:
+
+```powershell
+pmx config set host proxmox
+pmx config set transport ssh
+pmx config validate
+pmx discover
+```
+
+The alias must already exist in `srv`; PMX deliberately does not store an address, password,
+token, or private-key content of its own. Use `pmx config show` to inspect the active policy.
+
+### A PMX change is cancelled in a pipeline or CI
+
+This is intentional. Amber operations require an interactive terminal so redirected input
+cannot answer a destructive prompt. Use `--dry-run` for automation that needs to validate and
+display a plan without changing Proxmox state. There is no non-interactive force switch.
+
+### VM name is ambiguous
+
+Friendly names are resolved case-insensitively and must be unique. If two cluster resources
+share a name, use the VMID printed by `pmx vm list`; the plan always displays the authoritative
+VMID before a change.
+
+### A disk will not grow
+
+`pmx disk grow` takes the requested final size and refuses shrinking, an unknown disk slot, a
+missing config digest, or changed VM state. After a successful virtual-disk resize, expand the
+partition/filesystem inside the guest separately; PMX does not guess the guest OS or layout.
+
+### Linux install reports `starship failed`
+
+PowerFlow first tries the distro package manager and then the official GitHub release asset.
+Check outbound HTTPS access to `api.github.com` and `github.com`, then rerun the installer.
+The adapter reports the underlying HTTP/download error and retries transient API failures.
+
+---
+
 ## 📞 Getting Additional Help
 
 ### Before Reporting Issues

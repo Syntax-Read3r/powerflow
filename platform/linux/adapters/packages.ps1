@@ -139,6 +139,47 @@ function Invoke-PackageManager {
     return (Invoke-Elevated -Command ($cmd + $Arguments))
 }
 
+# Build headers for GitHub API calls. GitHub Actions supplies GITHUB_TOKEN because parallel
+# release jobs share an anonymous rate limit; interactive installs continue to work without it.
+function Get-GitHubApiHeaders {
+    $headers = @{
+        Accept                 = 'application/vnd.github+json'
+        'User-Agent'           = 'PowerFlow'
+        'X-GitHub-Api-Version' = '2022-11-28'
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
+        $headers.Authorization = "Bearer $($env:GITHUB_TOKEN)"
+    }
+
+    return $headers
+}
+
+# Query GitHub with bounded retries. A transient response should not turn a clean-machine
+# dependency install into a partial PowerFlow installation.
+function Invoke-GitHubApiRequest {
+    param(
+        [Parameter(Mandatory)][string]$Uri,
+        [ValidateRange(1, 5)][int]$MaxAttempts = 3,
+        [ValidateRange(1, 300)][int]$TimeoutSec = 20
+    )
+
+    $headers = Get-GitHubApiHeaders
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            return Invoke-RestMethod -Uri $Uri -Headers $headers -TimeoutSec $TimeoutSec `
+                -ErrorAction Stop
+        }
+        catch {
+            if ($attempt -eq $MaxAttempts) { throw }
+
+            Write-Verbose "GitHub request failed (attempt $attempt of $MaxAttempts): $($_.Exception.Message)"
+            Start-Sleep -Seconds ([Math]::Min($attempt * 2, 5))
+        }
+    }
+}
+
 # Install a tool from its GitHub release, for distros that do not package it.
 #
 # starship and lsd are NOT in Ubuntu 22.04's repos at all, so apt can never install
@@ -153,9 +194,12 @@ function Install-FromGitHubRelease {
     )
 
     try {
-        $release = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest" -TimeoutSec 20
+        $release = Invoke-GitHubApiRequest -Uri "https://api.github.com/repos/$Repo/releases/latest"
         $asset   = $release.assets | Where-Object { $_.name -like $AssetPattern } | Select-Object -First 1
-        if (-not $asset) { return $false }
+        if (-not $asset) {
+            Write-Warning "PowerFlow could not find a $Name release asset matching '$AssetPattern' in $Repo."
+            return $false
+        }
 
         $tmp = Join-Path (Get-TempPath) $asset.name
         Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmp -TimeoutSec 180
@@ -179,7 +223,10 @@ function Install-FromGitHubRelease {
         Remove-Item $tmp -Force -ErrorAction SilentlyContinue
         return (Test-Dependency $Name)
     }
-    catch { return $false }
+    catch {
+        Write-Warning "PowerFlow could not install $Name from ${Repo}: $($_.Exception.Message)"
+        return $false
+    }
 }
 
 # Fallback for tools the distro does not package.

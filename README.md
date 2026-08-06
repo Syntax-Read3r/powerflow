@@ -85,8 +85,14 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 
 ### ⚡ Proxmox Without the Incantations (Linux)
 
-- **`pmx`**: node, disks, ZFS pools, guests and pending updates — one command instead of
-  `pvesh` + `lsblk` + `smartctl` + `zpool` + `journalctl`
+- **`pmx`**: node, disks, ZFS pools, guests and pending updates on the host — one command
+  instead of `pvesh` + `lsblk` + `smartctl` + `zpool` + `journalctl`
+- **VM management from either side**: use local transport on Proxmox or a saved `srv` SSH
+  alias from Windows/Linux for VM discovery, full clones, CPU/memory changes, disk growth,
+  lifecycle actions, and snapshots
+- **Safe mutations**: every change previews, confirms in a real terminal, re-reads state,
+  executes an allow-listed `qm` operation, verifies the result, and writes a secret-free audit
+  record. `--dry-run` stops before execution
 - **`pmx disk sdg report`**: *is this drive genuine?* Zero WWN, a generic model string, a
   six-digit serial, a drive that refuses SMART, a size that disagrees with itself, kernel
   I/O errors — each is evidence, and the report says which fired and what it means
@@ -307,7 +313,8 @@ The workflow:
 2. Presents a bump-type selector (patch / minor / major / custom)
 3. Prompts for a release description
 4. Updates `config/PowerFlow.settings.ps1` to the new version
-5. Commits all staged changes, pushes, creates the tag, and pushes the tag
+5. Runs `git add .`, commits **all working-tree changes**, pushes, creates the tag, and pushes
+   the tag. Review `git status --short` first; this is not limited to files you staged earlier.
 
 **Example Flow:**
 - **Current**: `v2.0.1` + pick **patch** → **Next**: `v2.0.2`
@@ -489,21 +496,33 @@ PowerFlow's versions live on as `del` and `mvf`.
 | `team-room stop <name>` | Stop a room: disarm it and end its watcher process |
 | `team-room start <name>`| Re-arm a room you previously set up (arm is boot-scoped) |
 
-### Proxmox VE (Linux)
+### Proxmox VE
 
 `pmx` is one command for the things you otherwise reach for `pvesh`, `lsblk`, `smartctl`,
-`zpool` and `journalctl` to answer. It runs **only on a Proxmox node** — everywhere else
-every verb but `help` says so plainly rather than rendering an empty dashboard.
+`zpool`, `journalctl` and `qm` to answer. Host and physical-disk inspection runs locally on a
+Proxmox node. VM management can run there too, or over SSH from Windows/Linux through a saved
+`srv` alias. PMX stores the alias and policy settings, never an SSH key or password.
 
 | Command                  | Description                                     |
 | ------------------------ | ----------------------------------------------- |
 | `pmx`                    | Node dashboard: uptime, load, memory, storage, guests, updates |
+| `pmx config set host <srv-alias>` | Select a saved SSH target; use `pmx config validate` to test it |
+| `pmx discover` / `pmx node status` / `pmx storage list` | Discover nodes, bridges, VM storage, templates and capacity |
+| `pmx vm list` / `show` / `status` / `next-id` | Read VM inventory and authoritative VMIDs |
+| `pmx vm clone --source <vm> --new-vmid auto --name <name> --dry-run` | Validate and preview an independent full clone |
+| `pmx vm cpu set` / `pmx vm memory set` | Guarded CPU and memory changes |
+| `pmx disk list --vm <vm>` / `pmx disk grow --vm <vm> --disk <slot> --to <size>` | Inspect or safely grow virtual disks; never shrink |
+| `pmx vm start` / `pmx vm shutdown` | Guarded start and graceful shutdown |
+| `pmx snapshot list` / `pmx snapshot create` | Inspect and create named VM snapshots |
 | `pmx disks`              | Every physical disk — model, size, SSD/HDD, what is using it |
 | `pmx disk sdg`           | One disk in full: stable IDs, SMART, and what would be destroyed |
 | `pmx disk sdg smart`     | The SMART report, decoded                       |
 | `pmx disk sdg report`    | **Is this drive genuine?** Evidence-based authenticity + health verdict |
 | `pmx disk sdg report -Write` | Save the evidence bundle (report, raw SMART, kernel log, IDs) for an RMA |
 | `pmx pools` / `pmx guests` / `pmx updates` | ZFS pools · VMs and containers · pending updates |
+
+Run `pmx help` for the full surface or a topic such as `pmx help disk grow`. Mutations accept
+`--dry-run` and `--show-native`; read views accept `--json` or `--table` where documented.
 
 ### Appearance & Login
 

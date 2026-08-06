@@ -339,7 +339,7 @@ Use that output as the exact source of truth for the PowerFlow module on your T4
 I ran: racadm help and this was the result: 
 
 
-root@192.168.8.10's password:
+root@<idrac-address>'s password:
 racadm>>racadm serveraction powerup
 Server power operation initiated successfully
 racadm>>racadm help

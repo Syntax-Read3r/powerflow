@@ -126,7 +126,7 @@ qm status 102
 Expected result:
 
 ```text
-Configuration file 'nodes/chikara/qemu-server/102.conf' does not exist
+Configuration file 'nodes/pve-node1/qemu-server/102.conf' does not exist
 ```
 
 That error is useful here: it confirms that `102` is available.
@@ -234,7 +234,7 @@ pmx vm list
 into:
 
 ```bash
-ssh root@192.168.8.20 -- qm list
+ssh root@<proxmox-address> -- qm list
 ```
 
 The next coding step is to implement that read-only command and confirm it returns VMs `100` and `101`.
@@ -457,7 +457,7 @@ A useful configuration table could look like this:
 | Setting           | Suggested value | Purpose                                |
 | ----------------- | --------------- | -------------------------------------- |
 | `host`            | `proxmox`       | SSH alias or server address            |
-| `node`            | `chikara`       | Proxmox node name                      |
+| `node`            | `pve-node1`     | Proxmox node name                      |
 | `transport`       | `ssh`           | Initial connection method              |
 | `output`          | `table`         | Default readable output                |
 | `show-native`     | `true`          | Display the underlying Proxmox command |
@@ -472,7 +472,7 @@ Example:
 
 ```powershell
 pmx config set host proxmox
-pmx config set node chikara
+pmx config set node pve-node1
 pmx config set output table
 pmx config set show-native true
 ```
@@ -488,7 +488,7 @@ could produce:
 | Setting         | Value        | Meaning                                |
 | --------------- | ------------ | -------------------------------------- |
 | Host            | `proxmox`    | SSH destination                        |
-| Node            | `chikara`    | Target Proxmox node                    |
+| Node            | `pve-node1`  | Target Proxmox node                    |
 | Output          | `table`      | Human-readable tables                  |
 | VMID policy     | `auto`       | Choose the next available ID           |
 | Clone mode      | `full`       | New VM receives an independent disk    |
@@ -507,7 +507,7 @@ This should inspect the real Proxmox host and return:
 
 | Category            | Example             |
 | ------------------- | ------------------- |
-| Nodes               | `chikara`           |
+| Nodes               | `pve-node1`         |
 | Storages            | actual storage IDs  |
 | Network bridges     | `vmbr0`             |
 | Existing VMIDs      | `100`, `101`        |

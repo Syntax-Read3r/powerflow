@@ -9,6 +9,75 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [3.17.0] - Unreleased
+
+### Added
+
+- ⚡ **`pmx` grows from a Proxmox host dashboard into guarded VM management.** The v3.16
+  command could inspect the node and investigate physical drives; v3.17 keeps that entire
+  surface and adds the day-to-day VM workflow, locally on a Proxmox shell or remotely through
+  a saved `srv` SSH alias:
+
+  ```powershell
+  pmx config set host proxmox
+  pmx config validate
+  pmx discover
+  pmx vm list
+  pmx vm clone --source debian-base --new-vmid auto --name docker-host --full --dry-run
+  pmx vm cpu set --vm docker-host --cores 4
+  pmx vm memory set --vm docker-host --size 8GiB
+  pmx disk grow --vm docker-host --disk scsi0 --to 100GiB
+  pmx snapshot create --vm docker-host --name pre-docker
+  pmx vm start --vm docker-host
+  ```
+
+  Discovery reports real nodes, VM storage, bridges, templates and authoritative VMIDs before
+  a plan is made. Reads cover inventory, status, configuration, virtual disks and snapshots;
+  changes cover independent full clones, CPU, memory, final-size disk growth, start, graceful
+  shutdown and snapshot creation. `pmx help <topic>` explains both the PowerFlow command and
+  the native Proxmox operation it represents.
+
+- 🛡️ **Every PMX mutation crosses one explicit amber safety boundary.** There is no
+  `pmx run` escape hatch and no user text is passed to a shell. PowerFlow resolves names to
+  authoritative VMIDs, validates the requested end state, shows the exact plan, refuses a
+  redirected confirmation prompt, and then re-reads identity and configuration in case the VM
+  changed while the operator was deciding. Only fixed allow-listed `qm` operations execute;
+  the result is read back and a secret-free JSONL audit record is written. `--dry-run`,
+  `--show-native`, `--explain`, `--json` and `--table` keep the workflow inspectable.
+
+- 🧩 **PMX is a component system, not another oversized shell function.** Configuration,
+  shared parsing, host views, physical disks, evidence, VM reads, VM changes, snapshots and
+  educational help live in responsibility-based components behind a thin command router.
+  Matching Windows and Linux adapters own local/SSH transport, while the component layer stays
+  platform-neutral and testable. The existing physical-disk, SMART, evidence-bundle and
+  destructive capacity-test behaviour is preserved.
+
+- 🧪 **Dedicated PMX regression suites now run on both release platforms.** Dependency-free
+  tests cover strict option parsing, one-token routing, virtual/physical disk separation,
+  adapter token parity, hostile-input rejection, VM and disk resolution, dry-run and
+  cancellation, time-of-check/time-of-use revalidation, execution, postcondition verification,
+  physical descendant safety and audit output. A separate Linux test pins authenticated,
+  retried GitHub release downloads.
+
+### Fixed
+
+- 🐧 **Ubuntu 24.04 no longer loses Starship during release validation.** The unpublished
+  v3.16.2 tag failed because Ubuntu's apt repositories did not provide Starship and the binary
+  fallback ignored the workflow's `GITHUB_TOKEN`. Parallel jobs exhausted GitHub's anonymous
+  API allowance, then the adapter swallowed the HTTP failure; the later dependency check could
+  only report that `starship` was missing. GitHub release requests now authenticate when a
+  token is available, retry bounded transient failures, and preserve the actionable request or
+  download error. Starship remains required, and the same hardened path benefits real Linux
+  installations outside CI.
+- 💽 **Physical-disk idle checks include every descendant device identity.** Mount namespaces
+  and open handles are checked for partitions and mapped descendants, and missing identities
+  fail closed before the destructive capacity workflow.
+- 🧭 **Strict PMX routing and identifiers.** One-item token tails remain arrays, short-option-
+  shaped values are rejected, and VMIDs with leading zeroes no longer pass the component only
+  to be rejected later by the platform adapter.
+- 📦 GitHub releases attach `RELEASE_NOTES.md` as a downloadable asset, and the maintainer
+  guide now states plainly that `git-rl` runs `git add .` and commits the whole working tree.
+
 ## [3.16.1] - 2026-08-04
 
 ### Fixed

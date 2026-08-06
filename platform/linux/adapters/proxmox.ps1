@@ -480,7 +480,7 @@ function Start-ProxmoxSmartTest {
 
 # ── authenticity flags ────────────────────────────────────────────────────────
 # Every one of these is drawn from a REAL counterfeit that reached this owner's server and
-# is documented in docs/proxmox.md: model literally "SSD 4TB", serial "003134", an all-zero
+    # is documented in docs/proxmox.md: model literally "SSD 4TB", a six-digit serial, an all-zero
 # WWN, ~18 MB/s sustained writes, and a drive that dropped off the bus twice.
 #
 # These are SIGNALS, never a verdict. The report says what was observed and what it

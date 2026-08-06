@@ -11,8 +11,10 @@
 
 function Get-PmxCommandTail {
     param([object[]]$Arguments, [int]$Start)
-    if ($null -eq $Arguments -or $Arguments.Count -le $Start) { return @() }
-    return @($Arguments[$Start..($Arguments.Count - 1)])
+    # Unary comma keeps PowerShell from enumerating a one-item array into a scalar string.
+    # Nested routers index token zero, so returning "set" as a scalar would make [0] be 's'.
+    if ($null -eq $Arguments -or $Arguments.Count -le $Start) { return ,@() }
+    return ,@($Arguments[$Start..($Arguments.Count - 1)])
 }
 
 function Invoke-PmxLegacyDiskCommand {

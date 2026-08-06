@@ -112,7 +112,7 @@ function ConvertFrom-PmxArguments {
                 }
                 $value = $inline
                 if ($null -eq $value) {
-                    if ($index + 1 -ge $argv.Count -or $argv[$index + 1].StartsWith('--', [StringComparison]::Ordinal)) {
+                    if ($index + 1 -ge $argv.Count -or $argv[$index + 1].StartsWith('-', [StringComparison]::Ordinal)) {
                         return [pscustomobject]@{ Success = $false; Options = @{}; Positionals = @(); Error = "option '--$name' requires a value" }
                     }
                     $index++
@@ -120,6 +120,9 @@ function ConvertFrom-PmxArguments {
                 }
                 if ([string]::IsNullOrWhiteSpace($value)) {
                     return [pscustomobject]@{ Success = $false; Options = @{}; Positionals = @(); Error = "option '--$name' requires a non-empty value" }
+                }
+                if ($value.StartsWith('-', [StringComparison]::Ordinal)) {
+                    return [pscustomobject]@{ Success = $false; Options = @{}; Positionals = @(); Error = "value for '--$name' may not begin with '-'" }
                 }
                 if ($value -match '[\x00-\x1F\x7F\u00AD\u200B-\u200D\u2060\uFEFF]') {
                     return [pscustomobject]@{ Success = $false; Options = @{}; Positionals = @(); Error = "value for '--$name' contains a control or invisible format character" }
@@ -244,6 +247,7 @@ function Write-PmxJson {
 
 function Test-PmxVmId {
     param($Value)
+    if ("$Value" -cnotmatch '^[1-9][0-9]{2,8}$') { return $false }
     $number = 0
     return ([int]::TryParse("$Value", [ref]$number) -and $number -ge 100 -and $number -le 999999999)
 }

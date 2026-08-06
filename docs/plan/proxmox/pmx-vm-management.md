@@ -1,7 +1,7 @@
 # PowerFlow PMX — modular VM management
 
-**Status:** Awaiting user approval
-**Target release:** v3.17.0 (minor, from current v3.16.1)
+**Status:** Implemented and locally verified — v3.17.0 release verification pending
+**Target release:** v3.17.0 (minor, from current v3.16.2; v3.16.2 tag failed and was not published)
 **Source:** `docs/feature-pmx.md`, layered onto the delivered v3.16.x host/disk `pmx`
 
 ## Goal

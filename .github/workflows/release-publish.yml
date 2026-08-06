@@ -54,6 +54,7 @@ jobs:
           overwrite_files: true
           fail_on_unmatched_files: true
           files: |
+            ./release-files/RELEASE_NOTES.md
             ./release-files/install.ps1
             ./release-files/uninstall.ps1
             ./release-files/install.sh

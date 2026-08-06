@@ -1,6 +1,8 @@
 ## Features
 
-> 🪟 **Windows-first**: PowerFlow is a PowerShell profile for Windows Terminal. It can launch and hand off to a WSL tab, but it does not ship a Linux shell profile — a dedicated Linux module is planned.
+> 🪟🐧 **Windows and Linux**: PowerFlow uses one component layer with matching platform
+> adapters. Linux keeps GNU `rm`/`mv`/`cp`/`cat` intact while exposing PowerFlow's safer file
+> commands under unambiguous names.
 
 ### 🧭 Smart Navigation System
 
@@ -63,6 +65,23 @@
 - **PowerShell profile enhancement** - Extends native PowerShell with productivity-focused aliases and functions
 - **Cross-session persistence** - Bookmarks, settings, and preferences maintained across sessions
 - **Auto-update system** - Built-in version checking and update mechanisms with conflict resolution
+
+### ⚡ Proxmox VE Management
+
+- **Local or SSH transport** - Inspect/manage a local Proxmox node or select a saved `srv`
+  alias from Windows/Linux; PMX stores no credentials
+- **Structured discovery** - Nodes, VM-image storage, bridges, templates, VMs, VMIDs, virtual
+  disks, power state, and snapshots come from allow-listed `pvesh` JSON queries
+- **Guarded changes** - Full template clones, CPU/memory changes, grow-only VM disks, start,
+  graceful shutdown, and snapshot creation preview and require interactive confirmation
+- **State-race protection** - PMX re-reads identity/config after confirmation, uses Proxmox
+  config digests where supported, and verifies the postcondition
+- **Educational output** - `--explain`, `--show-native`, `--dry-run`, `--json`, topic help,
+  and human-readable tables reveal what PowerFlow is doing
+- **Physical-disk evidence** - Local Linux views retain SMART, stable IDs, counterfeit-drive
+  signals, RMA evidence bundles, and the destructive F3 safety gate
+- **Modular design** - Parsing, configuration, host views, physical disks, evidence, VM reads,
+  VM changes, snapshots, help, routing, and OS execution are separate components/adapters
 
 ### 🖥️ Terminal Tab Management
 

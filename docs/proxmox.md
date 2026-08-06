@@ -271,7 +271,7 @@ No output means it is detached.
 Save the second failure log:
 
 journalctl -k --since "2026-08-03 21:15:00" --no-pager \
-  > /root/ssd-003134-second-failure.txt
+  > /root/ssd-sample-serial-second-failure.txt
 The sensible isolation test is now to remove this SSD and test SSD number two in the same bay. If the second SSD survives sustained writes and reads, the first SSD is defective. If the second also disappears, investigate the caddy, bay, backplane or controller path.
 
 
@@ -301,15 +301,15 @@ how can i display the findings?
 Package the evidence into one short report plus the raw logs. Do not claim that you conclusively proved the physical capacity is fake; the evidence conclusively proves the drives are defective or materially misrepresented.
 
 1. Create a readable evidence report
-From Bash on chikara, run:
+From Bash on `pve-node1`, run:
 
-cat > /root/ssd-003134-test-summary.txt <<'EOF'
+cat > /root/ssd-sample-serial-test-summary.txt <<'EOF'
 SSD ACCEPTANCE TEST REPORT
 
 Device identity
 ---------------
 Model: SSD 4TB
-Serial: 003134
+Serial: <sample-serial>
 Firmware: VA001CBN
 Advertised capacity: 4,000,787,030,016 bytes
 WWN: 0 000000 000000000
@@ -369,37 +369,37 @@ Requested resolution: full refund for the complete order.
 EOF
 Display it with:
 
-cat /root/ssd-003134-test-summary.txt
+cat /root/ssd-sample-serial-test-summary.txt
 2. Extract the strongest kernel messages
 Create a smaller log that is easier for the seller to understand:
 
 grep -Ei \
 'DID_BAD_TARGET|device offline|I/O error|Synchronize Cache.*failed|aborted journal|Remounting filesystem read-only' \
-/root/ssd-003134-kernel-failure.txt \
-> /root/ssd-003134-key-errors.txt
+/root/ssd-sample-serial-kernel-failure.txt \
+> /root/ssd-sample-serial-key-errors.txt
 Display it:
 
-cat /root/ssd-003134-key-errors.txt
+cat /root/ssd-sample-serial-key-errors.txt
 3. Bundle the evidence
-tar -czf /root/ssd-003134-evidence.tar.gz \
-/root/ssd-003134-test-summary.txt \
-/root/ssd-003134-key-errors.txt \
-/root/ssd-003134-kernel-failure.txt \
-/root/ssd-003134-smart-after.txt \
-/root/ssd-003134-e2fsck-readonly.txt \
-/root/ssd-003134-f3read-1-84.txt
+tar -czf /root/ssd-sample-serial-evidence.tar.gz \
+/root/ssd-sample-serial-test-summary.txt \
+/root/ssd-sample-serial-key-errors.txt \
+/root/ssd-sample-serial-kernel-failure.txt \
+/root/ssd-sample-serial-smart-after.txt \
+/root/ssd-sample-serial-e2fsck-readonly.txt \
+/root/ssd-sample-serial-f3read-1-84.txt
 Confirm it exists:
 
-ls -lh /root/ssd-003134-evidence.tar.gz
+ls -lh /root/ssd-sample-serial-evidence.tar.gz
 4. Copy the evidence to your computer
 From PowerShell on your Windows computer:
 
-scp root@192.168.1.50:/root/ssd-003134-evidence.tar.gz "$HOME\Downloads\"
+scp root@<proxmox-address>:/root/ssd-sample-serial-evidence.tar.gz "$HOME\Downloads\"
 You may be asked for the Proxmox root password.
 
 You can also copy just the readable report:
 
-scp root@192.168.1.50:/root/ssd-003134-test-summary.txt "$HOME\Downloads\"
+scp root@<proxmox-address>:/root/ssd-sample-serial-test-summary.txt "$HOME\Downloads\"
 Seller-facing explanation
 I tested one of the supplied 4 TB SSDs in a Dell PowerEdge server using SMART, F3, ext4 filesystem checks and Linux kernel logs.
 
@@ -418,5 +418,4 @@ The device uses the generic model name “SSD 4TB,” has a very short generic s
 Regardless of whether the underlying cause is counterfeit capacity, defective firmware or failed hardware, the SSD is materially misrepresented and unsuitable for normal storage use. I am requesting a full refund for the complete order. I have retained the SMART report, F3 output, filesystem-check output and Linux kernel failure logs as evidence.
 
 The strongest screenshots are the f3write failure, the kernel lines containing device offline and Remounting filesystem read-only, and the later errno=19: No such device read failure.
-
 

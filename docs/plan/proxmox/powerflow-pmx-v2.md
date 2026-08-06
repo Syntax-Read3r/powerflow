@@ -125,7 +125,7 @@ VM/container lifecycle, pool creation, `zpool` mutation, package upgrades, and a
 
 - Parse; architecture gate; help-registry gate; **contract parity with the regex extended**.
 - Renderers and flag logic against fixtures, including the exact identity of the drive in
-  `docs/proxmox.md` (`SSD 4TB` / `003134` / zero WWN) — the flags must fire on it.
+  `docs/proxmox.md` (`SSD 4TB` / short numeric serial / zero WWN) — the flags must fire on it.
 - Every refusal path of the destructive gate, by fixture. Never a real probe.
 - Confirm the corrected phrase is the one the adapter checks, and that a wrong phrase refuses.
 - Windows: the whole surface degrades honestly.

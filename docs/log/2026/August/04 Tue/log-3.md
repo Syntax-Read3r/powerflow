@@ -25,7 +25,7 @@ destructive path with a probe stub that records its arguments instead of touchin
 The Linux adapter reaches the OS through `& smartctl` and `& lsblk`. PowerShell resolves a
 bare command name to a **function** before a native binary — so defining functions with those
 names runs Codex's real parsing bodies against recorded output. Fixtures came from
-`docs/proxmox.md`: model `SSD 4TB`, serial `003134`, firmware `VA001CBN`, all-zero WWN.
+`docs/proxmox.md`: model `SSD 4TB`, a short numeric serial, firmware `VA001CBN`, all-zero WWN.
 
 68 more assertions. And the first run **hung**.
 

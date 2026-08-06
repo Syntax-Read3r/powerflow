@@ -65,10 +65,10 @@ jobs:
 
       - name: 📦 Install PowerFlow (as root, from this checkout)
         shell: bash
-        # GITHUB_TOKEN: the tarball path asks api.github.com for the latest pwsh
-        # release, and ANONYMOUS calls from shared runner IPs get 403 rate-limited —
-        # that exact 403 killed the v3.3.2 release on this job's Arch leg. install.sh
-        # uses the token when present; interactive users never need one.
+        # GITHUB_TOKEN: both the pwsh tarball fallback and PowerFlow's dependency adapter
+        # ask api.github.com for releases. Anonymous calls from shared runner IPs get
+        # 403 rate-limited — that exact class of failure killed v3.3.2 and v3.16.2.
+        # Both installers use the token when present; interactive users never need one.
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: bash ./install.sh --yes
@@ -120,6 +120,14 @@ jobs:
         run: |
           sudo snap install powershell --classic
           pwsh --version
+
+      - name: 🔐 GitHub dependency downloads authenticate and retry
+        shell: pwsh
+        run: ./tests/linux/github-release-download.ps1
+
+      - name: 🧪 PMX parser, routing, adapter, and mutation regressions
+        shell: pwsh
+        run: ./tests/proxmox/run.ps1
 
       - name: 🧪 Parse every .ps1 under pwsh on Linux
         shell: pwsh
@@ -173,6 +181,7 @@ jobs:
             else echo "::error::dependency not installed: $t"; fail=1; fi
           done
           [ "$fail" -eq 0 ] || exit 1
+          starship --version
 
       - name: 🚀 Load the profile and exercise it
         shell: pwsh
