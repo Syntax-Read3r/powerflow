@@ -83,7 +83,7 @@ function Invoke-PmxVmCommand {
         'cpu' {
             $subaction = if ($rest.Count) { "$($rest[0])".ToLowerInvariant() } else { '' }
             if ($subaction -ne 'set') {
-                Write-Host '❌ Use: pmx vm cpu set --vm <vm> --cores <number>' -ForegroundColor Red
+                Write-Host '❌ Use: pmx vm cpu set <vm> --cores <number>' -ForegroundColor Red
                 return
             }
             Invoke-PmxVmCpuSet -Arguments (Get-PmxCommandTail -Arguments $rest -Start 1)
@@ -91,7 +91,7 @@ function Invoke-PmxVmCommand {
         'memory' {
             $subaction = if ($rest.Count) { "$($rest[0])".ToLowerInvariant() } else { '' }
             if ($subaction -ne 'set') {
-                Write-Host '❌ Use: pmx vm memory set --vm <vm> --size <size>' -ForegroundColor Red
+                Write-Host '❌ Use: pmx vm memory set <vm> --size <size>' -ForegroundColor Red
                 return
             }
             Invoke-PmxVmMemorySet -Arguments (Get-PmxCommandTail -Arguments $rest -Start 1)

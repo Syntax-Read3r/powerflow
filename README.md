@@ -516,12 +516,14 @@ Proxmox node. VM management can run there too, or over SSH from Windows/Linux th
 | `pmx`                    | Node dashboard: uptime, load, memory, storage, guests, updates |
 | `pmx config set host <srv-alias>` | Select a saved SSH target; use `pmx config validate` to test it |
 | `pmx discover` / `pmx node status` / `pmx storage list` | Discover nodes, bridges, VM storage, templates and capacity |
-| `pmx vm list` / `show` / `status` / `next-id` | Read VM inventory and authoritative VMIDs |
+| `pmx vm list` / `pmx vm next-id` | Read VM inventory and authoritative VMIDs |
+| `pmx vm show <vm>` / `pmx vm status <vm>` | Inspect one VM by name or VMID |
 | `pmx vm clone --source <vm> --new-vmid auto --name <name> --dry-run` | Validate and preview an independent full clone |
-| `pmx vm cpu set` / `pmx vm memory set` | Guarded CPU and memory changes |
+| `pmx vm cpu set <vm> --cores <number>` | Guarded CPU allocation change |
+| `pmx vm memory set <vm> --size <size>` | Guarded memory allocation change |
 | `pmx disk list --vm <vm>` / `pmx disk grow --vm <vm> --disk <slot> --to <size>` | Inspect or safely grow virtual disks; never shrink |
-| `pmx vm start` / `pmx vm shutdown` | Guarded start and graceful shutdown |
-| `pmx snapshot list` / `pmx snapshot create` | Inspect and create named VM snapshots |
+| `pmx vm start <vm>` / `pmx vm shutdown <vm>` | Guarded start and graceful shutdown |
+| `pmx snapshot list --vm <vm>` / `pmx snapshot create --vm <vm> --name <name>` | Inspect and create named VM snapshots |
 | `pmx disks`              | Every physical disk — model, size, SSD/HDD, what is using it |
 | `pmx disk sdg`           | One disk in full: stable IDs, SMART, and what would be destroyed |
 | `pmx disk sdg smart`     | The SMART report, decoded                       |
@@ -531,6 +533,8 @@ Proxmox node. VM management can run there too, or over SSH from Windows/Linux th
 
 Run `pmx help` for the full surface or a topic such as `pmx help disk grow`. Mutations accept
 `--dry-run` and `--show-native`; read views accept `--json` or `--table` where documented.
+Commands already under `pmx vm` take the VM name or VMID directly; `--vm` is reserved for
+cross-resource commands such as `pmx disk` and `pmx snapshot`.
 
 ### Appearance & Login
 

@@ -88,8 +88,11 @@
   graceful shutdown, and snapshot creation preview and require interactive confirmation
 - **State-race protection** - PMX re-reads identity/config after confirmation, uses Proxmox
   config digests where supported, and verifies the postcondition
-- **Educational output** - `--explain`, `--show-native`, `--dry-run`, `--json`, topic help,
-  and human-readable tables reveal what PowerFlow is doing
+- **Executable help** - `pmx help` lists every routed operation with required arguments;
+  `pmx help vm`, `pmx help disk`, `pmx help snapshot`, and action topics provide purpose,
+  syntax, examples, native equivalents, and safety boundaries
+- **Educational output** - `--explain`, `--show-native`, `--dry-run`, `--json`, and
+  human-readable tables reveal what PowerFlow is doing
 - **Physical-disk evidence** - Local Linux views retain SMART, stable IDs, counterfeit-drive
   signals, RMA evidence bundles, and the destructive F3 safety gate
 - **Modular design** - Parsing, configuration, host views, physical disks, evidence, VM reads,

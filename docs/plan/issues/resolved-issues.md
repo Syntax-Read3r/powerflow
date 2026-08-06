@@ -1,5 +1,19 @@
 # Resolved Issues
 
+## Issue 15 — `pmx help` omits required arguments and routed commands
+
+**Files:** `components/proxmox/help.ps1`, `components/proxmox/vm-read.ps1`,
+`components/proxmox/vm-change.ps1`, PMX regressions, README and release notes
+**Severity:** Medium
+**Description:** The hand-written overview listed operation names such as
+`pmx vm start|shutdown` without the required VM selector. Detailed help also omitted accepted
+forms and entire router families, so users had to inspect source or guess how to execute PMX.
+
+**Status:** Resolved — a table-driven overview now covers every management and local route with
+executable syntax, complete family/action topics resolve, and a regression pins the inventory.
+Commands already under `pmx vm` use a direct positional VM selector and reject redundant `--vm`;
+disk and snapshot commands retain `--vm` to identify their owning VM.
+
 ## Issue 14 — `srv` password succeeds but the remote shell disappears
 
 **Files:** `components/network/server-privacy.ps1`, `components/network/servers.ps1`,

@@ -260,6 +260,21 @@ dependency, read `components/core/dependencies.ps1` first.**
   authentication probe used by `srv <name> info` may capture diagnostics.
 - This file must be updated whenever a new rule is given.
 
+### 5e. Executable PMX Help
+
+- `pmx help` must show executable syntax, not operation names without required arguments.
+- Every route accepted by `components/proxmox/command.ps1` must appear in the overview or be
+  identified there as a compatibility alias. Required VM, disk, size, name, and selector values
+  must be visible without opening source code.
+- Detailed topics must document every supported canonical named and positional form, and family
+  topics such as `pmx help vm`, `pmx help disk`, and `pmx help snapshot` must resolve.
+- Commands already nested beneath `pmx vm` take the VM name or VMID positionally and must reject
+  redundant `--vm`. Cross-resource commands beneath `pmx disk` and `pmx snapshot` may retain
+  `--vm` to identify the owning VM among their other resource arguments.
+- A dependency-free regression must compare the overview/topic catalog with the routed command
+  inventory so future PMX commands cannot silently disappear from help.
+- This file must be updated whenever a new rule is given.
+
 ### 5a. Automatic Planning for Comprehensive Tasks
 
 **When asked to perform a comprehensive task:**

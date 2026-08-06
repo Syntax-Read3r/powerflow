@@ -42,6 +42,8 @@ $script:routedArguments = @()
 function Show-PmxHelp { param([object[]]$TopicParts); $script:routed = 'help'; $script:routedArguments = @($TopicParts) }
 function Invoke-PmxVmCpuSet { param([object[]]$Arguments); $script:routed = 'vm-cpu-set'; $script:routedArguments = @($Arguments) }
 function Invoke-PmxVmMemorySet { param([object[]]$Arguments); $script:routed = 'vm-memory-set'; $script:routedArguments = @($Arguments) }
+function Invoke-PmxVmStart { param([object[]]$Arguments); $script:routed = 'vm-start'; $script:routedArguments = @($Arguments) }
+function Show-PmxManagedVm { param([object[]]$Arguments, [switch]$StatusOnly); $script:routed = $(if ($StatusOnly) { 'vm-status' } else { 'vm-show' }); $script:routedArguments = @($Arguments) }
 function Invoke-PmxVmDiskGrow { param([object[]]$Arguments); $script:routed = 'vm-disk-grow'; $script:routedArguments = @($Arguments) }
 function Invoke-PmxSnapshotCreate { param([object[]]$Arguments); $script:routed = 'snapshot-create'; $script:routedArguments = @($Arguments) }
 . (Join-Path $PSScriptRoot '..' '..' 'components' 'proxmox' 'command.ps1')
@@ -52,10 +54,16 @@ Assert-PmxTest ($one -is [array] -and $one.Count -eq 1 -and $one[0] -ceq 'set') 
 
 pmx vm cpu set
 Assert-PmxTest ($script:routed -ceq 'vm-cpu-set') 'Nested vm cpu set route did not reach its handler.'
-pmx vm set-memory --vm 101 --size 2GiB
+pmx vm set-memory 101 --size 2GiB
 Assert-PmxTest ($script:routed -ceq 'vm-memory-set') 'Compatibility set-memory route did not reach its handler.'
-Assert-PmxEqual @('--vm', '101', '--size', '2GiB') $script:routedArguments `
+Assert-PmxEqual @('101', '--size', '2GiB') $script:routedArguments `
     'Router changed VM memory handler arguments.'
+pmx vm start debian13-lab
+Assert-PmxTest ($script:routed -ceq 'vm-start') 'VM-first lifecycle route did not reach its handler.'
+Assert-PmxEqual @('debian13-lab') $script:routedArguments 'Router changed the positional lifecycle selector.'
+pmx vm status 101
+Assert-PmxTest ($script:routed -ceq 'vm-status') 'VM-first status route did not reach its handler.'
+Assert-PmxEqual @('101') $script:routedArguments 'Router changed the positional status selector.'
 pmx disk grow --vm 101 --disk scsi0 --to 80GiB
 Assert-PmxTest ($script:routed -ceq 'vm-disk-grow') 'Virtual disk grow collided with the physical disk route.'
 pmx snapshot create

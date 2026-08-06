@@ -262,19 +262,20 @@ function Get-PmxSetInvocation {
         [Parameter(Mandatory)][string]$ValueProperty
     )
 
-    $valueOptions = @{ 'vm' = 'Vm'; $ValueOption = $ValueProperty }
+    $valueOptions = @{ $ValueOption = $ValueProperty }
     $parsed = ConvertFrom-PmxArguments -Arguments $Arguments -ValueOptions $valueOptions `
         -SwitchOptions (Get-PmxGlobalSwitchMap) -MaxPositionals 2
     if (-not $parsed.Success) { return $parsed }
-    if ($parsed.Positionals.Count) {
-        if ($parsed.Positionals.Count -ne 2 -or $parsed.Options.ContainsKey('Vm') -or $parsed.Options.ContainsKey($ValueProperty)) {
-            return [pscustomobject]@{ Success = $false; Options = $parsed.Options; Positionals = $parsed.Positionals; Error = 'use named options, or exactly two positional values' }
-        }
+
+    if ($parsed.Positionals.Count -eq 1 -and $parsed.Options.ContainsKey($ValueProperty)) {
+        $parsed.Options.Vm = $parsed.Positionals[0]
+    }
+    elseif ($parsed.Positionals.Count -eq 2 -and -not $parsed.Options.ContainsKey($ValueProperty)) {
         $parsed.Options.Vm = $parsed.Positionals[0]
         $parsed.Options[$ValueProperty] = $parsed.Positionals[1]
     }
-    if (-not $parsed.Options.ContainsKey('Vm') -or -not $parsed.Options.ContainsKey($ValueProperty)) {
-        return [pscustomobject]@{ Success = $false; Options = $parsed.Options; Positionals = $parsed.Positionals; Error = "--vm and --$ValueOption are required" }
+    else {
+        return [pscustomobject]@{ Success = $false; Options = $parsed.Options; Positionals = $parsed.Positionals; Error = "use: <vmid|name> --$ValueOption <value>, or <vmid|name> <value>" }
     }
     return $parsed
 }
@@ -427,7 +428,7 @@ function Invoke-PmxVmDiskGrow {
 
 function Get-PmxLifecycleInvocation {
     param([object[]]$Arguments)
-    return (Get-PmxReadInvocation -Arguments $Arguments -RequireSelector)
+    return (Get-PmxReadInvocation -Arguments $Arguments -RequireSelector -PositionalSelectorOnly)
 }
 
 function Invoke-PmxVmLifecycleChange {

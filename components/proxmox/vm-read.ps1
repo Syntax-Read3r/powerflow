@@ -133,13 +133,22 @@ function Get-PmxManagedVmDetails {
 function Get-PmxReadInvocation {
     param(
         [object[]]$Arguments,
-        [switch]$RequireSelector
+        [switch]$RequireSelector,
+        [switch]$PositionalSelectorOnly
     )
 
-    $parsed = ConvertFrom-PmxArguments -Arguments $Arguments -ValueOptions @{ 'vm' = 'Vm' } `
+    $valueOptions = if ($PositionalSelectorOnly) { @{} } else { @{ 'vm' = 'Vm' } }
+    $parsed = ConvertFrom-PmxArguments -Arguments $Arguments -ValueOptions $valueOptions `
         -SwitchOptions (Get-PmxGlobalSwitchMap) -MinPositionals 0 -MaxPositionals $(if ($RequireSelector) { 1 } else { 0 })
     if (-not $parsed.Success) { return $parsed }
     if ($RequireSelector) {
+        if ($PositionalSelectorOnly) {
+            if ($parsed.Positionals.Count -ne 1) {
+                return [pscustomobject]@{ Success = $false; Options = $parsed.Options; Positionals = $parsed.Positionals; Error = 'supply one VM name or VMID after the action' }
+            }
+            $parsed.Options['Selector'] = "$($parsed.Positionals[0])"
+            return $parsed
+        }
         $hasOption = $parsed.Options.ContainsKey('Vm')
         $hasPosition = $parsed.Positionals.Count -eq 1
         if ($hasOption -eq $hasPosition) {
@@ -184,7 +193,7 @@ function Show-PmxManagedVm {
         [switch]$StatusOnly
     )
 
-    $parsed = Get-PmxReadInvocation -Arguments $Arguments -RequireSelector
+    $parsed = Get-PmxReadInvocation -Arguments $Arguments -RequireSelector -PositionalSelectorOnly
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     if ($parsed.Options.Help) { Show-PmxTopicHelp $(if ($StatusOnly) { 'vm status' } else { 'vm show' }); return }
     $session = Get-PmxManagementSession

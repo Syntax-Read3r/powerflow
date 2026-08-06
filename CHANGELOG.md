@@ -9,7 +9,29 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [3.18.1] - Unreleased
+## [4.0.0] - Unreleased
+
+### Changed
+
+- 📖 **`pmx help` is now a complete executable command map.** The overview includes every
+  routed configuration, discovery, VM read/change, snapshot, virtual-disk, local-host, guest,
+  update, and physical-disk operation with its required arguments. Detailed family topics such
+  as `pmx help vm`, `pmx help disk`, and `pmx help snapshot` now resolve, supported positional
+  and named forms are documented, and a dependency-free inventory regression prevents drift.
+- ⚡ **Commands already inside `pmx vm` now take the VM directly.** Use
+  `pmx vm start debian13-lab`, `pmx vm show 101`, `pmx vm cpu set 101 --cores 4`, and the same
+  VM-first pattern for status, memory, and shutdown. The redundant `--vm` option has been
+  removed from this namespace. It remains on `pmx disk` and `pmx snapshot`, where it
+  legitimately identifies the VM that owns a different resource.
+
+### Breaking
+
+- `pmx vm show|status|start|shutdown --vm <vm>` and
+  `pmx vm cpu|memory set --vm <vm> ...` are no longer accepted. Move the VM name or VMID
+  directly after the action. This deliberate command-language simplification requires the
+  v4.0.0 major version.
+
+## [3.18.1] - 2026-08-06
 
 ### Fixed
 

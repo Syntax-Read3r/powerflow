@@ -609,9 +609,9 @@ The exact disk-growth calculation must be based on the cloned disk’s current s
 ### CPU and memory
 
 ```powershell
-pmx vm cpu show --vm 102
-pmx vm cpu set --vm 102 --cores 4
-pmx vm memory set --vm 102 --size 8GiB
+pmx vm cpu show 102
+pmx vm cpu set 102 --cores 4
+pmx vm memory set 102 --size 8GiB
 ```
 
 PowerFlow should display both the friendly unit and native unit:
@@ -671,9 +671,9 @@ VLAN configuration should remain an advanced feature until we complete the VLAN 
 ### Boot behaviour
 
 ```powershell
-pmx vm autostart enable --vm 102
-pmx vm autostart disable --vm 102
-pmx vm startup set --vm 102 --order 30 --delay 20
+pmx vm autostart enable 102
+pmx vm autostart disable 102
+pmx vm startup set 102 --order 30 --delay 20
 ```
 
 Proxmox supports automatic VM startup and configurable startup/shutdown ordering. ([Proxmox VE][4])
@@ -694,8 +694,8 @@ For example:
 ### Protection
 
 ```powershell
-pmx vm protect --vm 100
-pmx vm unprotect --vm 100
+pmx vm protect 100
+pmx vm unprotect 100
 ```
 
 Use protection for:
@@ -711,9 +711,9 @@ PowerFlow should explain that protection is a guardrail, not a backup.
 ### Tags and notes
 
 ```powershell
-pmx vm tag add --vm 102 docker
-pmx vm tag add --vm 102 intranet
-pmx vm note set --vm 102 --text "Runs internal Docker services"
+pmx vm tag add 102 docker
+pmx vm tag add 102 intranet
+pmx vm note set 102 --text "Runs internal Docker services"
 ```
 
 Suggested tags:
