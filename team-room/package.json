@@ -1,0 +1,32 @@
+{
+  "name": "teamchat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Portable, zero-dependency agent-to-agent team-chat coordination: a turn-based file protocol plus two watchers that wake an AI coding agent when a message addressed to it arrives. Drop this folder into any project.",
+  "type": "commonjs",
+  "bin": {
+    "teamchat-wait": "bin/teamchat-wait.js",
+    "teamchat-wake": "bin/teamchat-codex-wake.js"
+  },
+  "files": [
+    "bin/",
+    "PROTOCOL.md",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "self-test": "node bin/teamchat-codex-wake.js self-test"
+  },
+  "keywords": [
+    "agent",
+    "coordination",
+    "team-chat",
+    "watcher",
+    "scheduler",
+    "codex",
+    "claude"
+  ],
+  "license": "MIT"
+}

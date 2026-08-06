@@ -1,6 +1,36 @@
 # Current Issues
 
-No open issues recorded.
+## Issue 3 — Release notes are not attached to GitHub releases
+
+**File:** `.github/workflows/release-publish.yml`
+**Severity:** Medium
+**Description:** The mandatory release checklist requires `RELEASE_NOTES.md` as a downloadable
+asset, and the generation workflow includes it in the release artifact, but the publish
+workflow uses it only as the release body. Published releases therefore omit a required asset.
+
+**Status:** Open
+
+## Issue 4 — README understates what `git-rl` commits
+
+**File:** `README.md`
+**Severity:** Medium
+**Description:** The release guide says `git-rl` commits staged changes, while the function
+runs `git add .` and stages the entire working tree. Following the documentation can therefore
+include unrelated modified or untracked files in a release commit.
+
+**Status:** Open
+
+## Issue 5 — Proxmox disk-use checks do not inspect descendant device identities
+
+**File:** `platform/linux/adapters/proxmox.ps1`
+**Severity:** Medium
+**Description:** Mount-namespace and open-handle checks currently inspect only the selected
+whole disk's major:minor identity. A child partition or mapped descendant can therefore be
+missing from those diagnostic checks. The present capacity probe still refuses any partition,
+but shared disk-idle checks must cover descendants before they can safely support another
+destructive disk workflow.
+
+**Status:** Open
 
 ---
 

@@ -91,10 +91,10 @@ function Get-ProxmoxNodeSummary {
 function Invoke-PmxLsblkJson {
     if (-not (Get-Command lsblk -ErrorAction SilentlyContinue)) { return $null }
 
-    $columns = 'NAME,KNAME,PATH,TYPE,SIZE,MODEL,SERIAL,WWN,TRAN,ROTA,RO,FSTYPE,MOUNTPOINTS,PKNAME'
+    $columns = 'NAME,KNAME,PATH,TYPE,SIZE,MODEL,SERIAL,WWN,TRAN,ROTA,RO,FSTYPE,MOUNTPOINTS,PKNAME,MAJ:MIN'
     $raw = @(& lsblk '--json' '--bytes' '--paths' '--output' $columns 2>$null)
     if (-not $raw -or $LASTEXITCODE -ne 0) {
-        $columns = 'NAME,KNAME,PATH,TYPE,SIZE,MODEL,SERIAL,WWN,TRAN,ROTA,RO,FSTYPE,MOUNTPOINT,PKNAME'
+        $columns = 'NAME,KNAME,PATH,TYPE,SIZE,MODEL,SERIAL,WWN,TRAN,ROTA,RO,FSTYPE,MOUNTPOINT,PKNAME,MAJ:MIN'
         $raw = @(& lsblk '--json' '--bytes' '--paths' '--output' $columns 2>$null)
     }
     if (-not $raw) { return $null }
@@ -113,6 +113,15 @@ function Get-PmxBlockDescendants {
         $child
         Get-PmxBlockDescendants $child
     }
+}
+
+function Get-PmxBlockMajorMinor {
+    param($Block)
+
+    if ($null -eq $Block) { return '' }
+    $property = $Block.PSObject.Properties['maj:min']
+    if ($null -eq $property -or $null -eq $property.Value) { return '' }
+    return "$($property.Value)".Trim()
 }
 
 function Get-PmxCanonicalPath {
@@ -185,15 +194,32 @@ function Get-ProxmoxDisks {
         # host physical media. It deliberately excludes zvol, loop, optical and iSCSI rows.
         if ($pveVerified -and -not $pve) { continue }
         $children = @(Get-PmxBlockDescendants $disk)
-        $parts = @($children | Where-Object { "$($_.type)" -eq 'part' } | ForEach-Object {
+        # Preserve every child identity, not only partitions. A disk can have mapped,
+        # encrypted, LVM or other nested descendants whose mount namespace or open handles
+        # must be checked before any destructive operation is considered.
+        $descendants = @($children | ForEach-Object {
+            $childName = [IO.Path]::GetFileName("$($_.kname)")
+            if (-not $childName) { $childName = [IO.Path]::GetFileName("$($_.name)") }
+            $childPath = if ($_.path) {
+                "$($_.path)"
+            } elseif ("$($_.name)" -like '/*') {
+                "$($_.name)"
+            } elseif ($childName) {
+                "/dev/$childName"
+            } else {
+                ''
+            }
             [pscustomobject]@{
-                Name        = [IO.Path]::GetFileName("$($_.name)")
-                Path        = if ($_.path) { "$($_.path)" } else { "$($_.name)" }
+                Name        = $childName
+                Path        = if ($childPath) { Get-PmxCanonicalPath $childPath } else { '' }
+                Type        = "$($_.type)"
+                MajorMinor  = Get-PmxBlockMajorMinor $_
                 SizeBytes   = ConvertTo-PmxInt64 $_.size
                 FileSystem  = "$($_.fstype)"
                 Mountpoints = @(Get-PmxMountpoints $_)
             }
         })
+        $parts = @($descendants | Where-Object { $_.Type -eq 'part' })
         $mounts = @((Get-PmxMountpoints $disk) + @($children | ForEach-Object { Get-PmxMountpoints $_ }) |
             Where-Object { $_ } | Sort-Object -Unique)
         $holdersPath = "/sys/class/block/$name/holders"
@@ -209,7 +235,12 @@ function Get-ProxmoxDisks {
             (Test-Path -LiteralPath "$($pve.by_id_link)")) {
             $ids = @("$($pve.by_id_link)") + @($ids | Where-Object { $_ -ne "$($pve.by_id_link)" })
         }
-        $majorMinor = (@(& lsblk '-dn' '-o' 'MAJ:MIN' $path 2>$null) -join '').Trim()
+        $majorMinor = Get-PmxBlockMajorMinor $disk
+        if (-not $majorMinor) {
+            # Retain compatibility with an older lsblk JSON response while making the
+            # resulting safety object fail closed if neither source yields an identity.
+            $majorMinor = (@(& lsblk '-dn' '-o' 'MAJ:MIN' $path 2>$null) -join '').Trim()
+        }
         $diskSeqPath = "/sys/class/block/$name/diskseq"
         $diskSeq = if (Test-Path -LiteralPath $diskSeqPath) { (Get-Content -LiteralPath $diskSeqPath -Raw -ErrorAction SilentlyContinue).Trim() } else { '' }
         $pveSerial = if ($pve -and "$($pve.serial)" -and "$($pve.serial)" -ne 'unknown') { "$($pve.serial)" } else { '' }
@@ -232,6 +263,7 @@ function Get-ProxmoxDisks {
             StableIds   = @($ids)
             MajorMinor  = $majorMinor
             DiskSeq     = $diskSeq
+            Descendants = @($descendants)
             Partitions  = @($parts)
             Mountpoints = @($mounts)
             Holders     = @($holders)
@@ -715,7 +747,12 @@ function Get-PmxConfigReferenceCheck {
 }
 
 function Get-PmxMountNamespaceCheck {
-    param([string]$MajorMinor)
+    param([string[]]$MajorMinor)
+
+    $identities = @($MajorMinor | Where-Object { $_ } | Sort-Object -Unique)
+    if (-not $identities.Count -or @($identities | Where-Object { $_ -notmatch '^\d+:\d+$' }).Count) {
+        return [pscustomobject]@{ Success = $false; References = @(); Error = 'one or more block-device major:minor identities are unavailable or malformed' }
+    }
     $references = @()
     if (-not (Test-Path -LiteralPath '/proc')) {
         return [pscustomobject]@{ Success = $false; References = @(); Error = '/proc is unavailable' }
@@ -725,9 +762,8 @@ function Get-PmxMountNamespaceCheck {
         $mountInfo = Join-Path $proc.FullName 'mountinfo'
         foreach ($line in @(Get-Content -LiteralPath $mountInfo -ErrorAction SilentlyContinue)) {
             $fields = "$line" -split ' '
-            if ($fields.Count -gt 2 -and $fields[2] -eq $MajorMinor) {
-                $references += "mounted in process namespace PID $($proc.Name)"
-                break
+            if ($fields.Count -gt 2 -and $fields[2] -in $identities) {
+                $references += "block device $($fields[2]) is mounted in process namespace PID $($proc.Name)"
             }
         }
     }
@@ -735,16 +771,27 @@ function Get-PmxMountNamespaceCheck {
 }
 
 function Get-PmxOpenHandleCheck {
-    param([string]$DevicePath)
+    param([string[]]$DevicePath)
+
+    $paths = @($DevicePath | Where-Object { $_ } | Sort-Object -Unique)
+    if (-not $paths.Count -or @($paths | Where-Object { $_ -notlike '/dev/*' -or $_ -match '[\x00-\x1f\x7f]' }).Count) {
+        return [pscustomobject]@{ Success = $false; InUse = $false; InUsePaths = @(); Error = 'one or more block-device paths are unavailable or malformed' }
+    }
     $fuser = Get-Command fuser -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $fuser) {
-        return [pscustomobject]@{ Success = $false; InUse = $false; Error = 'fuser is missing' }
+        return [pscustomobject]@{ Success = $false; InUse = $false; InUsePaths = @(); Error = 'fuser is missing' }
     }
-    & $fuser.Source '-s' $DevicePath 2>$null
-    $code = $LASTEXITCODE
-    if ($code -eq 0) { return [pscustomobject]@{ Success = $true; InUse = $true; Error = '' } }
-    if ($code -eq 1) { return [pscustomobject]@{ Success = $true; InUse = $false; Error = '' } }
-    return [pscustomobject]@{ Success = $false; InUse = $false; Error = "fuser could not verify open handles (exit $code)" }
+
+    $inUsePaths = @()
+    foreach ($path in $paths) {
+        & $fuser.Source '-s' $path 2>$null
+        $code = $LASTEXITCODE
+        if ($code -eq 0) { $inUsePaths += $path; continue }
+        if ($code -ne 1) {
+            return [pscustomobject]@{ Success = $false; InUse = $false; InUsePaths = @($inUsePaths); Error = "fuser could not verify open handles for $path (exit $code)" }
+        }
+    }
+    return [pscustomobject]@{ Success = $true; InUse = [bool]$inUsePaths.Count; InUsePaths = @($inUsePaths); Error = '' }
 }
 
 function Get-ProxmoxDiskSafety {
@@ -781,6 +828,35 @@ function Get-ProxmoxDiskSafety {
     if ($disk.ProxmoxUse) { $reasons += "Proxmox reports the disk in use: $($disk.ProxmoxUse)" }
     if (@($disk.CephOsdIds).Count) { $reasons += "assigned to Ceph OSD(s): $(@($disk.CephOsdIds) -join ', ')" }
 
+    $majorMinorIdentities = @()
+    $devicePaths = @()
+    if ($disk.MajorMinor -match '^\d+:\d+$') { $majorMinorIdentities += "$($disk.MajorMinor)" }
+    if ($disk.Path -like '/dev/*' -and $disk.Path -notmatch '[\x00-\x1f\x7f]') { $devicePaths += "$($disk.Path)" }
+
+    if ($disk.PSObject.Properties.Name -notcontains 'Descendants') {
+        $reasons += 'descendant block-device identity inventory is unavailable'
+    } else {
+        foreach ($descendant in @($disk.Descendants)) {
+            if ($null -eq $descendant) {
+                $reasons += 'a descendant block-device identity is unavailable'
+                continue
+            }
+            $label = if ($descendant.Path) { "$($descendant.Path)" } elseif ($descendant.Name) { "$($descendant.Name)" } else { '<unknown>' }
+            if ($descendant.MajorMinor -notmatch '^\d+:\d+$') {
+                $reasons += "descendant major:minor identity is unavailable or malformed: $label"
+            } else {
+                $majorMinorIdentities += "$($descendant.MajorMinor)"
+            }
+            if ($descendant.Path -notlike '/dev/*' -or "$($descendant.Path)" -match '[\x00-\x1f\x7f]') {
+                $reasons += "descendant device path is unavailable or malformed: $label"
+            } else {
+                $devicePaths += "$($descendant.Path)"
+            }
+        }
+    }
+    $majorMinorIdentities = @($majorMinorIdentities | Sort-Object -Unique)
+    $devicePaths = @($devicePaths | Sort-Object -Unique)
+
     $active = Get-PmxActiveDiskUses
     $reasons += @($active.Errors)
     if ($active.Uses.ContainsKey($disk.Path)) { $reasons += @($active.Uses[$disk.Path]) }
@@ -791,11 +867,15 @@ function Get-ProxmoxDiskSafety {
     $configs = Get-PmxConfigReferenceCheck -Disk $disk
     if (-not $configs.Success) { $reasons += $configs.Error } else { $reasons += @($configs.References) }
 
-    $namespaces = Get-PmxMountNamespaceCheck -MajorMinor $disk.MajorMinor
+    $namespaces = Get-PmxMountNamespaceCheck -MajorMinor $majorMinorIdentities
     if (-not $namespaces.Success) { $reasons += $namespaces.Error } else { $reasons += @($namespaces.References) }
 
-    $handles = Get-PmxOpenHandleCheck -DevicePath $disk.Path
-    if (-not $handles.Success) { $reasons += $handles.Error } elseif ($handles.InUse) { $reasons += 'the raw block device has an open file handle' }
+    $handles = Get-PmxOpenHandleCheck -DevicePath $devicePaths
+    if (-not $handles.Success) {
+        $reasons += $handles.Error
+    } elseif ($handles.InUse) {
+        $reasons += "block device(s) have open file handles: $(@($handles.InUsePaths) -join ', ')"
+    }
 
     if (-not (Test-Admin)) { $reasons += 'capacity testing requires root' }
     if (-not (Test-Path -LiteralPath '/usr/bin/f3probe' -PathType Leaf)) { $reasons += 'trusted /usr/bin/f3probe is not installed' }

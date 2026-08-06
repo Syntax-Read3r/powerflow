@@ -405,6 +405,11 @@ components/
 - Functions use kebab-case: `git-release`, `nav`, `copy-pwd`.
 - All cross-component variables use `$script:` scope prefix.
 - Do not add a new top-level component folder without updating the bootloader load order.
+- Do not grow a feature into one monolithic component. Split substantial features into
+  responsibility-based files (for example: shared helpers, configuration, read operations,
+  mutations, help, and command routing), keep the entry-point dispatcher thin, and declare
+  the load order explicitly. For `pmx`, preserve the existing host/disk behaviour while VM
+  management is added as separate Proxmox components and matching platform adapters.
 
 ---
 
