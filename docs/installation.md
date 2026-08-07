@@ -5,7 +5,7 @@ Complete installation guide for PowerFlow - the enhanced PowerShell profile that
 ## 📋 System Requirements
 
 ### Minimum Requirements
-- **PowerShell 5.1** or higher (PowerShell 7+ recommended)
+- **PowerShell 7.0** or higher
 - **Windows 10/11** or Windows Server 2016+
 - **Internet connection** for downloading dependencies
 - **Administrator privileges** (for some dependency installations)
@@ -181,12 +181,14 @@ For `gh-l` (GitHub repository listing):
 
 ### Installing in Different PowerShell Profiles
 
-**PowerShell 5.1 (Windows PowerShell)**
-```powershell
-# Profile location: Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1
-$profile51 = "$HOME\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
-Invoke-RestMethod -Uri "https://raw.githubusercontent.com/Syntax-Read3r/powerflow/main/Microsoft.PowerShell_profile.ps1" -OutFile $profile51
-```
+> **Windows PowerShell 5.1 is not supported.** The floor was raised to 7.0 in v4.4.0 because
+> the claim was never testable: the source tree is UTF-8 **without** a BOM, which 5.1 decodes
+> as the legacy ANSI code page and then fails to parse wherever a file contains non-ASCII text —
+> which is most of them, given the output uses box-drawing characters and emoji. At least one
+> adapter also uses PowerShell 7's null-coalescing operator. Every supported install path and
+> both CI legs already run `pwsh`, so 5.1 was documented but never exercised.
+>
+> `pwsh` installs alongside Windows PowerShell — it does not replace it.
 
 **PowerShell 7+ (PowerShell Core)**
 ```powershell

@@ -9,6 +9,55 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [4.4.0] - 2026-08-07
+
+### Changed
+
+- ⬆️ **The documented PowerShell floor is now 7.0.** Windows PowerShell 5.1 was advertised in the
+  README badge, the prerequisites table, the installation guide and `#Requires` — but the claim
+  was never testable, and nothing in the pipeline ever exercised it. The source tree is UTF-8
+  **without** a BOM, which 5.1 decodes as the legacy ANSI code page and then fails to parse
+  wherever a file contains non-ASCII text — which is most of them, since the output uses
+  box-drawing characters and emoji throughout. At least one adapter also uses PowerShell 7's
+  null-coalescing operator.
+
+  **No working configuration loses support.** Every supported install path and both CI legs
+  already run `pwsh`, and a 5.1 host could not have parsed the profile in the first place. This
+  documents reality rather than removing a capability. `pwsh` installs alongside Windows
+  PowerShell; it does not replace it.
+
+  The bootloader's defensive 5.1 detection is deliberately kept — it costs nothing, and a clear
+  failure on an unsupported host beats an obscure one.
+
+### Verified
+
+- 🔐 **Issue 16 (SSH/PMX endpoint disclosure) confirmed fixed and closed** — 24 assertions.
+
+  Both platform SSH adapters force `SSH_ASKPASS` **and** `SSH_ASKPASS_REQUIRE`, so OpenSSH cannot
+  fall back to its own terminal prompt — which is the thing that printed the endpoint. Both
+  askpass helpers prompt with `Password for '<alias>':` and interpolate no `user@host` anywhere;
+  the Linux cache is `chmod 700`; nothing is persisted.
+
+  The disconnected state validates the alias against `^[a-z0-9][a-z0-9_-]{0,63}# Changelog
+
+All notable changes to PowerFlow will be documented in this file.
+
+## [Unreleased]
+
+### Planning
+- Additional database providers
+- Testing framework integration
+- Enhanced Docker optimizations
+
+ **before**
+  printing it, so a malformed alias degrades to the literal "saved server" rather than echoing
+  whatever it contained. It is wired at all 17 session-failure sites — it was 1 of 17 until
+  v4.2.0, which is what let raw errors reach the dashboard.
+
+  Checked end to end: a disconnected `pmx vm list` and `srv list` contain no dotted-quad and no
+  `user@host` anywhere in their output. `tests/network/` keeps all three claims under test on
+  every release.
+
 ## [4.3.0] - 2026-08-07
 
 Completes the convenience review of the Proxmox surface. Every item below came from that

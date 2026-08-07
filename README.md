@@ -3,7 +3,7 @@
 > A beautiful, intelligent PowerShell profile that supercharges your terminal experience with smart navigation, enhanced Git workflows, and productivity-focused tools.
 
 [![Latest Release](https://img.shields.io/github/v/release/Syntax-Read3r/powerflow)](https://github.com/Syntax-Read3r/powerflow/releases)
-[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue.svg)](https://github.com/PowerShell/PowerShell)
+[![PowerShell](https://img.shields.io/badge/PowerShell-7.0%2B-blue.svg)](https://github.com/PowerShell/PowerShell)
 [![Windows Terminal](https://img.shields.io/badge/Windows%20Terminal-Recommended-brightgreen.svg)](https://github.com/microsoft/terminal)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -220,7 +220,7 @@ shadows them. Its own versions are **`del`** and **`mvf`**.
 
 | | |
 |---|---|
-| **Windows** | PowerShell 5.1+ (7+ recommended) · Windows 10/11 or Server 2016+ · Scoop (installed automatically if missing) |
+| **Windows** | PowerShell 7.0+ · Windows 10/11 or Server 2016+ · Scoop (installed automatically if missing) |
 | **Linux** | Any distro with apt / dnf / pacman / zypper / apk (PowerShell 7 is installed for you) |
 | **Both** | Internet connection, for dependency installation |
 
