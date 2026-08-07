@@ -117,26 +117,57 @@ function Invoke-PmxVmClone {
     param([object[]]$Arguments = @())
 
     $switches = Get-PmxGlobalSwitchMap
+    # --full is accepted so nobody's existing command breaks, but it has never DONE anything:
+    # Options.Full is read nowhere, and the clone parameters below hardcode Full = $true. It is
+    # gone from the help text rather than advertised as a choice the user does not have.
     $switches['full'] = 'Full'
     $parsed = ConvertFrom-PmxArguments -Arguments $Arguments `
         -ValueOptions @{ 'source' = 'Source'; 'source-vmid' = 'Source'; 'new-vmid' = 'NewVmid'; 'name' = 'Name' } `
         -SwitchOptions $switches -MaxPositionals 3
-    if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
+    if (-not $parsed.Success) {
+        # The shared parser's message is accurate but generic ("expected at most 3 positional
+        # value(s)"). Append what to type instead — an error that only says what was wrong
+        # leaves the user to guess the shape.
+        Write-Host "❌ $($parsed.Error)" -ForegroundColor Red
+        Write-Host '   Use: pmx vm clone <template> <name>' -ForegroundColor DarkGray
+        return
+    }
     if ($parsed.Options.Help) { Show-PmxTopicHelp 'vm clone'; return }
 
+    # `pmx vm clone debian-base docker-host` — the everyday form.
+    #
+    # Cloning a template is the most common Proxmox task, and it had the worst ergonomics in
+    # pmx: four flags, three flag names to remember, and the magic value `auto` — which is the
+    # ONLY value the system accepts anyway (config.ps1 rejects any other vmid-policy). Two
+    # positionals now mean source and name, with the VMID resolved automatically; the amber
+    # preview prints the resolved VMID before you confirm, so nothing becomes invisible.
+    #
+    # `pmx disk grow 101 50G` in the same file already reads this way. Clone was the outlier.
     if ($parsed.Positionals.Count) {
-        if ($parsed.Positionals.Count -ne 3 -or $parsed.Options.ContainsKey('Source') -or
-            $parsed.Options.ContainsKey('NewVmid') -or $parsed.Options.ContainsKey('Name')) {
-            Write-Host '❌ Use named clone options, or exactly: pmx vm clone <source> <new-vmid> <name>' -ForegroundColor Red
+        $named = $parsed.Options.ContainsKey('Source') -or $parsed.Options.ContainsKey('NewVmid') -or $parsed.Options.ContainsKey('Name')
+        if ($named -or $parsed.Positionals.Count -notin @(2, 3)) {
+            Write-Host '❌ Use: pmx vm clone <template> <name>' -ForegroundColor Red
+            Write-Host '       pmx vm clone <template> <new-vmid> <name>      (to choose the VMID)' -ForegroundColor DarkGray
+            Write-Host '       pmx vm clone --source <t> --name <n>           (script-friendly)' -ForegroundColor DarkGray
             return
         }
         $parsed.Options.Source = $parsed.Positionals[0]
-        $parsed.Options.NewVmid = $parsed.Positionals[1]
-        $parsed.Options.Name = $parsed.Positionals[2]
+        if ($parsed.Positionals.Count -eq 3) {
+            $parsed.Options.NewVmid = $parsed.Positionals[1]
+            $parsed.Options.Name    = $parsed.Positionals[2]
+        }
+        else {
+            $parsed.Options.NewVmid = 'auto'
+            $parsed.Options.Name    = $parsed.Positionals[1]
+        }
     }
-    foreach ($required in @('Source', 'NewVmid', 'Name')) {
+    # NewVmid is no longer required: 'auto' is the only policy the tool supports, so demanding
+    # the user type it was ceremony. Source and Name genuinely cannot be guessed.
+    if (-not $parsed.Options.ContainsKey('NewVmid')) { $parsed.Options.NewVmid = 'auto' }
+    foreach ($required in @('Source', 'Name')) {
         if (-not $parsed.Options.ContainsKey($required)) {
-            Write-Host "❌ Missing required clone option: $required. Run: pmx help vm clone" -ForegroundColor Red
+            Write-Host "❌ Missing required clone option: $required." -ForegroundColor Red
+            Write-Host '   Use: pmx vm clone <template> <name>' -ForegroundColor DarkGray
             return
         }
     }

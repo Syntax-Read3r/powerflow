@@ -27,7 +27,10 @@ $requiredSyntax = @(
     'pmx vm network stats <name|vmid> [--json|--table]',
     'pmx vm network list [--json|--table]',
     'pmx disk list --vm <name|vmid> [--json|--table]',
-    'pmx vm clone --source <template> --new-vmid <number|auto> --name <dns-name> [--full] [--dry-run]',
+    # v4.3.0: the overview advertises the SHORT form. The flag string still works, but the
+    # VMID is chosen automatically (it was the only policy the tool accepted) and --full was
+    # decorative — registered, never read, with Full = $true hardcoded at the call site.
+    'pmx vm clone <template> <name> [--dry-run]',
     'pmx vm cpu set <name|vmid> --cores <number> [--dry-run]',
     'pmx vm memory set <name|vmid> --size <size> [--dry-run]',
     'pmx disk grow <name|vmid> <size> [--dry-run]',

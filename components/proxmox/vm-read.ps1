@@ -39,7 +39,7 @@ function Get-PmxManagedVmRows {
 
 function Resolve-PmxManagedVm {
     param(
-        [Parameter(Mandatory)][string]$Selector,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Selector,
         [Parameter(Mandatory)]$Session
     )
 
@@ -49,6 +49,36 @@ function Resolve-PmxManagedVm {
     $inventory = Get-PmxManagedVmRows -Session $Session
     if (-not $inventory.Success) {
         return [pscustomobject]@{ Success = $false; Vm = $null; Error = $inventory.Error }
+    }
+
+    # NO SELECTOR? PICK ONE. Thirteen VM-taking commands answered a missing name with a usage
+    # line while a working fzf picker sat forty lines away, wired to physical disks only \u2014
+    # `pmx disk` opens one, `pmx vm show` did not. Refusing where a picker would do is the
+    # house anti-pattern (srv, start-folder and pc-whoami -ram all pick).
+    #
+    # Doing it HERE rather than per-command means every caller gains it at once, and the
+    # safety path is untouched: whatever is picked still goes through the same validate \u2192
+    # confirm \u2192 revalidate \u2192 verify chain, and Confirm-PmxAmberPlan already refuses
+    # non-interactive sessions outright.
+    if (-not $Selector) {
+        if ([Console]::IsOutputRedirected -or -not (Get-Command fzf -ErrorAction SilentlyContinue)) {
+            return [pscustomobject]@{ Success = $false; Vm = $null
+                Error = 'name a VM, or run this in a terminal with fzf to pick one' }
+        }
+        $rows = @($inventory.Vms)
+        if (-not $rows.Count) {
+            return [pscustomobject]@{ Success = $false; Vm = $null; Error = 'this node has no VMs' }
+        }
+        $tab = [char]9
+        $lines = $rows | ForEach-Object {
+            $mark = if ($_.Template) { 'template' } else { "$($_.Status)" }
+            '{0}{1}{2}{1}{3}{1}{4}' -f $_.VmId, $tab, (ConvertTo-PmxDisplayText $_.Name), $mark, $_.Node
+        }
+        $picked = $lines | fzf --height=60% --layout=reverse --border=rounded --delimiter="$tab" `
+            --with-nth=1.. --prompt='\uD83D\uDDA5\uFE0F  VM: ' `
+            --header="$($rows.Count) VMs \u00B7 type to filter \u00B7 Enter selects \u00B7 Esc cancels" --header-first
+        if (-not $picked) { return [pscustomobject]@{ Success = $false; Vm = $null; Error = 'cancelled' } }
+        $Selector = ("$picked" -split "$tab", 2)[0]
     }
 
     $hits = if (Test-PmxVmId $Selector) {
@@ -105,19 +135,24 @@ function Get-PmxReadInvocation {
         -SwitchOptions (Get-PmxGlobalSwitchMap) -MinPositionals 0 -MaxPositionals $(if ($RequireSelector) { 1 } else { 0 })
     if (-not $parsed.Success) { return $parsed }
     if ($RequireSelector) {
+        # A MISSING selector is no longer an error — it becomes an empty one, and
+        # Resolve-PmxManagedVm opens a picker. Supplying BOTH forms is still an error,
+        # because that is genuinely ambiguous rather than merely unspecified.
         if ($PositionalSelectorOnly) {
-            if ($parsed.Positionals.Count -ne 1) {
-                return [pscustomobject]@{ Success = $false; Options = $parsed.Options; Positionals = $parsed.Positionals; Error = 'supply one VM name or VMID after the action' }
+            if ($parsed.Positionals.Count -gt 1) {
+                return [pscustomobject]@{ Success = $false; Options = $parsed.Options; Positionals = $parsed.Positionals; Error = 'name one VM, not several' }
             }
-            $parsed.Options['Selector'] = "$($parsed.Positionals[0])"
+            $parsed.Options['Selector'] = if ($parsed.Positionals.Count -eq 1) { "$($parsed.Positionals[0])" } else { '' }
             return $parsed
         }
         $hasOption = $parsed.Options.ContainsKey('Vm')
         $hasPosition = $parsed.Positionals.Count -eq 1
-        if ($hasOption -eq $hasPosition) {
+        if ($hasOption -and $hasPosition) {
             return [pscustomobject]@{ Success = $false; Options = $parsed.Options; Positionals = $parsed.Positionals; Error = 'supply one VM as a positional value or with --vm, but not both' }
         }
-        $parsed.Options['Selector'] = if ($hasOption) { "$($parsed.Options.Vm)" } else { "$($parsed.Positionals[0])" }
+        $parsed.Options['Selector'] = if ($hasOption) { "$($parsed.Options.Vm)" }
+                                      elseif ($hasPosition) { "$($parsed.Positionals[0])" }
+                                      else { '' }
     }
     return $parsed
 }
@@ -147,6 +182,10 @@ function Show-PmxManagedVmList {
             (ConvertTo-PmxDisplayText $vm.Name), (ConvertTo-PmxDisplayText $vm.Node), $type,
             $vm.CpuCount, (Format-PmxBytes $vm.MaxMemory)) -ForegroundColor $color
     }
+    Write-Host ''
+    # Every srv and pc-whoami view ends by naming what to do next; pmx views ended in silence,
+    # leaving the user to go back to `pmx help` to find the obvious follow-up.
+    Write-Host '  pmx vm show <name>  ·  pmx vm ip <name>  ·  pmx snapshot list <name>' -ForegroundColor DarkGray
     Write-Host ''
 }
 

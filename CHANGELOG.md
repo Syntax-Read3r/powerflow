@@ -9,6 +9,49 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
+## [4.3.0] - 2026-08-07
+
+Completes the convenience review of the Proxmox surface. Every item below came from that
+review, was adversarially verified before being acted on, and is additive — no existing
+invocation stops working.
+
+### Added
+
+- 🖥️ **A missing VM name opens a picker instead of a usage line.** Thirteen VM-taking commands
+  answered `pmx vm show` with *"supply one VM name or VMID after the action"* while a working
+  fzf picker sat forty lines away, wired to physical disks only. Now `pmx vm show`,
+  `pmx vm ip`, `pmx disk list`, `pmx snapshot list` and the rest let you pick — VMID, name,
+  status and node in the list. Done at the resolver, so every caller gained it at once.
+
+  Safety is untouched: whatever is picked goes through the same validate → confirm →
+  revalidate → verify chain, and non-interactive sessions fall back to a message naming what
+  they need rather than hanging on fzf.
+
+- 🧬 **`pmx vm clone <template> <name>`** — the everyday form. Cloning is the most common
+  Proxmox task and had the worst ergonomics in pmx: four flags, three flag names, and the magic
+  value `auto` — which was the only value the tool accepted anyway. The VMID is now resolved
+  automatically and the amber preview prints it before you confirm. The three-positional and
+  fully-named forms still work.
+
+- 🧭 **Bare `pmx vm net` lists the fleet**, mirroring bare `pmx vm`. It previously threw a raw
+  binding exception.
+
+- ➡️ **`pmx vm list` ends by naming the next step** — `pmx vm show <name> · pmx vm ip <name> ·
+  pmx snapshot list <name>` — the way every `srv` and `pc-whoami` view already does.
+
+### Fixed
+
+- 💥 **`pmx vm net` with no VM threw `Cannot bind argument to parameter Arguments`** — a raw
+  .NET binding failure before any parsing, because the parameter was Mandatory with no default.
+- 🧹 **`--full` on `pmx vm clone` never did anything.** It was registered as a switch, read
+  nowhere, and the clone call hardcodes `Full = $true`. Removed from the help; still accepted
+  so no existing script breaks.
+- 🧹 **`vmid-policy` and `clone-mode` were dead configuration.** Neither was read outside
+  `config.ps1`, each accepted exactly one value, and `pmx config set` advertised "clone mode"
+  as something you could change. Removed. A saved `pmx.json` carrying them is ignored, not
+  rejected.
+- 📖 **A generic parser error now teaches.** `pmx vm clone a b c d` answered *"expected at most 3
+  positional value(s)"* with no hint of the right shape; it now names the invocation to use.
 ## [4.2.0] - 2026-08-07
 
 **This release also delivers v4.1.0.** That tag was pushed but its CI run was cancelled, so it

@@ -26,8 +26,12 @@ function Get-PmxConfigDefaults {
         # with --show-native, or permanently with `pmx config set show-native true`.
         ShowNative     = $false
         Explain        = $true
-        VmidPolicy     = 'auto'
-        CloneMode      = 'full'
+        # VmidPolicy and CloneMode were removed in v4.3.0. Neither was ever READ outside this
+        # file — grep confirmed zero consumers — yet `pmx config set` advertised "clone mode"
+        # as something you could change. Each also accepted exactly one value, so the setting
+        # was a choice between one option that did nothing. A saved pmx.json carrying them is
+        # still fine: Get-PmxConfig only reads keys present in these defaults, so they are
+        # ignored rather than rejected.
         Confirmation   = 'risk-based'
         AuditLog       = $true
         TimeoutSeconds = 60
@@ -42,8 +46,6 @@ function Get-PmxConfigSettingMap {
         'output'          = 'Output'
         'show-native'     = 'ShowNative'
         'explain'         = 'Explain'
-        'vmid-policy'     = 'VmidPolicy'
-        'clone-mode'      = 'CloneMode'
         'confirmation'    = 'Confirmation'
         'audit-log'       = 'AuditLog'
         'timeout-seconds' = 'TimeoutSeconds'
@@ -112,18 +114,6 @@ function ConvertTo-PmxConfigValue {
         }
         { $_ -in @('ShowNative', 'Explain', 'AuditLog') } {
             return (ConvertTo-PmxBooleanSetting -Value $Value)
-        }
-        'VmidPolicy' {
-            if ($text -ne 'auto') {
-                return [pscustomobject]@{ Success = $false; Value = $null; Error = 'vmid-policy currently supports only auto' }
-            }
-            return [pscustomobject]@{ Success = $true; Value = $text; Error = '' }
-        }
-        'CloneMode' {
-            if ($text -ne 'full') {
-                return [pscustomobject]@{ Success = $false; Value = $null; Error = 'clone-mode currently supports only full' }
-            }
-            return [pscustomobject]@{ Success = $true; Value = $text; Error = '' }
         }
         'Confirmation' {
             if ($text -ne 'risk-based') {

@@ -134,11 +134,12 @@ function Get-PmxHelpTopics {
     $topics['vm clone'] = [pscustomobject]@{
         Purpose = 'Create an independent VM from an existing template.'
         Syntax = @(
-            'pmx vm clone --source <vmid|name> --new-vmid <number|auto> --name <dns-name> [--full] [--dry-run]',
-            'pmx vm clone <source> <new-vmid|auto> <dns-name> [--full] [--dry-run]',
+            'pmx vm clone <template> <dns-name> [--dry-run]',
+            'pmx vm clone <template> <new-vmid> <dns-name> [--dry-run]',
+            'pmx vm clone --source <template> --name <dns-name> [--dry-run]'
             'Compatibility: --source-vmid is accepted as an alias of --source.'
         )
-        Example = @('pmx vm clone --source debian-base --new-vmid auto --name docker-host --full --dry-run')
+        Example = @('pmx vm clone debian-base docker-host', 'pmx vm clone debian-base docker-host --dry-run')
         Native = @('qm clone <source-vmid> <new-vmid> --name <name> --full 1')
         Safety = 'Amber. Shows every source-to-target storage mapping and provisioned capacity, then validates, confirms, revalidates, executes, and verifies.'
         Story = 'Copy one hotel room into a new, independently owned room number while showing which storage pool receives each disk.'
@@ -233,7 +234,7 @@ function Get-PmxHelpTopics {
             'pmx vm network adapters|addresses|stats <vm> [--json|--table]',
             'pmx vm network list [--json|--table]',
             'Short aliases: pmx vm net <vm> · pmx vm nic <vm> · pmx vm ip <vm>',
-            'pmx vm clone --source <template> --new-vmid <number|auto> --name <dns-name> [--dry-run]',
+            'pmx vm clone <template> <dns-name> [--dry-run]',
             'pmx vm cpu set <vm> --cores <number> [--dry-run]',
             'pmx vm memory set <vm> --size <size> [--dry-run]',
             'pmx vm start|shutdown <vm> [--dry-run]'
@@ -324,7 +325,7 @@ function Get-PmxHelpOverview {
     return @(
         [pscustomobject]@{ Title = 'CONFIGURATION & DISCOVERY'; Commands = @(
             [pscustomobject]@{ Syntax = 'pmx config show [--json|--table]'; Description = 'show target and policy settings' },
-            [pscustomobject]@{ Syntax = 'pmx config set <setting> <value>'; Description = 'change host, transport, node, output, confirmation, audit, or clone mode' },
+            [pscustomobject]@{ Syntax = 'pmx config set <setting> <value>'; Description = 'change host, transport, node, output, confirmation, or audit' },
             [pscustomobject]@{ Syntax = 'pmx config reset <setting|all>'; Description = 'restore one or all defaults' },
             [pscustomobject]@{ Syntax = 'pmx config validate'; Description = 'verify transport and selected node' },
             [pscustomobject]@{ Syntax = 'pmx discover [--json|--table]'; Description = 'nodes, storage, bridges, VMIDs, templates; alias: pmx config discover' },
@@ -344,7 +345,7 @@ function Get-PmxHelpOverview {
             [pscustomobject]@{ Syntax = 'pmx disk list --vm <name|vmid> [--json|--table]'; Description = 'virtual disks attached to one VM' }
         ) },
         [pscustomobject]@{ Title = 'GUARDED VM CHANGES'; Commands = @(
-            [pscustomobject]@{ Syntax = 'pmx vm clone --source <template> --new-vmid <number|auto> --name <dns-name> [--full] [--dry-run]'; Description = 'full clone with per-disk storage placement and capacity' },
+            [pscustomobject]@{ Syntax = 'pmx vm clone <template> <name> [--dry-run]'; Description = 'full clone; the VMID is chosen automatically' },
             [pscustomobject]@{ Syntax = 'pmx vm cpu set <name|vmid> --cores <number> [--dry-run]'; Description = 'cores per socket; alias: pmx vm set-cpu' },
             [pscustomobject]@{ Syntax = 'pmx vm memory set <name|vmid> --size <size> [--dry-run]'; Description = 'memory in MiB/GiB/TiB; alias: pmx vm set-memory' },
             [pscustomobject]@{ Syntax = 'pmx disk grow <name|vmid> <size> [--dry-run]'; Description = 'grow the only eligible virtual disk to a final IEC size' },

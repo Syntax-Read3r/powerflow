@@ -199,7 +199,10 @@ function Get-PmxVmNetworkModel {
 
 function Show-PmxVmNetwork {
     param(
-        [Parameter(Mandatory)][object[]]$Arguments,
+        # Not Mandatory: `pmx vm net` with no VM threw "Cannot bind argument to parameter
+        # 'Arguments' because it is an empty array" — a raw binding exception, before any
+        # parsing. With a default, an empty tail flows through to the VM picker instead.
+        [object[]]$Arguments = @(),
         [ValidateSet('combined', 'adapters', 'addresses', 'stats')][string]$View = 'combined'
     )
 
@@ -262,6 +265,10 @@ function Show-PmxVmNetworkList {
 
 function Invoke-PmxVmNetworkCommand {
     param([object[]]$Arguments = @())
+
+    # Bare `pmx vm net` lists the fleet, mirroring bare `pmx vm`. The user just learned that
+    # pattern one level up, so erroring here taught the opposite of what the level above does.
+    if (-not $Arguments.Count) { Show-PmxVmNetworkList -Arguments @(); return }
 
     $action = if ($Arguments.Count) { "$($Arguments[0])".ToLowerInvariant() } else { '' }
     $tail = Get-PmxCommandTail -Arguments $Arguments -Start 1
