@@ -142,3 +142,348 @@
 - **Extensible architecture** - Easy to customize and extend with additional functionality
 - **Professional workflows** - Supports enterprise development patterns and team collaboration
 - **Version management** - Built-in update mechanisms and version tracking for easy maintenance
+
+
+
+Linux Feature to be added if not done so already: 
+
+lsblk --bytes --json -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS,PKNAME
+findmnt --json --bytes
+df --block-size=1 --output=source,fstype,size,used,avail,pcent,target
+swapon --show --bytes --output=NAME,TYPE,SIZE,USED,PRIO
+
+
+sudo hostnamectl set-hostname docker-host
+sudo sed -i 's/debian13-base/docker-host/g' /etc/hosts
+
+Meaning:
+
+hostnamectl set-hostname changes the computer’s hostname.
+sed replaces the old hostname inside /etc/hosts.
+-i means edit the file in place.
+
+Verify:
+
+hostnamectl --static
+
+Expected:
+
+docker-host
+
+Your current shell prompt may continue showing the old name until you reconnect.
+
+2. Give it a unique machine identity
+sudo rm -f /etc/machine-id
+sudo systemd-machine-id-setup
+
+machine-id is Linux’s internal identifier for this installation. A clone should not retain the template’s identifier.
+
+Verify that a new value exists:
+
+cat /etc/machine-id
+
+It should show a long hexadecimal value.
+
+3. Generate unique SSH host keys
+sudo rm -f /etc/ssh/ssh_host_*
+sudo ssh-keygen -A
+sudo sshd -t
+
+Meaning:
+
+Command	Purpose
+rm -f /etc/ssh/ssh_host_*	Remove the copied server identity keys
+ssh-keygen -A	Generate all missing SSH host keys
+sshd -t	Test the SSH server configuration without restarting it
+
+sshd -t should return no output when everything is valid.
+
+Display the new ED25519 fingerprint:
+
+ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+4. Reboot only the VM
+
+--------------------
+
+Required presentation
+STORAGE
+  Virtual disk     /dev/sda · 100 GiB
+  Root filesystem  /dev/sda2 · ext4 · 29 GiB
+  Root available   27 GiB
+  EFI partition    /dev/sda1 · 975 MiB
+  Swap             /dev/sda3 · 1.7 GiB
+  Unallocated      approximately 68 GiB
+
+Required JSON shape
+
+  {
+  "block_devices": [
+    {
+      "name": "/dev/sda",
+      "type": "disk",
+      "size_bytes": 107374182400,
+      "virtual": true,
+      "partitions": [
+        {
+          "name": "/dev/sda2",
+          "filesystem": "ext4",
+          "mountpoints": ["/"],
+          "size_bytes": 31138512896,
+          "available_bytes": 28991029248
+        }
+      ]
+    }
+  ],
+  "swap": [
+    {
+      "name": "/dev/sda3",
+      "size_bytes": 1825361100,
+      "used_bytes": 0
+    }
+  ]
+}
+
+
+Fixes to consider: 
+
+PowerFlow must not calculate storage values by parsing its own formatted sentence.
+
+Required: iGPU is incorrectly labelled
+
+Your output says:
+
+iGPU Vendor 1234 Device 1111
+
+Inside this VM, that is almost certainly a virtual display adapter presented by QEMU, not an integrated physical GPU.
+
+The label should be:
+
+Display adapter   QEMU virtual VGA
+
+or:
+
+Virtual GPU       Vendor 1234 · Device 1111
+
+The function should use virtualization detection such as:
+
+systemd-detect-virt
+lspci -nn
+
+When virtualization is detected, it should not label a display device as the host’s physical iGPU.
+
+Recommended: clarify virtual RAM and firmware
+
+These lines are also potentially misleading:
+
+RAM   8 GB   install dmidecode for type/speed
+BIOS  4.2025.05-2
+
+Inside a VM:
+
+the 8 GB is virtual RAM allocated by Proxmox;
+dmidecode may only expose virtual SMBIOS information;
+it cannot reliably describe the T440’s physical ECC RDIMMs;
+the displayed BIOS is the VM’s virtual firmware, not the Dell T440 BIOS.
+
+Better output:
+
+Memory          8 GiB allocated to VM
+Physical DIMMs  unavailable inside guest
+Firmware        SeaBIOS/QEMU virtual firmware · 4.2025.05-2
+Hypervisor      KVM/QEMU
+
+Checkpoint:
+
+We need to be able to do this in powerflow: 
+
+Tiny lesson: the diagnosis is confirmed.
+
+```text
+/dev/sda     100G   whole virtual disk
+/dev/sda2   29.4G   Debian root filesystem
+/dev/sda3    1.7G   swap
+```
+
+Roughly **68 GiB is still unallocated**. Debian can see the larger building, but those rooms have not been assigned to a department.
+
+Because the swap partition sits after the root partition:
+
+```text
+sda1 → EFI
+sda2 → /
+sda3 → swap
+free space → about 68 GiB
+```
+
+we cannot simply stretch `sda2` into the free space without moving or removing `sda3`.
+
+For this Docker VM, the cleaner beginner-friendly plan is:
+
+```text
+sda2   Debian operating system
+sda3   swap
+sda4   Docker service data
+```
+
+We will mount `sda4` at:
+
+```text
+/srv/docker
+```
+
+Later Docker will store containers, images, volumes, and service data there instead of filling Debian’s root filesystem.
+
+Before creating anything, inspect the exact partition boundaries:
+
+```bash
+sudo fdisk -l /dev/sda
+```
+
+Also confirm the root filesystem capacity:
+
+```bash
+df -hT /
+```
+
+`fdisk -l` means:
+
+* `fdisk` — inspect or edit disk partition tables
+* `-l` — list the current layout
+* `/dev/sda` — inspect this specific disk
+
+Do not enter interactive `fdisk` yet. Send both outputs.
+
+Checkpoint:
+
+1. Why can’t `sda2` simply grow directly into the free space?
+2. What will `/srv/docker` hold?
+3. Is the unused 68 GiB currently part of any filesystem?
+
+
+Tiny lesson: the disk map confirms exactly what we expected.
+
+```text
+Whole virtual disk      /dev/sda   100 GiB
+Debian root partition   /dev/sda2   29.4 GiB
+Swap                    /dev/sda3    1.7 GiB
+Unallocated space                  about 68 GiB
+```
+
+The warning:
+
+```text
+The backup GPT table is not on the end of the device.
+```
+
+appeared because the disk used to be 32 GiB. GPT keeps a backup copy of the partition map at the end of the disk, and that backup is still sitting at the old 32 GiB boundary. Writing the partition table once will move it to the new end of the 100 GiB disk.
+
+We will create only `/dev/sda4`. Do not delete or alter `sda1`, `sda2`, or `sda3`.
+
+Run:
+
+```bash
+sudo fdisk /dev/sda
+```
+
+Inside `fdisk`, enter these keys one at a time:
+
+```text
+n
+Enter
+Enter
+Enter
+p
+```
+
+Meaning:
+
+| Input          | Action                                  |
+| -------------- | --------------------------------------- |
+| `n`            | Create a new partition                  |
+| first `Enter`  | Accept partition number `4`             |
+| second `Enter` | Accept the first free sector            |
+| third `Enter`  | Use all remaining space                 |
+| `p`            | Print the proposed layout before saving |
+
+At the preview, verify that:
+
+```text
+sda1   still 976M
+sda2   still 29.4G
+sda3   still 1.7G
+sda4   approximately 68G
+```
+
+Do **not** type `d`, `g`, or `o`:
+
+* `d` deletes a partition.
+* `g` creates a new empty GPT table.
+* `o` creates a new empty DOS partition table.
+
+Only when the preview is correct, type:
+
+```text
+w
+```
+
+`w` means **write the changes**. It will also repair the GPT backup-table location.
+
+Then verify:
+
+```bash
+lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS
+```
+
+Expected new line:
+
+```text
+sda4   approximately 68G   part
+```
+
+It should have no filesystem and no mount point yet. That is correct—we will format and mount it only after verifying the partition.
+
+
+Tiny lesson: the new partition exists, but it is still an empty room with no shelving system.
+
+```text
+/dev/sda4   68G   partition
+Filesystem  none
+Mount point none
+```
+
+Now create an **ext4 filesystem** on that new partition:
+
+```4 filesystem** on thatbash
+sudo mkfs.ext4 -L docker-data /dev/sda4
+```
+
+Meaning:
+
+| Part             | Meaning                         |
+| ---------------- | ------------------------------- |
+| `mkfs`           | make filesystem                 |
+| `.ext4`          | create an ext4 filesystem       |
+| `-L docker-data` | give it the label `docker-data` |
+| `/dev/sda4`      | format this exact partition     |
+
+This command is destructive to anything already on `/dev/sda4`, but the partition is newly created and empty. Do not substitute `sda`, `sda1`, `sda2`, or `sda3`.
+
+After it finishes, verify:
+
+```bash
+lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINTS /dev/sda
+```
+
+Expected important line:
+
+```text
+sda4   68G   ext4   docker-data
+```
+
+It should still have no mount point. We will mount it at `/srv/docker` in the next step.
+
+Checkpoint:
+
+1. What does `mkfs` do?
+2. Why are we formatting `/dev/sda4` rather than `/dev/sda`?
+3. Does creating a filesystem automatically mount the partition?

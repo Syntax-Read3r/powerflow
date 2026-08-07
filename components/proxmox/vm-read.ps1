@@ -129,7 +129,7 @@ function Show-PmxManagedVmList {
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     if ($parsed.Options.Help) { Show-PmxTopicHelp 'vm list'; return }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $inventory = Get-PmxManagedVmRows -Session $session
     if (-not $inventory.Success) { Write-Host "❌ $($inventory.Error)" -ForegroundColor Red; return }
     $mode = Get-PmxOutputMode -Options $parsed.Options -Config $session.Config
@@ -160,7 +160,7 @@ function Show-PmxManagedVm {
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     if ($parsed.Options.Help) { Show-PmxTopicHelp $(if ($StatusOnly) { 'vm status' } else { 'vm show' }); return }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $resolved = Resolve-PmxManagedVm -Selector $parsed.Options.Selector -Session $session
     if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
     $details = Get-PmxManagedVmDetails -Session $session -Vm $resolved.Vm
@@ -203,7 +203,7 @@ function Show-PmxNextVmId {
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     if ($parsed.Options.Help) { Show-PmxTopicHelp 'vm next-id'; return }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $result = Invoke-ProxmoxManagementQuery -Operation 'next-id' -Connection $session.Connection
     if (-not $result.Success -or -not (Test-PmxVmId $result.Data)) {
         $why = if ($result.Error) { $result.Error } else { 'Proxmox returned an invalid next VMID' }
@@ -223,7 +223,7 @@ function Show-PmxManagedVmDisks {
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     if ($parsed.Options.Help) { Show-PmxTopicHelp 'disk list'; return }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $resolved = Resolve-PmxManagedVm -Selector $parsed.Options.Selector -Session $session
     if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
     $details = Get-PmxManagedVmDetails -Session $session -Vm $resolved.Vm

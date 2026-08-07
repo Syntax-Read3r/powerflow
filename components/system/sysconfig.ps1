@@ -57,6 +57,20 @@ function pwsh-config {
     }
 
     $opts = @(Get-SysConfigOptions)
+
+    # PowerFlow's OWN preferences live alongside the OS ones, because "where do I change
+    # things" is one question to a user even though it is two answers underneath. They carry
+    # Owner='powerflow' so the apply path saves them to PowerFlow config instead of handing
+    # them to the OS adapter — the adapter stays purely about the operating system.
+    $folderPref = Get-PFFolderPreference
+    $opts += [pscustomobject]@{
+        Key     = 'user-folders'
+        Label   = 'User folders'
+        Current = $folderPref
+        Kind    = 'list'
+        Owner   = 'powerflow'
+    }
+
     if ($opts.Count -eq 0) { Write-Host "❌ No settings available." -ForegroundColor Red; return }
 
     # One notion of "interactive" for the WHOLE flow. fzf reads /dev/tty even when stdin
@@ -137,6 +151,34 @@ function pwsh-config {
                 Write-Host "   Install fzf to pick from the list, or set it directly with the real command." -ForegroundColor DarkGray
                 return
             }
+            # PowerFlow's own preferences never reach the OS adapter.
+            if ($entry.Owner -eq 'powerflow' -and $entry.Key -eq 'user-folders') {
+                $homeDir = Get-HomePath
+                $choices = @(
+                    "auto`tfollow the OS — on Windows this includes the OneDrive redirect"
+                    "local`tinsist on $homeDir\<Folder>, keeping files off OneDrive"
+                    "known`tthe redirect target explicitly, even if a local folder exists"
+                )
+                $picked = $choices | fzf --query $entry.Current --reverse --border=rounded --height=45% `
+                    --delimiter="`t" --with-nth=1.. `
+                    --prompt='User folders: ' `
+                    --header='Which location should nav -docs / -pics use? · Esc cancels' --header-first `
+                    --color="header:bold:cyan,prompt:bold:green,border:cyan"
+                if (-not $picked) { Write-Host '❌ Cancelled' -ForegroundColor DarkGray; return }
+                $val = ("$picked" -split "`t", 2)[0].Trim()
+                if (Set-PFFolderPreference -Preference $val) {
+                    Write-Host "✅ User folders: $val" -ForegroundColor Green
+                    $named = Get-PFNamedRoots
+                    foreach ($f in @('documents', 'downloads', 'pictures', 'videos', 'music', 'desktop')) {
+                        if ($named.Contains($f)) { Write-Host ("   -{0,-11} {1}" -f $f, @($named[$f])[0]) -ForegroundColor DarkGray }
+                    }
+                    # The whole point of choosing 'local': say so when the folders are not there,
+                    # and offer to create them rather than silently falling back to OneDrive.
+                    if ($val -eq 'local') { Repair-PFUserFolders }
+                }
+                return
+            }
+
             $choices = @(Get-SysConfigChoices -Key $entry.Key)
             if ($choices.Count -eq 0) {
                 # Per-setting hint — "are locales generated?" is wrong for a keyboard problem.

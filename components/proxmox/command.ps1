@@ -65,6 +65,48 @@ function Invoke-PmxLegacyDiskCommand {
     }
 }
 
+# Accepts every reasonable spelling of a single-value VM setting and normalises it to the
+# canonical `<vm> --<option> <value>` form the setter already understands:
+#
+#   pmx vm memory 101 8G                 short — what people type
+#   pmx vm memory set 101 8G             with the optional `set`
+#   pmx vm memory set 101 --size 8G      the original long form (unchanged)
+#   pmx vm memory 101 --size 8G          any mixture
+#
+# Flags such as --dry-run pass through untouched wherever they appear.
+function Invoke-PmxVmScalarSet {
+    param(
+        [object[]]$Rest = @(),
+        [Parameter(Mandatory)][string]$Option,
+        [Parameter(Mandatory)][string]$Setter,
+        [Parameter(Mandatory)][string]$Usage
+    )
+
+    $tokens = @($Rest | ForEach-Object { "$_" })
+    if ($tokens.Count -and $tokens[0].ToLowerInvariant() -eq 'set') {
+        $tokens = @($tokens | Select-Object -Skip 1)
+    }
+    # NOTE: no early return on an empty tail. The router's job is to ROUTE — the setter owns
+    # its own argument validation and error text, and a routing test asserts the handler is
+    # reached even with no arguments. Returning here silently broke that contract.
+
+    # Split the leading positionals from anything flag-shaped, so --dry-run et al survive.
+    $positional = @(); $passthrough = @(); $seenFlag = $false
+    for ($i = 0; $i -lt $tokens.Count; $i++) {
+        if ($tokens[$i] -like '-*') { $seenFlag = $true }
+        if ($seenFlag) { $passthrough += $tokens[$i] } else { $positional += $tokens[$i] }
+    }
+
+    # <vm> <value> — promote the bare value to its flag. If the value was already supplied as
+    # a flag, $positional holds only the VM and there is nothing to promote.
+    if ($positional.Count -ge 2) {
+        $argv = @($positional[0], "--$Option", $positional[1]) + @($positional | Select-Object -Skip 2) + $passthrough
+    } else {
+        $argv = @($positional) + $passthrough
+    }
+    & $Setter -Arguments $argv
+}
+
 function Invoke-PmxVmCommand {
     param([object[]]$Arguments = @())
 
@@ -84,22 +126,11 @@ function Invoke-PmxVmCommand {
         'shutdown'   { Invoke-PmxVmShutdown -Arguments $rest }
         'set-cpu'    { Invoke-PmxVmCpuSet -Arguments $rest }
         'set-memory' { Invoke-PmxVmMemorySet -Arguments $rest }
-        'cpu' {
-            $subaction = if ($rest.Count) { "$($rest[0])".ToLowerInvariant() } else { '' }
-            if ($subaction -ne 'set') {
-                Write-Host '❌ Use: pmx vm cpu set <vm> --cores <number>' -ForegroundColor Red
-                return
-            }
-            Invoke-PmxVmCpuSet -Arguments (Get-PmxCommandTail -Arguments $rest -Start 1)
-        }
-        'memory' {
-            $subaction = if ($rest.Count) { "$($rest[0])".ToLowerInvariant() } else { '' }
-            if ($subaction -ne 'set') {
-                Write-Host '❌ Use: pmx vm memory set <vm> --size <size>' -ForegroundColor Red
-                return
-            }
-            Invoke-PmxVmMemorySet -Arguments (Get-PmxCommandTail -Arguments $rest -Start 1)
-        }
+        # `set` is OPTIONAL, and the value may be positional. `pmx disk grow 101 50G` already
+        # reads this way, so `pmx vm memory set 101 --size 8G` was the odd one out — same kind
+        # of operation, twice the ceremony. Both spellings work; the long form is untouched.
+        'cpu'    { Invoke-PmxVmScalarSet -Rest $rest -Option 'cores' -Setter 'Invoke-PmxVmCpuSet'    -Usage 'pmx vm cpu <vm> <cores>' }
+        'memory' { Invoke-PmxVmScalarSet -Rest $rest -Option 'size'  -Setter 'Invoke-PmxVmMemorySet' -Usage 'pmx vm memory <vm> <size>' }
         default { Write-Host "❌ Unknown VM action '$action'. Run: pmx help" -ForegroundColor Red }
     }
 }
@@ -139,6 +170,20 @@ function pmx {
     $tail = Get-PmxCommandTail -Arguments $argv -Start 1
     if ($group -in @('help', '-h', '--help', '/?')) {
         Show-PmxHelp -TopicParts $tail
+        return
+    }
+
+    # `--help` ANYWHERE means "explain this command", never "run it". Previously it was
+    # honoured only at token zero, so `pmx vm show --help` fell through to the command, whose
+    # own help check sits BELOW its parse-failure gate (vm-read.ps1) — meaning asking for help
+    # failed arity validation first and answered "❌ supply one VM name or VMID after the
+    # action". Nine to ten advertised paths behaved that way, each with a different unrelated
+    # error. Hoisting it here makes `pmx vm show --help` ≡ `pmx help vm show` for every path,
+    # including ones with no per-function scan at all (`pmx disks --help`, `pmx vm --help`).
+    # Only literal help tokens trigger this; -Full/-Write/-Destroy are untouched.
+    if (@($argv | Where-Object { "$_".ToLowerInvariant() -in @('--help', '-h', '/?') }).Count) {
+        $topic = @($argv | Where-Object { -not "$_".StartsWith('-', [StringComparison]::Ordinal) -and "$_" -ne '/?' })
+        Show-PmxHelp -TopicParts $topic
         return
     }
 
@@ -205,9 +250,10 @@ function pmx {
     }
 }
 
-Register-PFCommand -Name 'pmx' -Section '⚡ PROXMOX VE' -Platform 'Both' -Synopsis 'safe Proxmox host, disk, VM and snapshot workflows' -Example 'pmx help · pmx discover · pmx vm list'
-Register-PFCommand -Name 'pmx config' -Section '⚡ PROXMOX VE' -Platform 'Both' -Synopsis 'configure and validate a local or saved SSH target' -Example 'pmx config show'
-Register-PFCommand -Name 'pmx discover' -Section '⚡ PROXMOX VE' -Platform 'Both' -Synopsis 'discover nodes, storage, bridges, VMIDs and templates'
-Register-PFCommand -Name 'pmx vm' -Section '⚡ PROXMOX VE' -Platform 'Both' -Synopsis 'inspect, clone, size, start and shut down QEMU VMs' -Example 'pmx vm list'
-Register-PFCommand -Name 'pmx disk' -Section '⚡ PROXMOX VE' -Platform 'Both' -Synopsis 'inspect physical disks locally or manage one VM disk' -Example 'pmx disk list --vm 102'
-Register-PFCommand -Name 'pmx snapshot' -Section '⚡ PROXMOX VE' -Platform 'Both' -Synopsis 'list or create guarded VM snapshots' -Example 'pmx snapshot list --vm 102'
+# ONE entry, not eleven. The ten sub-route registrations (pmx config / discover / vm / disk /
+# snapshot / vm network / …) were listed in pwsh-h on EVERY machine, including boxes with no
+# Proxmox at all — where each one answers "not connected". That is a menu of things that error.
+# `pmx help` already owns the full 31-topic catalogue and works everywhere (it is reachable
+# before the Proxmox gate), so pwsh-h names the family once and hands off. pwsh-h is a command
+# reference, not a mirror of every route.
+Register-PFCommand -Name 'pmx' -Section '⚡ PROXMOX VE' -Platform 'Both' -Synopsis 'Proxmox host, disk, VM and snapshot workflows — pmx help lists them all' -Example 'pmx help · pmx vm list · pmx vm ip <name>'

@@ -176,13 +176,25 @@ function ConvertFrom-PmxArguments {
 
 function ConvertFrom-PmxSize {
     param(
-        [Parameter(Mandatory)][string]$Value,
+        # AllowEmptyString so an empty size reaches THIS function's own validation and comes
+        # back as a readable "must be a whole number and a unit" error. Without it, a Mandatory
+        # [string] refuses '' at binding time and `pmx disk grow 101 ""` threw a raw
+        # ParameterBindingException at the user — the flag forms (--size "") were already
+        # guarded upstream, but the positional form was not. Fixing it here covers every caller.
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Value,
         [ValidateSet('memory', 'disk')][string]$Kind = 'disk'
     )
 
     $text = $Value.Trim()
-    if ($text -notmatch '^([1-9][0-9]*)(MiB|GiB|TiB|MB|GB|TB)$') {
-        return [pscustomobject]@{ Success = $false; Bytes = 0L; MiB = 0L; Canonical = ''; Error = "size '$Value' must be a positive whole number with MiB, GiB, or TiB" }
+    # Accept the unit people actually type. The original pattern demanded MiB/GiB/TiB or
+    # MB/GB/TB and was case-SENSITIVE, so `pmx disk grow 101 50G` — the obvious invocation,
+    # and the one `qm resize` itself takes — was rejected with a lecture about IEC units.
+    # Bare M/G/T and any casing are now accepted; the value is still a positive WHOLE number,
+    # because every size here is converted to exact bytes and a decimal would invite rounding
+    # into a disk-growth plan.
+    if ($text -notmatch '(?i)^([1-9][0-9]*)\s*(M|MB|MIB|G|GB|GIB|T|TB|TIB)$') {
+        return [pscustomobject]@{ Success = $false; Bytes = 0L; MiB = 0L; Canonical = ''
+            Error = "size '$Value' must be a whole number and a unit — for example 512M, 8G or 2T (MB/MiB, GB/GiB, TB/TiB also work)" }
     }
     $amount = 0L
     if (-not [long]::TryParse($matches[1], [ref]$amount)) {
@@ -190,9 +202,9 @@ function ConvertFrom-PmxSize {
     }
     $unit = $matches[2].ToLowerInvariant()
     $multiplier = switch ($unit) {
-        { $_ -in @('mib', 'mb') } { 1MB }
-        { $_ -in @('gib', 'gb') } { 1GB }
-        { $_ -in @('tib', 'tb') } { 1TB }
+        { $_ -in @('m', 'mib', 'mb') } { 1MB }
+        { $_ -in @('g', 'gib', 'gb') } { 1GB }
+        { $_ -in @('t', 'tib', 'tb') } { 1TB }
     }
     $product = [decimal]$amount * [decimal]$multiplier
     if ($product -gt [long]::MaxValue) {

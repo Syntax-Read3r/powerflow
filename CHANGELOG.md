@@ -9,7 +9,136 @@ All notable changes to PowerFlow will be documented in this file.
 - Testing framework integration
 - Enhanced Docker optimizations
 
-## [4.1.0] - Unreleased
+## [4.2.0] - 2026-08-07
+
+**This release also delivers v4.1.0.** That tag was pushed but its CI run was cancelled, so it
+never published — the pmx network layer has been stranded since. Everything below ships together.
+
+### Added
+
+- 🧭 **`nav`, redesigned from the bottom up — named starting points on both platforms.**
+  `nav` searched one place (`~/Code` on Windows, `~` on Linux), which made it useless for
+  everything else you own:
+
+  ```
+  ❯ nav downloads
+  ❌ No directories found in: /home/you
+  ```
+  …when the thing wanted was `/srv/docker/downloads`.
+
+  ```
+  nav -srv downloads        search from /srv
+  nav -pics screenshots     search from your Pictures folder
+  nav -docs                 go straight there, no argument needed
+  ```
+
+  Starting points use the **same names on both platforms** — `home code documents downloads
+  pictures videos music desktop config tmp`, plus Linux's `srv opt www etc log mnt` — with
+  shorthand `-pics -docs -dl -vids -desk -cfg`. Only ones that exist on the machine are offered.
+
+  `/dev`, `/proc`, `/sys` and `/run` are deliberately absent: there is nothing in a
+  kernel-backed pseudo-filesystem for a person to navigate to.
+
+  **The picker is the one you already know.** An anchor SCOPES the existing search rather than
+  getting a search of its own, so `nav -srv downloads` gives the identical fzf experience as
+  `nav ai` — every candidate, live filtering, the `126/171` counter, arrow keys — just narrowed.
+
+- ⚓ **Anchors — your own starting points.**
+
+  ```
+  nav --anchor . mon        anchor the directory you are in
+  nav -mon <destination>    …then search from it, forever
+  ls  -mon <destination>    the same anchors, the same resolver
+  nav anchors               a table: built-in vs yours, with paths
+  nav anchors rm mon        remove yours; built-ins refuse, and say why
+  ```
+
+  Built-ins cannot be deleted because they are derived from the machine — there is genuinely
+  nothing stored to delete, and the error says that rather than just "no". A user anchor can
+  never shadow a built-in or its alias, so `nav -code` cannot quietly change meaning.
+
+- 📑 **`nav b .` — bookmark the directory you are in**, named after its leaf, or
+  `nav b . <name>` to choose. `.` cannot collide with a real bookmark, so the intent is
+  unambiguous.
+
+- 📂 **`ls -<anchor> <name>` — list a directory without typing its path.**
+  `ls -srv complete` finds it and lists it. Ambiguity opens an fzf picker; piped or without
+  fzf it falls back to naming the candidates.
+
+- 🗂️ **`ls -recurse` and `-depth N`** — the spellings a PowerShell user already types.
+  `ll -recurse -depth 2` replaces `Get-ChildItem … -Recurse -Depth 2` with permissions, owner,
+  size and date, grouped and readable. **`-r` is untouched** — that is GNU reverse-sort, and
+  lsd honours it.
+
+- ⚙️ **`pwsh-config` → User folders — choose OneDrive or local, and create what is missing.**
+  Some people deliberately keep files off OneDrive. Choosing `local` and finding the folder
+  absent now offers to create it rather than silently falling back to the redirect, which
+  would ignore the preference you just set.
+
+### Fixed
+
+- 🪟 **`nav -docs` landed in the WRONG folder on Windows, and `nav -pics` did not exist.**
+  `Join-Path $home 'Documents'` is wrong on a modern install: OneDrive Known Folder Move
+  redirects Documents/Pictures/Desktop to `~\OneDrive\…`, leaving the local path an empty stub
+  or absent entirely. Measured on a real machine: `~\Pictures` did not exist at all, and
+  `~\Documents` existed but was not the live folder.
+
+  New adapter contract **`Get-UserFolderPath`** on both platforms — Windows consults the Known
+  Folder registry and follows the redirect; Linux has the same trap in a different shape (XDG
+  user dirs can be relocated or localised — `~/Documentos`) and uses `xdg-user-dir(1)`, falling
+  back to parsing `~/.config/user-dirs.dirs`.
+
+- 🔍 **`--show-native` was ON by default in pmx**, so native `qm`/`pvesh` vocabulary —
+  including `qm … --digest <sha1>` — reached users who never asked for it. That is the exact
+  inversion of the rule the flag exists to enforce. Now off, as documented.
+
+- ❓ **`pmx <anything> --help` errored on 15 paths.** `--help` was honoured only at token zero,
+  so `pmx vm show --help` fell through to the command — whose own help check sat *below* its
+  parse-failure gate, meaning asking for help failed arity validation first and answered
+  "supply one VM name or VMID after the action". Hoisted into the router; every path now
+  answers, and `-Full`/`--dry-run` are still not mistaken for help.
+
+- 🔌 **The most-hit error in pmx was a dead end 16 times out of 17.**
+  `Write-PmxDisconnectedState` — which names the recovery command — was written, handles all
+  three failure cases, and was called from exactly one of seventeen session-failure sites. Now
+  all seventeen: `🟡 Not connected … Sign in first: srv proxmox`.
+
+- 🧹 **`pwsh-h` listed 11 pmx entries on machines with no Proxmox**, where every one answers
+  "not connected" — a menu of things that error. Collapsed to **one**, handing off to
+  `pmx help`, which owns the full 37-invocation catalogue and works everywhere.
+
+- 📏 **`pmx disk grow 101 50G` was rejected.** The parser demanded `MiB/GiB/TiB` or `MB/GB/TB`,
+  case-sensitively — so the obvious invocation, and the one `qm resize` itself takes, failed
+  with a lecture about IEC units. Bare `M`/`G`/`T` and any casing now work.
+
+- 💥 **`pmx disk grow 101 ""` leaked a raw `ParameterBindingException`.** The `--size` flag form
+  was guarded; the positional form was not. Fixed at the root so every caller gets a readable
+  error.
+
+- 🎚️ **`pmx vm memory set 101 --size 8G` was the odd one out.** `pmx disk grow 101 50G` already
+  reads naturally, so the same kind of operation carried twice the ceremony. `set` is now
+  optional and the value may be positional — `pmx vm memory 101 8G`, `pmx vm cpu 101 4` — with
+  every longer spelling still working. Their usage errors now name the command.
+
+- 🌐 **`srv help` told you to create a server called "help".** `help` was reserved as a name
+  (proving it was meant to be a subcommand) but had no dispatch case, so it fell through to
+  "connect by name". `pmx help` and `team-room help` both worked; `srv` now matches them.
+
+- 🔒 **A real LAN address was committed in a test fixture** (`tests/proxmox/network-contracts.ps1`)
+  and pushed. Replaced with the documentation placeholder. One commit deep; no published
+  release ever carried it.
+
+### Changed
+
+- 🛡️ `Get-PowerFlowDataPath` and `Get-UserFolderPath` added to the CI adapter-parity regex,
+  which is hand-maintained — **0 of 89** referenced adapter functions now ship unchecked.
+- 📖 `ls` and `ll` synopses rewritten. Neither mentioned `--depth`, and nothing revealed that
+  `ll` is `ls -lh` or that it composes with `--tree` — which is why a PowerShell user falls
+  back to `Get-ChildItem`.
+- 📋 Docker design plan (`docs/plan/docker/dkr.md`) reconciled: named `dkr`, picker-first with
+  multi-select, one table, `--show-native`, eighteen verbs kept and staged.
+
+## [4.1.0] - 2026-08-06 (tag published with 4.2.0)
 
 ### Added
 

@@ -2,3 +2,6 @@
 # Never commit: they leak local paths (a username) and are useless to anyone else.
 # The shared/team file, .claude/settings.json, is fine to track.
 .claude/settings.local.json
+
+# Stray docker-pull output from interactive sessions
+pull_*.log

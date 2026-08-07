@@ -207,7 +207,7 @@ function Show-PmxVmNetwork {
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     if ($parsed.Options.Help) { Show-PmxTopicHelp "vm network$(if ($View -ne 'combined') { " $View" })"; return }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $mode = Get-PmxOutputMode -Options $parsed.Options -Config $session.Config
     if (-not $mode.Success) { Write-Host "❌ $($mode.Error)" -ForegroundColor Red; return }
     $resolved = Resolve-PmxManagedVm -Selector $parsed.Options.Selector -Session $session
@@ -230,7 +230,7 @@ function Show-PmxVmNetworkList {
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     if ($parsed.Options.Help) { Show-PmxTopicHelp 'vm network list'; return }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $mode = Get-PmxOutputMode -Options $parsed.Options -Config $session.Config
     if (-not $mode.Success) { Write-Host "❌ $($mode.Error)" -ForegroundColor Red; return }
     $inventory = Get-PmxManagedVmRows -Session $session
@@ -274,18 +274,3 @@ function Invoke-PmxVmNetworkCommand {
     }
 }
 
-Register-PFCommand -Name 'pmx vm network' -Section '⚡ PROXMOX VE' -Platform 'Both' `
-    -Synopsis 'show configured adapters and VM-reported addresses' -Example 'pmx vm network 102' `
-    -Aliases @('pmx vm net')
-Register-PFCommand -Name 'pmx vm network adapters' -Section '⚡ PROXMOX VE' -Platform 'Both' `
-    -Synopsis 'show configured virtual adapters, bridges and MACs' -Example 'pmx vm nic 102' `
-    -Aliases @('pmx vm nic')
-Register-PFCommand -Name 'pmx vm network addresses' -Section '⚡ PROXMOX VE' -Platform 'Both' `
-    -Synopsis 'show addresses currently reported from inside a VM' -Example 'pmx vm ip 102' `
-    -Aliases @('pmx vm ip')
-Register-PFCommand -Name 'pmx vm network stats' -Section '⚡ PROXMOX VE' -Platform 'Both' `
-    -Synopsis 'show VM-reported network traffic counters' -Example 'pmx vm net stats 102' `
-    -Aliases @('pmx vm net stats')
-Register-PFCommand -Name 'pmx vm network list' -Section '⚡ PROXMOX VE' -Platform 'Both' `
-    -Synopsis 'summarize network state across QEMU VMs' -Example 'pmx vm net list' `
-    -Aliases @('pmx vm net list')

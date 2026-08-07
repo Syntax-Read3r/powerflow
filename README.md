@@ -436,14 +436,37 @@ PowerFlow includes automated release workflows:
 
 | Command               | Description                              |
 | --------------------- | ---------------------------------------- |
-| `nav <project>`       | Smart project search with fuzzy matching |
-| `nav b <bookmark>`    | Navigate to bookmark                     |
-| `nav create-b <name>` | Create bookmark from current directory   |
-| `nav delete-b <name>` | Delete bookmark with confirmation        |
-| `nav list`            | Interactive bookmark manager             |
-| `nav roots`           | Show where nav searches (Win: `~/Code` · Linux: `~`) |
-| `nav roots add /srv`  | Also search `/srv` (or `/opt`, `/mnt/data`, …) |
-| `..`, `...`, `....`   | Quick parent directory navigation        |
+| `nav <project>`         | Smart project search with fuzzy matching |
+| `nav -docs <name>`      | Search from a named starting point — see below |
+| `nav -pics`             | Go straight there, no argument needed    |
+| `nav b <bookmark>`      | Navigate to bookmark                     |
+| `nav b .`               | Bookmark the directory you are in        |
+| `nav --anchor . <name>` | Make **your own** starting point → `nav -<name>` |
+| `nav anchors`           | Every starting point: built-in vs yours  |
+| `nav anchors rm <name>` | Remove one you made (built-ins are protected) |
+| `nav list`              | Interactive bookmark manager             |
+| `nav roots`             | Where a bare `nav` searches, plus every starting point |
+| `nav roots add /srv`    | Also search `/srv` (or `/opt`, `/mnt/data`, …) |
+| `..`, `...`, `....`     | Quick parent directory navigation        |
+
+**Starting points** save you typing a path. The same names work on Windows and Linux:
+
+```
+-home  -code  -documents  -downloads  -pictures  -videos  -music  -desktop  -config  -tmp
+                                    Linux also:  -srv  -opt  -www  -etc  -log  -mnt
+       shorthand:  -docs  -pics  -dl  -vids  -desk  -cfg
+```
+
+```bash
+nav -srv downloads      # search /srv for it, then pick from the same fzf you already know
+nav -pics screenshots   # your real Pictures folder — OneDrive-redirected or local, whichever it is
+ls  -srv complete       # list it without cd'ing
+```
+
+`/dev`, `/proc`, `/sys` and `/run` are deliberately excluded — there is nothing in a
+kernel-backed pseudo-filesystem to navigate to. On Windows the folders are read from the
+**Known Folder registry**, so `-docs` finds your real Documents even when OneDrive has moved it;
+`pwsh-config` → *User folders* switches to local paths and offers to create any that are missing.
 
 ### Enhanced Git Workflow
 

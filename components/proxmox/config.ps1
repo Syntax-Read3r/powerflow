@@ -19,7 +19,12 @@ function Get-PmxConfigDefaults {
         Node           = 'auto'
         Transport      = 'auto'
         Output         = 'table'
-        ShowNative     = $true
+        # OFF by default. The whole point of --show-native is that a user ASKS for the
+        # translated `qm`/`pvesh` command; defaulting it to $true meant native vocabulary —
+        # including `qm ... --digest <sha1>` — reached people who never asked for it, which is
+        # the exact inversion of the rule the flag exists to enforce. Turn it on per-invocation
+        # with --show-native, or permanently with `pmx config set show-native true`.
+        ShowNative     = $false
         Explain        = $true
         VmidPolicy     = 'auto'
         CloneMode      = 'full'
@@ -445,7 +450,7 @@ function Invoke-PmxConfigCommand {
             if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
             if ($parsed.Options.Help) { Show-PmxTopicHelp 'config validate'; return }
             $session = Get-PmxManagementSession
-            if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+            if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
             Write-Host "✅ PMX configuration is valid; $($session.Connection.Transport) transport reached node $($session.Node)." -ForegroundColor Green
         }
         'discover' { Show-PmxDiscovery -Arguments $rest }

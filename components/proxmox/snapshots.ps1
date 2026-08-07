@@ -65,7 +65,7 @@ function Show-PmxSnapshots {
     $parsed = Get-PmxSnapshotInvocation -Arguments $Arguments
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $resolved = Resolve-PmxManagedVm -Selector "$($parsed.Options.Vm)" -Session $session
     if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
     $result = Get-PmxSnapshots -Session $session -Vm $resolved.Vm
@@ -101,7 +101,7 @@ function Invoke-PmxSnapshotCreate {
         return
     }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $resolved = Resolve-PmxManagedVm -Selector "$($parsed.Options.Vm)" -Session $session
     if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
     if ($resolved.Vm.Template) { Write-Host '❌ Create snapshots on a VM, not on its template.' -ForegroundColor Red; return }

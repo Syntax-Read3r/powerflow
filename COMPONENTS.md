@@ -36,7 +36,7 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `adapters/terminal.ps1` | `New-TerminalTab`, `Switch-TerminalTab`, `Close-TerminalTabAt`, `Send-TerminalKeys`, `Test-TerminalSupport` | Windows Terminal (`wt`) + SendKeys | tmux windows |
 | `adapters/power.ps1` | `Invoke-Shutdown`, `Stop-Shutdown` | `shutdown.exe /s /t` | `shutdown -h +N` |
 | `adapters/env.ps1` | `Get-PersistentPath`, `Add-PersistentPathEntry`, `Test-PersistentPathEntry`, `Get-PathScopeLabel` | Registry (`SetEnvironmentVariable`) | PowerFlow-managed rc fragment |
-| `adapters/locations.ps1` | `Get-StarshipConfigPath`, `Get-TerminalSettingsPath`, `Get-TempPath`, `Get-HomePath`, `Get-PowerFlowDataPath`, `Get-PowerFlowConfigPath` | `%LOCALAPPDATA%`, `%TEMP%` | XDG (`~/.config`, `~/.local/share`), `$TMPDIR` |
+| `adapters/locations.ps1` | `Get-StarshipConfigPath`, `Get-TerminalSettingsPath`, `Get-TempPath`, `Get-HomePath`, `Get-PowerFlowDataPath`, `Get-PowerFlowConfigPath`, `Get-UserFolderPath` | `%LOCALAPPDATA%`, `%TEMP%`; **`Get-UserFolderPath` reads the Known Folder registry** — `Join-Path $HOME 'Documents'` is WRONG once OneDrive Known Folder Move redirects Documents/Pictures/Desktop to `~\OneDrive\…`, leaving the local path an empty stub or absent (measured: `~\Pictures` did not exist at all). Takes `-Prefer auto\|local\|known` so someone who keeps files off OneDrive can say so | XDG (`~/.config`, `~/.local/share`), `$TMPDIR`; **`Get-UserFolderPath`** faces the same trap in another shape — XDG user dirs can be relocated or localised (`~/Documentos`) — so it uses `xdg-user-dir(1)`, then parses `~/.config/user-dirs.dirs`, then falls back to `~/<Name>` |
 | `adapters/pwsh-update.ps1` | `Invoke-PowerShellUpdate` | winget / MSI / Store | apt / snap / dotnet-tool |
 | `adapters/apps.ps1` | `Get-InstalledApplication`, `Uninstall-Application`, `Get-DiskHotspot`, `Measure-FolderSize`, `Move-ToTrash`, `Remove-PathPermanently`, `Test-TrashSupport`, `Test-ProtectedPath` | registry + Scoop; Recycle Bin | dpkg / rpm / pacman; `gio trash` |
 | `adapters/perms.ps1` | `Get-FileMode`, `Test-PermsSupported`, `Get-Umask`, `Set-Umask` | **returns `$null`** — Windows has ACLs, not POSIX mode bits, and inventing a fake `755` would teach something false | `stat(1)` for the mode; **libc `umask(2)` via P/Invoke** for the umask³ |
@@ -49,6 +49,20 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `adapters/proxmox-management.ps1` | `Test-ProxmoxManagementTransport`, `Invoke-ProxmoxManagementQuery`, `Invoke-ProxmoxManagementChange` plus private allow-list/token builders | SSH only: validates a saved target and maps documented operations to fixed `pvesh`/`qm` token arrays | local `pvesh`/`qm` on Proxmox or the same fixed operations over SSH elsewhere; structured results have `Success`, `Data`, `Error`, `ExitCode`, `NativeCommand`, `FailureKind`; remote errors/previews are alias-only |
 | `adapters/ssh-session.ps1` | `Invoke-PFPrivateSshSession`, `Get-PFPrivateSshSessionResult` plus private askpass preparation | Compiles/caches the shipped console helper; the helper reads `CONIN$`, masks input, and writes only to OpenSSH's askpass pipe | Copies/chmods the shipped `/dev/tty` helper; hidden input goes only to OpenSSH's askpass pipe |
 | `adapters/team-room.ps1` | `Get-TeamRoomState`, `Set-TeamRoomArm`, `Set-TeamRoomTask`, `Stop-TeamRoomWatcher` — plus internal `Get-TeamRoomBootInstant`, `Get-TeamRoomArmState`, `Get-TeamRoomWatchers`, `Get-TeamRoomTasks`, `Get-TeamRoomStateRoots` | Scheduled Tasks (`TeamChat-<agent>-<repo>`) for the wake connector; `Win32_Process` command lines to find live `node teamchat-wait.js` watchers; `LastBootUpTime` for the boot instant | `/proc/<pid>/cmdline` for watchers (matched on the **script** name — they are all plain `node`), `/proc/uptime` for the boot instant. `Set-TeamRoomTask` **reports it cannot act**: the wake connector registers a Windows Scheduled Task and team-room ships no Linux equivalent — no cron job, no systemd timer⁹ |
+
+> ⁹ **A standard user folder is not `$HOME/<Name>`, on either platform.** Windows OneDrive
+> Known Folder Move redirects Documents/Pictures/Desktop to `~\OneDrive\…` and leaves the local
+> path an empty stub — or absent, as `~\Pictures` was on the machine this was found on. So
+> `nav -pics` silently vanished and `nav -docs` would have landed in the *wrong* folder, which
+> is worse than failing. Linux has the same problem wearing different clothes: XDG user dirs are
+> relocatable and **localised** (`~/Documentos`). Both go through `Get-UserFolderPath`.
+>
+> The **preference** (`auto`/`local`/`known`) lives in PowerFlow config, not the adapter: the
+> adapter answers *"where is Documents under policy P"*, the component decides P. Under `local`
+> a missing folder returns empty rather than falling back to the redirect — silently falling
+> back would ignore the preference the user just set — and `Repair-PFUserFolders` offers to
+> create it. Creating is offered and confirmed, never automatic: it is a real directory on
+> someone's disk.
 
 > ⁸ **A stub that lies is worse than a stub that is empty.** The Windows Proxmox adapter
 > returns `$false`/`@()`/`$null` and never guesses. `pmx` checks `Test-ProxmoxSupport`
@@ -142,12 +156,12 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 > **The default is deliberately not `/`** — that walks `/proc`, `/sys`, `/dev` and `/run`,
 > which are kernel-backed pseudo-filesystems, and throws permission errors across most of
 > the rest. Add the real ones you want instead: `nav roots add /srv`.
-| `components/navigation/roots.ps1` | Navigation | `Get-NavSearchRoots`, `Get-NavDefaultRoots`, `Add-NavSearchRoot`, `Remove-NavSearchRoot`, `Reset-NavSearchRoots`, `Show-NavSearchRoots`, `Format-NavPath` — **where `nav` looks**, persisted to `~/.nav_roots.json`² |
+| `components/navigation/roots.ps1` | Navigation | `Get-NavSearchRoots`, `Get-NavDefaultRoots`, `Add-NavSearchRoot`, `Remove-NavSearchRoot`, `Reset-NavSearchRoots`, `Show-NavSearchRoots`, `Format-NavPath` — **where `nav` looks**, persisted to `~/.nav_roots.json`² · plus the **named-starting-point layer shared by `nav` and `ls`**: `Get-PFNamedRoots`, `Get-PFRootAliases`, `Resolve-PFRootAlias`, `Get-PFRootChoices`, `Resolve-PFRootedDirectory`, and user **anchors** `Get-PFUserAnchors`/`Save-PFUserAnchors`/`Add-PFAnchor`/`Remove-PFAnchor`/`Show-PFAnchors`, plus the OneDrive-vs-local folder preference `Get-PFFolderPreference`/`Set-PFFolderPreference`/`Repair-PFUserFolders`⁹ |
 | `components/navigation/bookmarks.ps1` | Navigation | `Initialize-DefaultBookmarks`, `Get-Bookmarks`, `Save-Bookmarks`, `Add-Bookmark`, `Remove-Bookmark`, `Rename-Bookmark`, `Show-BookmarkList` |
 | `components/navigation/projects.ps1` | Navigation | `Search-Projects` |
-| `components/navigation/nav.ps1` | Navigation | `nav`, `nav roots`, `Test-NavFunction`, `z` (alias) |
+| `components/navigation/nav.ps1` | Navigation | `nav`, `nav roots`, `nav anchors`, `nav b .`, `Test-NavFunction`, `z` (alias) — **hand-parses ``, no `param()` block**: a param block binds `-srv`/`-pics` as parameter NAMES, so `nav -srv complete` never reached the body (it just printed help). Same trap as `rm -rf`, footnote ⁵ |
 | `components/navigation/directory.ps1` | Navigation | `here`, `..`, `...`, `....`, `.....`, `~`, `back`, `cd-` (alias), `copy-pwd` |
-| `components/files/listing.ps1` | Files | `ls`, `la`, `ll`, `clr` (alias), `cat` (alias)¹, `cp` (alias)¹ |
+| `components/files/listing.ps1` | Files | `ls`, `la`, `ll`, `clr` (alias), `cat` (alias)¹, `cp` (alias)¹ — `ls -<anchor> <name>` lists a directory without typing its path (same resolver as `nav`); `-recurse`/`-depth N` accepted as the spellings PowerShell users already type. **`-r` is NOT aliased** — that is GNU reverse-sort |
 | `components/files/operations.ps1` | Files | `rm`¹, `mv`¹ ⁶, `Invoke-GnuMove`, `mv-t`, `mv-c`, `rmdir`¹, `touch`¹, `mkdir`¹, `Split-GnuArgs`⁵ |
 | `components/files/rename.ps1` | Files | `rn` |
 | `components/files/clipboard.ps1` | Files | `open-pwd`, `op`, `paste-file`, `copy-file`, `cf`, `pf` |

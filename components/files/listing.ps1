@@ -38,14 +38,69 @@ function ls {
     $pfDepth  = 0
     $gnuArgs  = @()
 
+    $pfRoot   = ''
+    $pfTarget = ''
+
+    # Root flags must be intercepted BEFORE the lsd hand-off. lsd bundles unknown shorts, so
+    # `ls -srv complete` reached it as -s -r -v and died with "unexpected argument '-s'".
+    $namedRoots = @()
+    try { $namedRoots = @((Get-PFNamedRoots).Keys) } catch { }
+
     for ($i = 0; $i -lt $args.Count; $i++) {
         $a = [string]$args[$i]
         switch -Regex ($a) {
             '^--tree$'  { $pfTree = $true }
-            '^--depth$' { $i++; $pfDepth = [int]$args[$i] }
-            '^--depth=' { $pfDepth = [int]($a -split '=', 2)[1] }
-            default     { $gnuArgs += $a }        # everything else is GNU's
+            # -recurse / -Recurse: the spelling a PowerShell user already knows. Get-ChildItem
+            # habits should not be punished. NOT -r — that is GNU reverse-sort and lsd honours
+            # it; -R is GNU recursive and already works.
+            '^-{1,2}recurse$' { $pfTree = $true }
+            '^--depth$'       { $i++; $pfDepth = [int]$args[$i] }
+            '^--depth='       { $pfDepth = [int]($a -split '=', 2)[1] }
+            '^-depth$'        { $i++; $pfDepth = [int]$args[$i] }
+            default {
+                $bare = $a -replace '^-{1,2}', ''
+                if ($a.StartsWith('-') -and $namedRoots -contains $bare.ToLowerInvariant()) {
+                    $pfRoot = $bare.ToLowerInvariant()
+                }
+                else { $gnuArgs += $a }           # everything else is GNU's
+            }
         }
+    }
+
+    # `ls -srv complete` — find the directory, then list it. Same resolver nav will use, so the
+    # two can never disagree about where a name lives.
+    if ($pfRoot) {
+        $needle = @($gnuArgs | Where-Object { -not $_.StartsWith('-') } | Select-Object -Last 1)
+        if (-not $needle) {
+            $named = Get-PFNamedRoots
+            $pfTarget = @($named[$pfRoot])[0]     # bare `ls -srv` lists the root itself
+        }
+        else {
+            $resolved = Resolve-PFRootedDirectory -Name "$needle" -RootKey $pfRoot
+            if (-not $resolved.Success) {
+                Write-Host "❌ $($resolved.Error)" -ForegroundColor Red
+                Write-Host "   Starting points:  $((Get-PFNamedRoots).Keys -join ' · ')" -ForegroundColor DarkGray
+                return
+            }
+            # Ambiguity gets a PICKER, not a refusal. Refusing where a picker would do is the
+            # house anti-pattern — srv, start-folder and pc-whoami -ram all pick. Falls back to
+            # listing the candidates only when there is no interactive terminal or no fzf.
+            $paths = @($resolved.Paths)
+            if ($paths.Count -gt 1) {
+                if ([Console]::IsOutputRedirected -or -not (Get-Command fzf -ErrorAction SilentlyContinue)) {
+                    Write-Host "❌ '$needle' matches more than one directory under -$($pfRoot):" -ForegroundColor Red
+                    $paths | ForEach-Object { Write-Host "   $_" -ForegroundColor DarkGray }
+                    return
+                }
+                $picked = $paths | fzf --height=40% --layout=reverse --border --header="ls -$pfRoot $needle — $($paths.Count) matches"
+                if (-not $picked) { return }
+                $paths = @("$picked")
+            }
+            $pfTarget = $paths[0]
+            $gnuArgs  = @($gnuArgs | Where-Object { $_ -ne $needle })
+        }
+        Write-Host "📁 $pfTarget" -ForegroundColor DarkGray
+        $gnuArgs += $pfTarget
     }
 
     # ── PowerFlow: --tree ─────────────────────────────────────────────────────
@@ -106,9 +161,9 @@ if (Test-Path Alias:\cp) { Remove-Item Alias:\cp -Force }
 Set-Alias cp Copy-Item
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
-Register-PFCommand -Name 'ls'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'pretty listing; real GNU flags (-la, -t) plus --tree' -Example 'ls -la · ls --tree'
-Register-PFCommand -Name 'la'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'list all, hidden included'
-Register-PFCommand -Name 'll'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'long list with sizes and dates'
+Register-PFCommand -Name 'ls'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'pretty listing; GNU flags, --tree/--depth, and -<root> starting points' -Example 'ls -la · ls -recurse -depth 2 · ls -srv complete'
+Register-PFCommand -Name 'la'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'ls -a: everything, dotfiles included'
+Register-PFCommand -Name 'll'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'ls -lh: permissions, owner, size, date - composes with --tree/--depth' -Example 'll · ll -recurse -depth 2'
 Register-PFCommand -Name 'clr' -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'clear the screen'
 Register-PFCommand -Name 'cat' -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'print a file (the GNU cat on Linux)'
 Register-PFCommand -Name 'cp'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'copy files (the GNU cp on Linux)'

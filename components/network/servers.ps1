@@ -297,6 +297,30 @@ function srv {
             return
         }
 
+        # `srv help` was RESERVED as a server name (see the add/rename guards above), which is
+        # proof it was meant to be a subcommand — but there was no case for it here, so it fell
+        # through to "connect by name" and answered "❌ No server called 'help'. srv add help
+        # <user@host>". Typing the obvious thing and being told to create a server called
+        # "help" is exactly the friction PowerFlow exists to remove. `pmx help` and
+        # `team-room help` both work; srv now matches them.
+        { $_ -in 'help', '-h', '--help', '/?' } {
+            Write-Host ''
+            Write-Host '🌐 srv — SSH connections by name, not by address' -ForegroundColor Cyan
+            Write-Host '  srv                       picker · Enter connects · ctrl-d forget · ctrl-r rename' -ForegroundColor White
+            Write-Host '  srv <name>                connect' -ForegroundColor White
+            Write-Host '  srv <name> info           reveal the saved endpoint — after you authenticate' -ForegroundColor White
+            Write-Host '  srv add <name> <user@host[:port]>' -ForegroundColor White
+            Write-Host '                            save one; the port is probed before it is saved' -ForegroundColor DarkGray
+            Write-Host '  srv rm <name> [-f]        forget one' -ForegroundColor White
+            Write-Host '  srv rename <old> <new>    rename one' -ForegroundColor White
+            Write-Host '  srv list                  every saved server, with live status' -ForegroundColor White
+            Write-Host ''
+            Write-Host '  Status:  ✅ online  ·  🟡 host up, ssh not answering  ·  ⛔ offline' -ForegroundColor DarkGray
+            Write-Host '  Addresses stay hidden until you authenticate — that is deliberate.' -ForegroundColor DarkGray
+            Write-Host ''
+            return
+        }
+
         { $_ -in 'list', 'ls' } {
             if ($servers.Count -eq 0) {
                 Write-Host "ℹ️  No servers yet.  srv add <name> <user@host>" -ForegroundColor DarkGray

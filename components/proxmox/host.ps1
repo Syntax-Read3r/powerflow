@@ -163,7 +163,7 @@ function Show-PmxManagedStorage {
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     if ($parsed.Options.Help) { Show-PmxTopicHelp 'storage list'; return }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $result = Invoke-ProxmoxManagementQuery -Operation 'storage-list' -Connection $session.Connection -Parameters @{ Node = $session.Node }
     if (-not $result.Success) { Write-Host "❌ $($result.Error)" -ForegroundColor Red; return }
     $storage = @($result.Data)
@@ -198,7 +198,7 @@ function Show-PmxDiscovery {
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     if ($parsed.Options.Help) { Show-PmxTopicHelp 'discover'; return }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
 
     $version = Invoke-ProxmoxManagementQuery -Operation 'version' -Connection $session.Connection
     $storage = Invoke-ProxmoxManagementQuery -Operation 'storage-list' -Connection $session.Connection -Parameters @{ Node = $session.Node }

@@ -27,7 +27,7 @@ $reported = @(
     [pscustomobject]@{
         name = 'ens18'; 'hardware-address' = 'aa-bb-cc-dd-ee-ff'
         'ip-addresses' = @(
-            [pscustomobject]@{ 'ip-address' = '192.168.8.106'; prefix = 24 },
+            [pscustomobject]@{ 'ip-address' = '192.168.1.50'; prefix = 24 },
             [pscustomobject]@{ 'ip-address' = 'fe80::1133:ba8a:e6dc:a5a2'; prefix = 64 },
             [pscustomobject]@{ 'ip-address' = '0.0.0.0'; prefix = 0 }
         )
@@ -54,7 +54,7 @@ $ipv6 = @(Select-PmxNetworkAddresses $joined.Interfaces -IPv6)
 Assert-PmxTest (@($ipv6 | ForEach-Object Addresses).Count -eq 1 -and
     @($ipv6 | ForEach-Object Addresses)[0].Scope -ceq 'link-local') 'IPv6 filtering or link-local classification failed.'
 $selection = Get-PmxPrimaryAddressSelection $filtered
-Assert-PmxTest ($selection.PrimaryCandidate -ceq '192.168.8.106' -and $selection.Inferred) `
+Assert-PmxTest ($selection.PrimaryCandidate -ceq '192.168.1.50' -and $selection.Inferred) `
     'Primary address ranking did not prefer the matched private IPv4 address.'
 Assert-PmxTest ((Get-PmxNetworkAddressRecord '10.0.0.1').Scope -ceq 'private') 'IPv4 private classification failed.'
 Assert-PmxTest ((Get-PmxNetworkAddressRecord '169.254.1.1').Scope -ceq 'link-local') 'IPv4 link-local classification failed.'
@@ -74,7 +74,7 @@ $model = [pscustomobject][ordered]@{
 }
 $contract = ConvertTo-PmxVmNetworkContract -Model $model -View addresses
 $json = $contract | ConvertTo-Json -Depth 12 -Compress
-Assert-PmxTest ($json -match '"primary_candidate":"192.168.8.106"' -and $json -match '"native_command":null') `
+Assert-PmxTest ($json -match '"primary_candidate":"192.168.1.50"' -and $json -match '"native_command":null') `
     'Address JSON omitted the primary candidate or leaked native vocabulary by default.'
 $nativeJson = ConvertTo-PmxVmNetworkContract -Model $model -View addresses -ShowNative | ConvertTo-Json -Depth 12 -Compress
 Assert-PmxTest ($nativeJson -match [regex]::Escape('qm guest cmd 102 network-get-interfaces')) `
@@ -85,7 +85,7 @@ Assert-PmxTest ($statsJson -match '"rx_bytes":2048' -and $statsJson -match '"tx_
     'Stats JSON lost exact integer counters.'
 $rendered = (@(& { Show-PmxVmNetworkResult -Model $model -View combined } 6>&1 | ForEach-Object { "$_" }) -join "`n")
 Assert-PmxTest ($rendered -match 'VIRTUAL ADAPTERS' -and $rendered -match 'VM ADDRESSES' -and
-    $rendered -match 'Primary candidate\s+192\.168\.8\.106' -and $rendered -notmatch 'guest cmd') `
+    $rendered -match 'Primary candidate\s+192\.168\.1\.50' -and $rendered -notmatch 'guest cmd') `
     'Combined table omitted its public contract or exposed internal command vocabulary.'
 
 $short = Get-PmxNetworkInvocation -Arguments @('102', '-4', '-j') -View addresses
@@ -152,7 +152,7 @@ function Resolve-PmxManagedVm {
 $script:networkQueryMode = 'running'; $script:runtimeQueryCount = 0
 $commandJson = @(Show-PmxVmNetwork -Arguments @('102', '--json') -View addresses) -join "`n"
 $parsedCommandJson = $commandJson | ConvertFrom-Json
-Assert-PmxTest ($parsedCommandJson.vm.vmid -eq 102 -and $parsedCommandJson.address_selection.primary_candidate -ceq '192.168.8.106' -and
+Assert-PmxTest ($parsedCommandJson.vm.vmid -eq 102 -and $parsedCommandJson.address_selection.primary_candidate -ceq '192.168.1.50' -and
     $commandJson -notmatch 'qm guest cmd') 'Successful --json command output was impure or leaked the native read.'
 $nativeCommandJson = @(Show-PmxVmNetwork -Arguments @('102', '--json', '--show-native') -View addresses) -join "`n"
 Assert-PmxTest ($nativeCommandJson -match [regex]::Escape('qm guest cmd 102 network-get-interfaces')) `

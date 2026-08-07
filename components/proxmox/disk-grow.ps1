@@ -129,7 +129,7 @@ function Invoke-PmxVmDiskGrow {
     $target = ConvertFrom-PmxSize -Value "$($parsed.Options.Target)" -Kind disk
     if (-not $target.Success) { Write-Host "❌ $($target.Error)" -ForegroundColor Red; return }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $resolved = Resolve-PmxManagedVm -Selector "$($parsed.Options.Vm)" -Session $session
     if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
     if ($resolved.Vm.Template) { Write-Host '❌ Clone the template before growing a virtual disk.' -ForegroundColor Red; return }

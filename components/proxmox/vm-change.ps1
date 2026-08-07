@@ -146,7 +146,7 @@ function Invoke-PmxVmClone {
     }
 
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $mode = Get-PmxOutputMode -Options $parsed.Options -Config $session.Config
     if (-not $mode.Success) { Write-Host "❌ $($mode.Error)" -ForegroundColor Red; return }
     $jsonMode = $mode.Mode -eq 'json'
@@ -240,7 +240,10 @@ function Get-PmxSetInvocation {
     param(
         [object[]]$Arguments,
         [Parameter(Mandatory)][string]$ValueOption,
-        [Parameter(Mandatory)][string]$ValueProperty
+        [Parameter(Mandatory)][string]$ValueProperty,
+        # Named so the usage error is self-contained. Without it the message read
+        # "use: <vmid|name> --size <value>, ..." with no clue which command it belonged to.
+        [string]$CommandName = "pmx vm"
     )
 
     $valueOptions = @{ $ValueOption = $ValueProperty }
@@ -256,7 +259,7 @@ function Get-PmxSetInvocation {
         $parsed.Options[$ValueProperty] = $parsed.Positionals[1]
     }
     else {
-        return [pscustomobject]@{ Success = $false; Options = $parsed.Options; Positionals = $parsed.Positionals; Error = "use: <vmid|name> --$ValueOption <value>, or <vmid|name> <value>" }
+        return [pscustomobject]@{ Success = $false; Options = $parsed.Options; Positionals = $parsed.Positionals; Error = "use: $CommandName <vmid|name> <value>   (or: $CommandName <vmid|name> --$ValueOption <value>)" }
     }
     return $parsed
 }
@@ -265,14 +268,14 @@ function Invoke-PmxVmCpuSet {
     param([object[]]$Arguments = @())
 
     if (@($Arguments | Where-Object { "$_" -eq '--help' }).Count) { Show-PmxTopicHelp 'vm cpu set'; return }
-    $parsed = Get-PmxSetInvocation -Arguments $Arguments -ValueOption 'cores' -ValueProperty 'Cores'
+    $parsed = Get-PmxSetInvocation -Arguments $Arguments -ValueOption 'cores' -ValueProperty 'Cores' -CommandName 'pmx vm cpu'
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     $cores = 0
     if (-not [int]::TryParse("$($parsed.Options.Cores)", [ref]$cores) -or $cores -lt 1 -or $cores -gt 1024) {
         Write-Host '❌ --cores must be an integer from 1 to 1024.' -ForegroundColor Red; return
     }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $resolved = Resolve-PmxManagedVm -Selector "$($parsed.Options.Vm)" -Session $session
     if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
     if ($resolved.Vm.Template) { Write-Host '❌ Clone the template before changing its CPU allocation.' -ForegroundColor Red; return }
@@ -313,12 +316,12 @@ function Invoke-PmxVmMemorySet {
     param([object[]]$Arguments = @())
 
     if (@($Arguments | Where-Object { "$_" -eq '--help' }).Count) { Show-PmxTopicHelp 'vm memory set'; return }
-    $parsed = Get-PmxSetInvocation -Arguments $Arguments -ValueOption 'size' -ValueProperty 'Size'
+    $parsed = Get-PmxSetInvocation -Arguments $Arguments -ValueOption 'size' -ValueProperty 'Size' -CommandName 'pmx vm memory'
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     $size = ConvertFrom-PmxSize -Value "$($parsed.Options.Size)" -Kind memory
     if (-not $size.Success -or $size.MiB -gt [int]::MaxValue) { Write-Host "❌ $($size.Error)" -ForegroundColor Red; return }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $resolved = Resolve-PmxManagedVm -Selector "$($parsed.Options.Vm)" -Session $session
     if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
     if ($resolved.Vm.Template) { Write-Host '❌ Clone the template before changing its memory allocation.' -ForegroundColor Red; return }
@@ -367,7 +370,7 @@ function Invoke-PmxVmLifecycleChange {
     $parsed = Get-PmxLifecycleInvocation -Arguments $Arguments
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
     $session = Get-PmxManagementSession
-    if (-not $session.Success) { Write-Host "❌ $($session.Error)" -ForegroundColor Red; return }
+    if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $resolved = Resolve-PmxManagedVm -Selector "$($parsed.Options.Selector)" -Session $session
     if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
     if ($resolved.Vm.Template) { Write-Host '❌ Templates cannot be started or shut down.' -ForegroundColor Red; return }

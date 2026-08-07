@@ -38,3 +38,56 @@ function Get-TempPath {
 function Get-HomePath {
     return $HOME
 }
+
+<#
+.SYNOPSIS
+    The REAL path of a standard user folder (Documents, Downloads, Pictures, …).
+.DESCRIPTION
+    Join-Path $HOME 'Documents' is WRONG on a modern Windows install. With OneDrive
+    Known Folder Move — the default on many setups — Documents/Pictures/Desktop are
+    redirected to %USERPROFILE%\OneDrive\..., and the local ~\Documents is either an
+    empty stub or absent entirely. Measured on a real machine:
+
+        ~\Pictures                 does not exist
+        MyPictures  (real)         C:\Users\<you>\OneDrive\Pictures
+        ~\Documents                exists, but is NOT the live one
+        MyDocuments (real)         C:\Users\<you>\OneDrive\Documents
+
+    So `nav -pics` was unavailable and `nav -docs` would have landed in the empty stub.
+    GetFolderPath consults the Known Folder registry and follows the redirect.
+
+    Downloads has no Environment.SpecialFolder member, so it falls back to ~\Downloads
+    (which Known Folder Move does not redirect by default).
+#>
+function Get-UserFolderPath {
+    param(
+        [Parameter(Mandatory)][ValidateSet('Documents','Downloads','Pictures','Videos','Music','Desktop')][string]$Name,
+        # auto  — whatever Windows says, following the OneDrive redirect. Correct for most people.
+        # local — insist on %USERPROFILE%\<Name>, for people who deliberately keep files OFF
+        #         OneDrive. Returns '' when it does not exist so the CALLER can offer to create
+        #         it; silently falling back to the redirect would defeat the whole preference.
+        # known — the redirect target explicitly, even when a local folder also exists.
+        [ValidateSet('auto', 'local', 'known')][string]$Prefer = 'auto'
+    )
+
+    if ($Prefer -eq 'local') {
+        $localPath = Join-Path (Get-HomePath) $Name
+        if (Test-Path -LiteralPath $localPath) { return $localPath }
+        return ''
+    }
+
+    $special = @{
+        Documents = 'MyDocuments'; Pictures = 'MyPictures'
+        Videos    = 'MyVideos';    Music    = 'MyMusic'
+        Desktop   = 'Desktop'
+    }
+    if ($special.ContainsKey($Name)) {
+        try {
+            $p = [Environment]::GetFolderPath($special[$Name])
+            if ($p -and (Test-Path -LiteralPath $p)) { return $p }
+        } catch { }
+    }
+    $fallback = Join-Path (Get-HomePath) $Name
+    if (Test-Path -LiteralPath $fallback) { return $fallback }
+    return ''
+}
