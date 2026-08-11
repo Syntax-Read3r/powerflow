@@ -99,7 +99,7 @@ function Check-PowerFlowUpdates {
         Write-Host ""
 
         switch (Read-Host "   Choice [1/2/3/4]") {
-            "1" { powerflow-update -Yes }
+            "1" { Invoke-PFSelfUpdate -Yes }   # implementation, not the shim: see git-aa
             "2" { Set-UpdateSnooze -Days 1; Write-Host "⏭️  Okay — tomorrow." -ForegroundColor Yellow }
             "3" { Set-UpdateSnooze -Days 7; Write-Host "😴 Snoozed until $((Get-Date).Date.AddDays(7).ToString('MMM d'))." -ForegroundColor Yellow }
             "4" {
@@ -149,7 +149,7 @@ function Check-PowerFlowUpdates {
     powerflow-update          # confirm, then upgrade
     powerflow-update -Yes     # no questions (the startup prompt uses this)
 #>
-function powerflow-update {
+function Invoke-PFSelfUpdate {
     param([switch]$Yes)
 
     Write-Host "🔍 Checking for PowerFlow updates..." -ForegroundColor Cyan
@@ -211,6 +211,13 @@ function powerflow-update {
         }
     }
 }
+
+# ── powerflow-update ──────────────────────────────────────────────────────────
+# The user-facing name is a shim so that --long flags bind at all: a param() block
+# cannot bind them, and worse, misbinds them into the next value parameter. The shim
+# must not declare param() of its own, or $args would not hold the whole line.
+# See docs/plan/ethos/ETHOS.md.
+function powerflow-update { Invoke-PFParamCommand -Target 'Invoke-PFSelfUpdate' -Command 'powerflow-update' -Argv $args }
 
 <#
 .SYNOPSIS

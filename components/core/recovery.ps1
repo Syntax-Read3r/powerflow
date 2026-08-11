@@ -69,6 +69,21 @@ function pwsh-recovery {
         "5" {
             $confirm = Read-Host "⚠️  Remove current profile? This will reset PowerFlow. (y/n)"
             if ($confirm -eq 'y') {
+                # BACK UP FIRST. A recovery tool must never be the thing that loses the file —
+                # and this same file already had a timestamped backup helper further down; the
+                # delete simply did not use it. If the backup cannot be written, nothing is
+                # removed: refusing is better than destroying the only copy.
+                if (Test-Path -LiteralPath $PROFILE) {
+                    $backup = "$PROFILE.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+                    Copy-Item -LiteralPath $PROFILE -Destination $backup -ErrorAction SilentlyContinue
+                    if (Test-Path -LiteralPath $backup) {
+                        Write-Host "💾 Backup saved: $backup" -ForegroundColor Cyan
+                    }
+                    else {
+                        Write-Host '❌ Could not back up the profile; nothing was removed.' -ForegroundColor Red
+                        return
+                    }
+                }
                 Remove-Item $PROFILE -Force
                 Write-Host "✅ Profile removed. Restart PowerShell to use default profile." -ForegroundColor Green
             }

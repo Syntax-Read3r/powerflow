@@ -113,6 +113,188 @@ function Invoke-PmxAmberMutation {
     return [pscustomobject]@{ Success = $true; Executed = $true; Error = ''; Result = $result; Verification = $verified }
 }
 
+<#
+.SYNOPSIS
+    Validate the optional configure-after-clone settings, before anything is created.
+.DESCRIPTION
+    Everything is validated UP FRONT, because the alternative is discovering that "4Q" is not a
+    memory size after a VM already exists. A refusal costs nothing; a half-configured clone
+    costs a manual cleanup.
+#>
+function Get-PmxCloneConfigurePlan {
+    param([hashtable]$Options, $SourceDetails)
+
+    $steps = @()
+
+    if ($Options.ContainsKey('Cores')) {
+        $cores = 0
+        if (-not [int]::TryParse("$($Options.Cores)", [ref]$cores) -or $cores -lt 1 -or $cores -gt 512) {
+            return [pscustomobject]@{ Success = $false; Error = "--cores must be a whole number from 1 to 512, got '$($Options.Cores)'"; Steps = @() }
+        }
+        $steps += [pscustomobject]@{ Kind = 'cpu'; Operation = 'vm-set-cpu'; Value = $cores
+            Display = "$cores core$(if ($cores -ne 1) { 's' })"; Field = 'Cores' }
+    }
+
+    if ($Options.ContainsKey('Memory')) {
+        $memory = ConvertFrom-PmxSize "$($Options.Memory)"
+        if (-not $memory.Success) {
+            return [pscustomobject]@{ Success = $false; Error = "--memory: $($memory.Error)"; Steps = @() }
+        }
+        # Proxmox takes memory in MiB. Refusing a value that would round to zero is better than
+        # silently setting 0 MiB, which is a VM that cannot boot.
+        $mib = [int64]([Math]::Floor($memory.Bytes / 1MB))
+        if ($mib -lt 16) {
+            return [pscustomobject]@{ Success = $false; Error = "--memory must be at least 16M, got '$($Options.Memory)'"; Steps = @() }
+        }
+        $steps += [pscustomobject]@{ Kind = 'memory'; Operation = 'vm-set-memory'; Value = $mib
+            Display = (Format-PmxBytes ($mib * 1MB)); Field = 'MemoryMiB' }
+    }
+
+    if ($Options.ContainsKey('GrowBy')) {
+        $delta = ConvertFrom-PmxSize "$($Options.GrowBy)"
+        if (-not $delta.Success) {
+            return [pscustomobject]@{ Success = $false; Error = "--grow-by: $($delta.Error)"; Steps = @() }
+        }
+        if ($delta.Bytes -le 0) {
+            return [pscustomobject]@{ Success = $false; Error = '--grow-by must be a positive size'; Steps = @() }
+        }
+        # The disk is resolved from the SOURCE layout, because the clone does not exist yet.
+        # A single eligible disk is inferred; anything else is refused rather than guessed at,
+        # since growing the wrong disk is not something a preview can take back.
+        $eligible = @($SourceDetails.Disks | Where-Object { $_.Growable })
+        if (-not $eligible.Count) {
+            return [pscustomobject]@{ Success = $false; Error = 'the source has no growable disk, so --grow-by cannot be planned'; Steps = @() }
+        }
+        if ($eligible.Count -gt 1) {
+            $names = @($eligible | ForEach-Object { $_.Disk }) -join ', '
+            return [pscustomobject]@{ Success = $false
+                Error = "the source has several growable disks ($names); grow the clone explicitly with pmx disk grow after it exists"; Steps = @() }
+        }
+        $disk = $eligible[0]
+        $final = [int64]$disk.SizeBytes + [int64]$delta.Bytes
+        $steps += [pscustomobject]@{ Kind = 'disk'; Operation = 'vm-disk-grow'; Value = $final
+            Display = "$($disk.Disk): $(Format-PmxBytes $disk.SizeBytes) -> $(Format-PmxBytes $final)  (+$(Format-PmxBytes $delta.Bytes))"
+            Field = 'Size'; Disk = "$($disk.Disk)" }
+    }
+
+    return [pscustomobject]@{ Success = $true; Error = ''; Steps = @($steps) }
+}
+
+<#
+.SYNOPSIS
+    Run the configure steps against a clone that already exists, verifying each.
+.DESCRIPTION
+    NOT AN ATOMIC TRANSACTION, and deliberately so. If the clone succeeds and a later step
+    fails, the VM is KEPT — an automatic destructive rollback after a successful clone is a
+    worse outcome than a half-configured VM the operator can finish by hand.
+    So this reports exactly what happened and returns the remaining work as commands to run.
+
+    The confirmation already happened: the amber plan covered the whole transaction, so these
+    steps do not ask again. They still verify individually, because "the command returned 0" is
+    not the same as "the setting took".
+#>
+function Invoke-PmxCloneConfigureSteps {
+    param(
+        [Parameter(Mandatory)]$Session,
+        [Parameter(Mandatory)][int]$VmId,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Steps
+    )
+
+    $outcomes = @()
+    foreach ($step in $Steps) {
+        $parameters = @{ Vmid = $VmId }
+        $parameters[$step.Field] = $step.Value
+        if ($step.Kind -eq 'disk') { $parameters['Disk'] = $step.Disk }
+
+        $result = Invoke-ProxmoxManagementChange -Operation $step.Operation `
+            -Connection $Session.Connection -Parameters $parameters
+        if (-not $result.Success) {
+            $outcomes += [pscustomobject]@{ Step = $step; Success = $false; Error = $result.Error
+                Diagnostics = $result.Diagnostics }
+            # Stop at the first failure: later steps may depend on this one, and continuing
+            # would produce a VM whose state is harder to describe than "it stopped here".
+            break
+        }
+
+        # Verify rather than trust the exit code.
+        $verified = $true
+        $detail = ''
+        $target = Resolve-PmxManagedVm -Selector "$VmId" -Session $Session
+        if (-not $target.Success) { $verified = $false; $detail = 'the VM could not be re-read after the change' }
+        else {
+            $fresh = Get-PmxManagedVmDetails -Session $Session -Vm $target.Vm
+            if (-not $fresh.Success) { $verified = $false; $detail = $fresh.Error }
+            else {
+                switch ($step.Kind) {
+                    'cpu' {
+                        $actual = [int](Get-PmxObjectProperty $fresh.Config 'cores' 0)
+                        if ($actual -ne [int]$step.Value) { $verified = $false; $detail = "cores read back as $actual" }
+                    }
+                    'memory' {
+                        $actual = [int64](Get-PmxObjectProperty $fresh.Config 'memory' 0)
+                        if ($actual -ne [int64]$step.Value) { $verified = $false; $detail = "memory read back as $actual MiB" }
+                    }
+                    'disk' {
+                        $grown = @($fresh.Disks | Where-Object { "$($_.Disk)" -ceq "$($step.Disk)" })
+                        if (-not $grown.Count) { $verified = $false; $detail = "disk $($step.Disk) was not found after the resize" }
+                        elseif ([int64]$grown[0].SizeBytes -lt [int64]$step.Value) {
+                            $verified = $false
+                            $detail = "disk read back as $(Format-PmxBytes $grown[0].SizeBytes), expected at least $(Format-PmxBytes $step.Value)"
+                        }
+                    }
+                }
+            }
+        }
+        $outcomes += [pscustomobject]@{ Step = $step; Success = $verified
+            Error = $(if ($verified) { '' } else { $detail }); Diagnostics = $null }
+        if (-not $verified) { break }
+    }
+    return @($outcomes)
+}
+
+<#
+.SYNOPSIS
+    Report what succeeded, what did not, and how to finish by hand.
+#>
+function Show-PmxCloneConfigureOutcome {
+    param(
+        [Parameter(Mandatory)][int]$VmId,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Planned,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Outcomes
+    )
+
+    Write-Host ''
+    foreach ($outcome in $Outcomes) {
+        if ($outcome.Success) { Write-Host "  [OK] $($outcome.Step.Display)" -ForegroundColor Green }
+        else { Write-Host "  [X]  $($outcome.Step.Display)  -  $($outcome.Error)" -ForegroundColor Red }
+    }
+
+    $failed = @($Outcomes | Where-Object { -not $_.Success })
+    if (-not $failed.Count -and $Outcomes.Count -eq $Planned.Count) { return $true }
+
+    # Anything planned but never attempted, because an earlier step stopped the run.
+    $attempted = @($Outcomes | ForEach-Object { $_.Step.Kind })
+    $skipped = @($Planned | Where-Object { $attempted -notcontains $_.Kind })
+    foreach ($step in $skipped) {
+        Write-Host "  [-]  $($step.Display)  -  not attempted" -ForegroundColor DarkGray
+    }
+
+    Write-Host ''
+    Write-Host "  VM $VmId was KEPT. Nothing is rolled back: deleting a successfully cloned VM" -ForegroundColor Yellow
+    Write-Host '  because a later setting failed would be the more destructive choice.' -ForegroundColor Yellow
+    Write-Host ''
+    Write-Host '  Continue manually:' -ForegroundColor DarkGray
+    foreach ($step in (@($failed | ForEach-Object { $_.Step }) + $skipped)) {
+        switch ($step.Kind) {
+            'cpu'    { Write-Host "    pmx vm cpu $VmId $($step.Value)" -ForegroundColor Yellow }
+            'memory' { Write-Host "    pmx vm memory $VmId $($step.Value)M" -ForegroundColor Yellow }
+            'disk'   { Write-Host "    pmx disk grow $VmId $(Format-PmxBytes $step.Value)" -ForegroundColor Yellow }
+        }
+    }
+    Write-Host "    pmx vm show $VmId" -ForegroundColor Yellow
+    Write-Host ''
+    return $false
+}
 function Invoke-PmxVmClone {
     param([object[]]$Arguments = @())
 
@@ -121,8 +303,17 @@ function Invoke-PmxVmClone {
     # Options.Full is read nowhere, and the clone parameters below hardcode Full = $true. It is
     # gone from the help text rather than advertised as a choice the user does not have.
     $switches['full'] = 'Full'
+    # --show prints the final managed config after every requested change verifies.
+    $switches['show'] = 'Show'
     $parsed = ConvertFrom-PmxArguments -Arguments $Arguments `
-        -ValueOptions @{ 'source' = 'Source'; 'source-vmid' = 'Source'; 'new-vmid' = 'NewVmid'; 'name' = 'Name' } `
+        -ValueOptions @{
+            'source' = 'Source'; 'source-vmid' = 'Source'; 'new-vmid' = 'NewVmid'; 'name' = 'Name'
+            # PF-FEAT-003: clone -> size CPU/RAM -> grow the boot disk, as one guarded workflow.
+            # --vmid is the same thing as --new-vmid under the name a native `qm clone` user
+            # already has in their head. It stays OPTIONAL: PowerFlow allocates the next free
+            # VMID, and an explicit one is only useful when something external expects it.
+            'vmid' = 'NewVmid'; 'cores' = 'Cores'; 'memory' = 'Memory'; 'grow-by' = 'GrowBy'
+        } `
         -SwitchOptions $switches -MaxPositionals 3
     if (-not $parsed.Success) {
         # The shared parser's message is accurate but generic ("expected at most 3 positional
@@ -144,7 +335,10 @@ function Invoke-PmxVmClone {
     #
     # `pmx disk grow 101 50G` in the same file already reads this way. Clone was the outlier.
     if ($parsed.Positionals.Count) {
-        $named = $parsed.Options.ContainsKey('Source') -or $parsed.Options.ContainsKey('NewVmid') -or $parsed.Options.ContainsKey('Name')
+        # Only the IDENTITY options conflict with positionals. --cores/--memory/--grow-by are
+        # modifiers that combine with the positional form, which is the whole point of
+        # `pmx vm clone 100 web-prod --cores 2`.
+        $named = $parsed.Options.ContainsKey('Source') -or $parsed.Options.ContainsKey('Name')
         if ($named -or $parsed.Positionals.Count -notin @(2, 3)) {
             Write-Host '❌ Use: pmx vm clone <template> <name>' -ForegroundColor Red
             Write-Host '       pmx vm clone <template> <new-vmid> <name>      (to choose the VMID)' -ForegroundColor DarkGray
@@ -243,6 +437,17 @@ function Invoke-PmxVmClone {
         }
         return [pscustomobject]@{ Success = $true; Error = ''; Message = "Cloned template $($sourceSnapshot.VmId) to VM $newVmid ($($parsed.Options.Name))."; Data = $target.Vm }
     }.GetNewClosure()
+    # PF-FEAT-003: the optional configure steps are validated and planned BEFORE anything is
+    # created, and folded into the single preview — so one confirmation covers the whole
+    # transaction rather than asking again per setting.
+    $configure = Get-PmxCloneConfigurePlan -Options $parsed.Options -SourceDetails $sourceDetails
+    if (-not $configure.Success) {
+        Write-Host "❌ $($configure.Error)" -ForegroundColor Red
+        Write-Host '   Nothing was created; the whole plan is validated before the clone starts.' -ForegroundColor DarkGray
+        return
+    }
+    $configureSteps = @($configure.Steps)
+
     $fields = [ordered]@{
         'Source VMID' = $source.Vm.VmId
         'Source name' = $source.Vm.Name
@@ -253,7 +458,18 @@ function Invoke-PmxVmClone {
         'Placement'   = $clonePlan.PlacementPolicy
         'Provisioned capacity' = $clonePlan.ProvisionedDisplay
     }
+    # Every requested change appears in the plan the user confirms. A step that is not previewed
+    # is a step nobody agreed to.
+    foreach ($step in $configureSteps) {
+        $label = switch ($step.Kind) { 'cpu' { 'Then set CPU' } 'memory' { 'Then set memory' } 'disk' { 'Then grow disk' } }
+        $fields[$label] = $step.Display
+    }
     $warnings = @()
+    if ($configureSteps.Count) {
+        # Said before confirmation, not after a failure. The operator should know the shape of
+        # the risk while declining is still free.
+        $warnings += 'This is a sequence, not an atomic transaction: if a later step fails the clone is KEPT and the remaining commands are printed.'
+    }
     if ($session.Config.Explain -or $parsed.Options.ContainsKey('Explain')) {
         $warnings += 'Placement is same-as-source for every disk; no target-storage override is requested.'
         $warnings += 'Provisioned capacity is configured virtual capacity, not allocated thin-pool blocks.'
@@ -261,6 +477,34 @@ function Invoke-PmxVmClone {
     if (-not $jsonMode) { Show-PmxClonePlacement -Plan $clonePlan }
     $mutation = Invoke-PmxAmberMutation -Session $session -Operation 'vm-clone' -Parameters $parameters `
         -Title 'CLONE VM' -Fields $fields -Warnings $warnings -Options $parsed.Options -Revalidate $revalidate -Verify $verify -VmId "$newVmid"
+
+    # The configure steps run ONLY after the clone is verified to exist. A dry run reaches here
+    # with Executed = $false and must perform zero mutations — the plan above was the output.
+    $configureOk = $true
+    if ($configureSteps.Count -and $mutation -and $mutation.Success -and $mutation.Executed) {
+        $outcomes = @(Invoke-PmxCloneConfigureSteps -Session $session -VmId $newVmid -Steps $configureSteps)
+        if (-not $jsonMode) {
+            $configureOk = Show-PmxCloneConfigureOutcome -VmId $newVmid -Planned $configureSteps -Outcomes $outcomes
+        }
+        else {
+            $configureOk = -not @($outcomes | Where-Object { -not $_.Success }).Count
+        }
+    }
+    elseif ($configureSteps.Count -and $mutation -and $mutation.DryRun) {
+        Write-Host '  Dry run: the configure steps above were validated and planned, and nothing ran.' -ForegroundColor DarkGray
+    }
+
+    # --show prints the final config, but only once everything verified: showing a
+    # half-configured VM as the result of a successful command would be misleading.
+    if (-not $jsonMode -and $mutation -and $mutation.Success -and $mutation.Executed) {
+        if ($parsed.Options.ContainsKey('Show') -and $configureOk) {
+            Show-PmxManagedVm -Arguments @("$newVmid")
+        }
+        elseif ($configureOk) {
+            Write-Host "  Next:  pmx vm show $newVmid" -ForegroundColor DarkGray
+        }
+    }
+
     if ($jsonMode -and $mutation) {
         $verifiedTarget = if ($mutation.Verification -and $mutation.Verification.Data) { $mutation.Verification.Data } else { $null }
         Write-PmxJson (ConvertTo-PmxCloneContract -Plan $clonePlan -Mutation $mutation -VerifiedTarget $verifiedTarget)
@@ -394,7 +638,11 @@ function Get-PmxLifecycleInvocation {
 
 function Invoke-PmxVmLifecycleChange {
     param(
-        [Parameter(Mandatory)][object[]]$Arguments,
+        # [AllowEmptyCollection()] is LOAD-BEARING. Invoke-PmxVmStart and Invoke-PmxVmShutdown
+        # both default $Arguments to @() and pass it straight through, so a bare
+        # `pmx vm start` crashed on parameter binding before this body could run. The body
+        # already resolves an empty selector through the VM picker.
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Arguments,
         [Parameter(Mandatory)][ValidateSet('start', 'shutdown')][string]$Action
     )
     if (@($Arguments | Where-Object { "$_" -eq '--help' }).Count) { Show-PmxTopicHelp "vm $Action"; return }

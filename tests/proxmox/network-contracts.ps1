@@ -136,8 +136,12 @@ Assert-PmxTest ($stoppedModel.Model.Agent.Status -ceq 'stopped' -and $script:run
     'Stopped VM queried runtime data or lost its non-fatal agent state.'
 $script:networkQueryMode = 'disabled'; $script:runtimeQueryCount = 0
 $disabledModel = Get-PmxVmNetworkModel -Session $session -Vm $runningVm -View addresses
-Assert-PmxTest ($disabledModel.Model.Agent.Status -ceq 'disabled' -and $script:runtimeQueryCount -eq 0) `
-    'Disabled agent channel still triggered a runtime read.'
+# 'not-configured', not 'disabled' (PF-UX-003): nothing was turned off, the channel was never
+# enabled — and the fix differs, since you add agent=1 rather than re-enabling something.
+Assert-PmxTest ($disabledModel.Model.Agent.Status -ceq 'not-configured' -and $script:runtimeQueryCount -eq 0) `
+    'An unconfigured agent channel still triggered a runtime read.'
+Assert-PmxTest ([bool]$disabledModel.Model.Agent.Reason) `
+    'Every non-available agent state must carry a Reason - the state alone is what made this a dead end.'
 $script:networkQueryMode = 'timeout'; $script:runtimeQueryCount = 0
 $timeoutModel = Get-PmxVmNetworkModel -Session $session -Vm $runningVm -View addresses
 Assert-PmxTest ($timeoutModel.Model.Agent.Status -ceq 'timed-out' -and

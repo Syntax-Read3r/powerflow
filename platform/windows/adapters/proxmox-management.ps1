@@ -16,13 +16,15 @@ function New-PmxManagementResult {
         [string]$ErrorMessage,
         $ExitCode,
         [string]$NativeCommand,
-        [string]$FailureKind = ''
+        [string]$FailureKind = '',
+        $Diagnostics = $null
     )
 
     return [pscustomobject]@{
         Success       = $Success
         Data          = $Data
         Error         = $ErrorMessage
+        Diagnostics   = $Diagnostics
         ExitCode      = $ExitCode
         NativeCommand = $NativeCommand
         FailureKind   = $FailureKind
@@ -377,15 +379,45 @@ function New-PmxManagementChangeTokens {
     }
 }
 
+<#
+.SYNOPSIS
+    Strip control sequences from adapter output, and bound its length.
+.DESCRIPTION
+    THE LENGTH CAP IS NOT ONE SIZE (PF-BUG-002). It used to be a flat 2000 characters applied
+    to every line of every stream, including the stdout PAYLOAD — and `pvesh --output-format
+    json` emits one compact single-line document. So any response over 2000 characters was cut
+    mid-token before ConvertFrom-Json ever saw it, and the user got:
+
+        ❌ Proxmox returned malformed JSON.
+
+    Measured: a running VM's status/current is ~3.8 KB on one line (blockstat for every block
+    device, plus ballooninfo). Truncated at 2000 it fails with "Unterminated string ... position
+    2000". A STOPPED VM omits blockstat, which is exactly why stopped VMs worked and running
+    ones did not — and why `qm config` worked while `qm status` did not.
+
+    This also explains PF-BUG-004: the "Current VM status could not be read" warning came from
+    this same failed vm-status query, so one truncation produced two separately-reported bugs.
+
+    The control-character and ANSI stripping stays unconditional — that is real safety, and it
+    cannot corrupt JSON because those bytes are not legal in a JSON document anyway. Only the
+    LENGTH cap becomes caller-chosen: generous for a payload that must survive intact, tight
+    for text that is going to be printed.
+#>
 function ConvertTo-PmxManagementSafeText {
-    param($Value)
+    param($Value, [int]$MaxLength = 2000)
 
     $text = "$Value"
     $text = [regex]::Replace($text, "$([char]27)\[[0-?]*[ -/]*[@-~]", '')
     $text = [regex]::Replace($text, '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '?')
-    if ($text.Length -gt 2000) { return $text.Substring(0, 2000) }
+    if ($MaxLength -gt 0 -and $text.Length -gt $MaxLength) { return $text.Substring(0, $MaxLength) }
     return $text
 }
+
+# The payload ceiling. Still bounded — a hostile or runaway response must not be unbounded —
+# but far above any legitimate pvesh document, so a real payload is never cut. If this IS ever
+# hit the result will fail to parse and the diagnostics record reports the byte count, which is
+# what makes the cause visible instead of mysterious.
+$script:PF_PmxPayloadMaxLength = 1048576
 
 function Format-PmxManagementNativeCommand {
     param($Connection, [string[]]$Tokens)
@@ -468,8 +500,10 @@ function Invoke-PmxManagementNative {
 
     # Native stderr redirected into the success stream remains an ErrorRecord. Keep it
     # separate: pvesh stdout is the JSON document and a warning must not corrupt it.
+    # stdout carries the JSON document and must survive intact — see ConvertTo-PmxManagementSafeText.
+    # stderr is only ever displayed, so it keeps the tight default cap.
     $stdout = @($output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } |
-        ForEach-Object { ConvertTo-PmxManagementSafeText $_ })
+        ForEach-Object { ConvertTo-PmxManagementSafeText $_ -MaxLength $script:PF_PmxPayloadMaxLength })
     $stderr = @($output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } |
         ForEach-Object { ConvertTo-PmxManagementSafeText $_ })
     $errorText = if ($stderr.Count) { $stderr -join [Environment]::NewLine } else { $stdout -join [Environment]::NewLine }
@@ -524,14 +558,20 @@ function Invoke-ProxmoxManagementQuery {
         return New-PmxManagementResult $false $null $message $run.ExitCode $run.NativeCommand 'command-failed'
     }
     $json = $run.StdOut -join [Environment]::NewLine
-    if (-not $json) {
-        return New-PmxManagementResult $false $null 'Proxmox returned no JSON data.' $run.ExitCode $run.NativeCommand
+    $parsed = ConvertFrom-PmxJsonPayload -Json $json
+    if (-not $parsed.Success) {
+        # The message stays short for ordinary use; the evidence rides along on the result
+        # so `--explain` can show WHICH of the failure classes this was. See PF-BUG-002.
+        $diagnostics = Get-PmxParseDiagnostics -Operation $Operation `
+            -Transport "$($resolved.Data.Transport)" -Run $run -Note $parsed.Note
+        $message = if ($parsed.Note -eq 'empty response') {
+            'Proxmox returned no JSON data.'
+        } else {
+            "Proxmox returned malformed JSON ($($parsed.Note))."
+        }
+        return New-PmxManagementResult $false $null $message $run.ExitCode $run.NativeCommand '' $diagnostics
     }
-    try {
-        $data = $json | ConvertFrom-Json
-    } catch {
-        return New-PmxManagementResult $false $null 'Proxmox returned malformed JSON.' $run.ExitCode $run.NativeCommand
-    }
+    $data = $parsed.Data
     $warning = if ($resolved.Data.Transport -eq 'ssh') { '' } else { $run.StdErr -join [Environment]::NewLine }
     return New-PmxManagementResult $true $data $warning $run.ExitCode $run.NativeCommand
 }
@@ -564,4 +604,120 @@ function Invoke-ProxmoxManagementChange {
     }
     $warning = if ($resolved.Data.Transport -eq 'ssh') { '' } else { $run.StdErr -join [Environment]::NewLine }
     return New-PmxManagementResult $true @($run.StdOut) $warning $run.ExitCode $run.NativeCommand
+}
+
+# ==============================================================================
+# PF-BUG-002 — parse diagnostics
+# ==============================================================================
+# "❌ Proxmox returned malformed JSON." collapses at least eight distinct failures into one
+# sentence: contaminated stdout, stderr merged in, an empty response, two JSON documents
+# concatenated, native text where JSON was expected, an encoding problem, a transport
+# difference between local and ssh, or a genuinely broken payload. None of them can be told
+# apart from that message, so the report cannot be acted on — which is why PF-BUG-002 sat
+# with a reproduction and no root cause.
+#
+# The evidence below is attached to the RESULT rather than printed, so the adapter stays
+# silent and the component decides whether to show it (`--explain`). Privacy is not
+# optional here: PowerFlow's contract is that ordinary output names a saved alias and never
+# an endpoint, and a raw payload preview is exactly where an address would leak.
+# ==============================================================================
+
+<#
+.SYNOPSIS
+    Remove anything endpoint-shaped from diagnostic text.
+.DESCRIPTION
+    Applied to every previewed byte. Order matters: user@host is collapsed before the bare
+    hostname pass, so `root@pve.example.net` does not survive as `pve.example.net`.
+#>
+function Protect-PmxDiagnosticText {
+    param([AllowEmptyString()][string]$Text)
+
+    if (-not $Text) { return '' }
+    $safe = $Text
+
+    # user@host  ->  <redacted-endpoint>
+    $safe = [regex]::Replace($safe, '[\w.+-]+@[\w.-]+', '<redacted-endpoint>')
+    # IPv4, with or without a port
+    $safe = [regex]::Replace($safe, '\b\d{1,3}(\.\d{1,3}){3}(:\d+)?\b', '<redacted-address>')
+    # IPv6, loosely: any run of hex groups joined by colons
+    $safe = [regex]::Replace($safe, '\b([0-9a-fA-F]{1,4}:){2,}[0-9a-fA-F]{1,4}\b', '<redacted-address>')
+    # Anything that looks like a key, token or password assignment
+    $safe = [regex]::Replace($safe, '(?i)\b(password|passwd|secret|token|apikey|api_key|ticket|csrf)\b\s*[:=]\s*\S+',
+                             '$1=<redacted>')
+    return $safe
+}
+
+<#
+.SYNOPSIS
+    Scrubbed evidence about a response that failed to parse.
+.DESCRIPTION
+    Byte counts rather than payloads wherever a count is enough, and a short head/tail
+    preview where the actual characters matter — a banner or an HTML error page is
+    unmistakable in 200 characters and invisible in a byte count.
+#>
+function Get-PmxParseDiagnostics {
+    param(
+        [Parameter(Mandatory)][string]$Operation,
+        [AllowEmptyString()][string]$Transport,
+        $Run,
+        [AllowEmptyString()][string]$Note = ''
+    )
+
+    $stdOut = @($Run.StdOut) -join [Environment]::NewLine
+    $stdErr = @($Run.StdErr) -join [Environment]::NewLine
+    $preview = if ($stdOut.Length -gt 220) {
+        $stdOut.Substring(0, 160) + ' […] ' + $stdOut.Substring($stdOut.Length - 40)
+    } else { $stdOut }
+
+    # A leading byte that is neither { nor [ is the single most diagnostic fact available:
+    # it means something printed before the JSON did.
+    $firstChar = if ($stdOut.Length) { $stdOut.TrimStart().Substring(0, 1) } else { '' }
+
+    return [pscustomobject]@{
+        CommandClass  = $Operation
+        Transport     = $(if ($Transport) { $Transport } else { 'local' })
+        Parser        = 'json'
+        ExitCode      = $Run.ExitCode
+        StdOutBytes   = [Text.Encoding]::UTF8.GetByteCount($stdOut)
+        StdErrBytes   = [Text.Encoding]::UTF8.GetByteCount($stdErr)
+        StdOutLines   = @($Run.StdOut).Count
+        FirstChar     = $firstChar
+        LooksLikeJson = ($firstChar -eq '{' -or $firstChar -eq '[')
+        Note          = $Note
+        StdOutPreview = Protect-PmxDiagnosticText $preview
+        StdErrPreview = Protect-PmxDiagnosticText $(if ($stdErr.Length -gt 220) { $stdErr.Substring(0, 220) } else { $stdErr })
+    }
+}
+
+<#
+.SYNOPSIS
+    Parse a JSON payload, tolerating leading or trailing noise, and say when it did.
+.DESCRIPTION
+    A strict parse is attempted first, so a clean payload is never treated as suspect. Only
+    on failure is the first { or [ located and the balance re-parsed — and when that
+    succeeds, the caller is TOLD noise was stripped rather than having it silently hidden.
+    Quietly accepting contamination would turn a reportable defect into a permanent mystery.
+#>
+function ConvertFrom-PmxJsonPayload {
+    param([AllowEmptyString()][string]$Json)
+
+    if (-not $Json) { return [pscustomobject]@{ Success = $false; Data = $null; Note = 'empty response' } }
+
+    try { return [pscustomobject]@{ Success = $true; Data = ($Json | ConvertFrom-Json); Note = '' } } catch { }
+
+    $start = [Math]::Min(
+        $(if ($Json.IndexOf('{') -ge 0) { $Json.IndexOf('{') } else { [int]::MaxValue }),
+        $(if ($Json.IndexOf('[') -ge 0) { $Json.IndexOf('[') } else { [int]::MaxValue }))
+    if ($start -eq [int]::MaxValue) {
+        return [pscustomobject]@{ Success = $false; Data = $null; Note = 'response contains no JSON document' }
+    }
+
+    $candidate = $Json.Substring($start)
+    try {
+        $data = $candidate | ConvertFrom-Json
+        return [pscustomobject]@{ Success = $true; Data = $data
+            Note = "stripped $start leading characters before the JSON document" }
+    } catch { }
+
+    return [pscustomobject]@{ Success = $false; Data = $null; Note = 'JSON document is malformed' }
 }

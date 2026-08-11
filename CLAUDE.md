@@ -73,15 +73,43 @@ Also update `COMPONENTS.md` — including the **Platform** column (Windows / Lin
 
 ## Command Shadowing on Linux (do not break this)
 
-PowerShell resolves `Alias → Function → Cmdlet → native binary`. PowerFlow defines `rm`,
-`mv`, `cp`, `cat`, `mkdir`, `touch` — which would **shadow the GNU coreutils** on Linux.
+PowerShell resolves `Alias → Function → Cmdlet → native binary`. So a **function beats a
+native binary**, and an **alias beats a function**. A function named `rm` in `components/`
+therefore hides `/usr/bin/rm` on Linux.
 
-`platform/linux/bindings.ps1` prevents that. PowerFlow's versions are re-exposed as
-**`del`** and **`mvf`**; the rest defer to the native tools.
+> **Nothing in `components/` may be named after a GNU coreutil.**
 
-Never bind a new command to a GNU coreutil's name without adding it to that file. The
-Linux CI job asserts `rm`/`mv`/`cp`/`cat`/`mkdir`/`touch`/`rmdir`/`which`/`grep` all
-resolve to `Application` (a native binary) — it will fail if you shadow one.
+Not `rm`, `mv`, `cp`, `cat`, `mkdir`, `touch`, `rmdir`, `which`, `grep`, `less`, `pwd`.
+
+PowerFlow's own file commands use **PowerFlow's own names on every platform**: `del` and
+`mvf` (in `components/files/operations.ps1`). They are not clones — `del` drives an fzf
+picker and confirms, `mvf` treats a single argument as a *cut* — so borrowing a coreutil's
+name would mean a Linux user's reflexes silently getting different behaviour.
+
+Where the platform-specific parts go:
+
+| | |
+|---|---|
+| `windows-only/coreutils.ps1` | `mkdir -p`, `touch`, `rmdir` — clones, for a platform that has none of them. Never loads on Linux. |
+| `platform/windows/bindings.ps1` | **adds only.** Binds `rm`→`del`, `mv`→`mvf`, plus `grep`/`less`/`pwd`/`which`. |
+| Linux | **has no bindings file.** There is nothing to unbind. |
+
+This replaced an arrangement where `components/` claimed the coreutil names and
+`platform/linux/bindings.ps1` removed them again afterwards. That failed in the dangerous
+direction — shadowing unconditional, undo conditional — so anything that stopped the undo
+from running left Linux with a silently substituted `rm`. Its own header recorded that the
+bug had shipped once already. Adding names is now the only operation, and its worst failure
+is a missing convenience on Windows.
+
+**CI enforces this** (`release-validate.yml`, "Coreutil names are not shadowed"): a static
+scan of `components/` for `^function <name>` and `^Set-Alias <name>` against a 57-name
+coreutil list. `ls`/`la`/`ll` are the one deliberate exception — the pretty listing is the
+point — and the gate allow-lists them by name. A second gate fails the release if
+`platform/linux/bindings.ps1` ever comes back.
+
+It is a source scan rather than a live name-resolution test on purpose: it fails on the root
+cause (the name, in the file that defines it) instead of on a symptom two layers away, and it
+does not depend on a profile load succeeding in CI.
 
 ---
 

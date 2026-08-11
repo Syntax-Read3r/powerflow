@@ -54,7 +54,7 @@ function Resolve-PmxManagedVm {
     # NO SELECTOR? PICK ONE. Thirteen VM-taking commands answered a missing name with a usage
     # line while a working fzf picker sat forty lines away, wired to physical disks only \u2014
     # `pmx disk` opens one, `pmx vm show` did not. Refusing where a picker would do is the
-    # house anti-pattern (srv, start-folder and pc-whoami -ram all pick).
+    # house anti-pattern (srv, start-folder and pc-whoami --ram all pick).
     #
     # Doing it HERE rather than per-command means every caller gains it at once, and the
     # safety path is untouched: whatever is picked still goes through the same validate \u2192
@@ -104,13 +104,19 @@ function Get-PmxManagedVmDetails {
     )
 
     $parameters = @{ Vmid = [int]$Vm.VmId; Node = "$($Vm.Node)" }
+    # Diagnostics is carried through, not dropped. The adapter attaches scrubbed evidence to a
+    # parse failure (PF-BUG-002), and re-wrapping the result without it is how "malformed JSON"
+    # reached the user with nothing to act on. Losing it here is the same information leak the
+    # response boundary suffers everywhere else — see PF-INVESTIGATE-001.
     $configResult = Invoke-ProxmoxManagementQuery -Operation 'vm-config' -Connection $Session.Connection -Parameters $parameters
     if (-not $configResult.Success) {
-        return [pscustomobject]@{ Success = $false; Vm = $Vm; Config = $null; Status = $null; Disks = @(); Error = $configResult.Error }
+        return [pscustomobject]@{ Success = $false; Vm = $Vm; Config = $null; Status = $null; Disks = @()
+            Error = $configResult.Error; Diagnostics = $configResult.Diagnostics }
     }
     $statusResult = Invoke-ProxmoxManagementQuery -Operation 'vm-status' -Connection $Session.Connection -Parameters $parameters
     if (-not $statusResult.Success) {
-        return [pscustomobject]@{ Success = $false; Vm = $Vm; Config = $configResult.Data; Status = $null; Disks = @(); Error = $statusResult.Error }
+        return [pscustomobject]@{ Success = $false; Vm = $Vm; Config = $configResult.Data; Status = $null; Disks = @()
+            Error = $statusResult.Error; Diagnostics = $statusResult.Diagnostics }
     }
     $disks = @(Get-PmxVirtualDisksFromConfig -Config $configResult.Data)
     return [pscustomobject]@{
@@ -120,8 +126,10 @@ function Get-PmxManagedVmDetails {
         Status  = $statusResult.Data
         Disks   = $disks
         Error   = ''
+        Diagnostics = $null
     }
 }
+
 
 function Get-PmxReadInvocation {
     param(
@@ -191,7 +199,9 @@ function Show-PmxManagedVmList {
 
 function Show-PmxManagedVm {
     param(
-        [Parameter(Mandatory)][object[]]$Arguments,
+        # Same reason as Show-PmxManagedVmDisks below: `pmx vm show` with no VM arrives as an
+        # empty tail, and the body already resolves an empty selector through the picker.
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Arguments,
         [switch]$StatusOnly
     )
 
@@ -203,7 +213,7 @@ function Show-PmxManagedVm {
     $resolved = Resolve-PmxManagedVm -Selector $parsed.Options.Selector -Session $session
     if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
     $details = Get-PmxManagedVmDetails -Session $session -Vm $resolved.Vm
-    if (-not $details.Success) { Write-Host "❌ $($details.Error)" -ForegroundColor Red; return }
+    if (-not $details.Success) { Write-PmxQueryFailure -Message $details.Error -Diagnostics $details.Diagnostics -Options $parsed.Options; return }
     $mode = Get-PmxOutputMode -Options $parsed.Options -Config $session.Config
     if (-not $mode.Success) { Write-Host "❌ $($mode.Error)" -ForegroundColor Red; return }
     if ($mode.Mode -eq 'json') {
@@ -256,7 +266,19 @@ function Show-PmxNextVmId {
 }
 
 function Show-PmxManagedVmDisks {
-    param([Parameter(Mandatory)][object[]]$Arguments)
+    # [AllowEmptyCollection()] is LOAD-BEARING. `pmx disk list` with no VM routes through
+    # Get-PmxCommandTail, which deliberately returns ,@() when there is nothing after the
+    # verb — and PowerShell rejects an empty array for a Mandatory [object[]] BEFORE the
+    # body runs. The user saw a raw ParameterBindingException instead of a VM picker.
+    #
+    # The body below already does the right thing: Resolve-PmxManagedVm opens a picker on an
+    # empty selector, and falls back to a clear "use --vm <name>" message when the terminal
+    # is not interactive. So an unspecified VM was always meant to mean "ask me" — the
+    # contract simply refused to let the body find out.
+    #
+    # Same defect as PF-BUG-005 in one dimension over: Mandatory rejecting a deliberately
+    # empty value at a dispatch boundary.
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Arguments)
 
     $parsed = Get-PmxReadInvocation -Arguments $Arguments -RequireSelector
     if (-not $parsed.Success) { Write-Host "❌ $($parsed.Error)" -ForegroundColor Red; return }
@@ -266,7 +288,10 @@ function Show-PmxManagedVmDisks {
     $resolved = Resolve-PmxManagedVm -Selector $parsed.Options.Selector -Session $session
     if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
     $details = Get-PmxManagedVmDetails -Session $session -Vm $resolved.Vm
-    if (-not $details.Success) { Write-Host "❌ $($details.Error)" -ForegroundColor Red; return }
+    if (-not $details.Success) {
+        Write-PmxQueryFailure -Message $details.Error -Diagnostics $details.Diagnostics -Options $parsed.Options
+        return
+    }
     $mode = Get-PmxOutputMode -Options $parsed.Options -Config $session.Config
     if (-not $mode.Success) { Write-Host "❌ $($mode.Error)" -ForegroundColor Red; return }
     if ($mode.Mode -eq 'json') { Write-PmxJson $details.Disks; return }

@@ -1,6 +1,28 @@
 # PowerFlow for Docker — `dkr`
 
-**Status:** Design agreed 2026-08-07. Not yet implemented.
+**Status: IMPLEMENTED 2026-08-11, shipping in v5.0.0.** Lives in
+[components/containers/containers.ps1](../../../components/containers/containers.ps1) with the
+engine calls in `platform/<os>/adapters/container.ps1`; tests in `tests/containers/` (707
+assertions).
+
+**Deviations from this design, all deliberate:**
+
+- **A second entry point, `pman`, drives podman.** Not in this document. One implementation,
+  two names — the command NAME is the engine selector, so there is no `--engine` flag to
+  remember. A switchable alias was rejected because it would make `dkr` mean different things
+  on different machines, so help text, docs and muscle memory would all become
+  machine-dependent. (`pman`, not `pdm`: that is a widely used Python package manager.)
+- **The adapter contract is `*-Container*`, not `*-Docker*`,** for the same reason.
+- **A store and machine model this design does not mention.** Podman has *machines* (a Linux VM),
+  each with *two stores* (rootless and rootful) holding different containers, images, volumes and
+  networks, reached by *connections* matched on SSH **port** rather than name. `dkr`/`pman stores`
+  exists because a container can be invisible while plainly running: the engine can answer
+  truthfully that there are none here while five sit one connection away.
+- **No `param()` block.** PowerShell would bind `-a`/`-f` as parameter *names*, and prefix
+  matching makes single letters ambiguous. Arguments are parsed by hand.
+- **Zero containers re-probes engine health before reporting "none".** Podman can report a usable
+  client version while the service is unreachable, and a confident wrong answer is worse than a
+  slow one.
 **Provenance:** The body of this document is a design by ChatGPT, reconciled against decisions
 the owner made in conversation. Where the two disagreed, the owner's decision wins and the
 change is marked inline. The original is preserved in git history.
@@ -156,13 +178,75 @@ sessions refuse rather than assume yes.
 
 ---
 
-## Still to merge
+## Research findings (merged 2026-08-07)
 
-A six-lens research pass (real-world command frequency · where the CLI is hardest to learn ·
-compose · prior art incl. lazydocker/ctop/dry · house fit · safety) was commissioned on
-2026-08-07 and is still running. Its verified findings will be merged into the body — in
-particular anything that contradicts the frequency assumptions below, since those drive the
-P0–P3 staging.
+The six-lens pass completed: **123 findings**, of which 21 went through adversarial
+verification against a **live Docker 29.6.2 / Compose v5.3.1** host. **14 were refuted.**
+That refutation rate is the useful part of this section — most of what follows is here
+because a verifier tried to kill it and could not.
+
+### What was refuted, and what it changes
+
+- **"lazydocker has no ports column."** False. It has had one for roughly four years
+  (`jesseduffield/lazydocker`). The argument for `dkr` is therefore *not* that prior art
+  cannot show you ports. It is narrower and still holds: lazydocker is a full-screen TUI
+  you enter and leave, whereas the daily question — *what is up, on which port* — wants a
+  line of output in the scrollback you already have. `dkr ui` handing off to lazydocker
+  stays the right call precisely because lazydocker is good.
+
+- **Several claims overstated prune/`down -v` risk**, and one was "wrong in the direction
+  that inflates the risk". `docker compose down` does **not** remove named volumes unless
+  `-v/--volumes` is passed, and that flag is scoped to volumes declared in the compose
+  file's `volumes:` section. Guardrails should be built to the measured behaviour, not to
+  the folklore — an over-warned command trains people to click through warnings.
+
+- **`docker exec -it sonar sh` does not print the error the finder quoted.** The
+  near-miss-name pain is real, but the proposed message was invented. `dkr` should show
+  what the daemon actually said and add its own suggestion, rather than fabricating
+  daemon output.
+
+- **One proposal "reproduced the exact defect it claimed to fix"** — a good reminder that
+  a wrapper is only worth having if it is measurably better than the line it replaces.
+
+### What survived verification
+
+These are the confirmed findings, and they are what P0 was built to:
+
+- **Bare `dkr` must show stopped containers, not just running ones.** When the list holds
+  only what is running, "it is not there" and "it is dead" look identical — and the second
+  is the one worth knowing about. *(Implemented: exited containers are listed, greyed.)*
+
+- **Names must resolve through compose labels.** `com.docker.compose.project`, `.service`
+  and `.config_files` come back from `docker ps --format '{{json .}}'`, which is what makes
+  `dkr restart sonarr` correct **from any directory**. Compose's single biggest friction is
+  that it otherwise demands you `cd` first. *(Implemented: name → service → project →
+  substring.)*
+
+- **`docker restart` on a compose-managed container ignores an edited compose file.** This
+  is the classic "I changed the yml and nothing happened". When the labels are present the
+  compose form must be used. *(Implemented, and asserted in `tests/docker/`.)*
+
+- **`dkr logs` with no name should open a picker**; with a name, 200 lines, and follow only
+  when asked. *(Implemented.)*
+
+- **The engine state is a four-way answer, not a pass/fail** — `missing` /
+  `unreachable` / `needs-sudo` / `ready`. Each needs different advice, and on Windows the
+  usermod line is meaningless. *(Implemented in both adapters.)*
+
+- **Never silently elevate.** The docker socket is root-equivalent: anyone who can reach it
+  can start a privileged container that mounts the host filesystem. `dkr` detects whether
+  the socket is reachable and *says so*; it does not quietly prepend `sudo` and prompt
+  mid-listing. The docker-group tradeoff is stated once, honestly, including that group
+  membership is root-equivalent.
+
+- **The header should report the effective endpoint, not just the context name.**
+  *(Partially implemented — P0 shows the server version and whether it is elevated.)*
+
+### Still deferred (P1+)
+
+`dkr stack`, `dkr clean` (**bare = a read-only itemised report that deletes nothing**),
+`dkr doctor` (the four-state answer above), `dkr why <name>` for restart loops, `dkr update`
+for the compose pull/up dance, and the `dkr ui` / `dkr top` hand-offs to lazydocker/ctop.
 
 ---
 
@@ -1008,7 +1092,7 @@ This would make the different parts of PowerFlow actually feel like one product.
 Imagine:
 
 ```powershell
-pc-whoami -ram
+pc-whoami --ram
 ```
 
 currently discovers Docker consuming 14 GB.

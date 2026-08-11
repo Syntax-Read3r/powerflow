@@ -279,11 +279,18 @@ function git-bd {
         Write-Host "🗑 Deleted branch: $branchName" -ForegroundColor Green
     } else {
         Write-Host "❌ Could not delete branch: $branchName (not fully merged?)" -ForegroundColor Red
-        Write-Host "💡 Use git-bD to force delete unmerged branches" -ForegroundColor DarkGray
+        Write-Host "💡 Use git-bd-force to force delete unmerged branches" -ForegroundColor DarkGray
     }
 }
 
-function git-bD {
+# RENAMED FROM `git-bD`. PowerShell's function table is case-insensitive, so `git-bD` and
+# `git-bd` were the SAME name: whichever loaded second won, and that was this one. Typing the
+# documented-safe `git-bd` therefore ran `git branch -D` and force-deleted unmerged work, while
+# git-bd's own hint pointed at a name that no longer differed from itself.
+#
+# `git-bD` cannot be kept as an alias — that is precisely the collision. The safe spelling keeps
+# the short name; the destructive one has to be spelled out.
+function git-bd-force {
     param([Parameter(Mandatory = $true)][string]$branchName)
 
     # Get current branch name for safety check
@@ -377,5 +384,10 @@ function git-c.sb {
 # ── pwsh-h registration ───────────────────────────────────────────────────────
 Register-PFCommand -Name 'git-b'    -Aliases @('git-branch') -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'interactive branch picker: switch, create, delete'
 Register-PFCommand -Name 'git-cm'   -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'checkout main/master, whichever exists'
-Register-PFCommand -Name 'git-bd'   -Aliases @('git-bD') -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'delete a branch (bD forces)'
+# `git-bD` is NOT listed as an alias any more, and must never be re-added. PowerShell function
+# names are case-insensitive, so `git-bD` and `git-bd` are the same name — declaring one as an
+# alias of the other described a distinction the language cannot make, and the force variant
+# silently replaced the safe one.
+Register-PFCommand -Name 'git-bd'       -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'delete a merged branch; refuses if unmerged'
+Register-PFCommand -Name 'git-bd-force' -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'DESTRUCTIVE: delete a branch even if unmerged (was git-bD)'
 Register-PFCommand -Name 'git-c.sb' -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'create and switch to a new branch'

@@ -128,7 +128,14 @@ function Write-PmxVmNetworkIdentity {
     Write-Host "🌐 $Title — $($Model.Vm.VmId) $((ConvertTo-PmxDisplayText $Model.Vm.Name))" -ForegroundColor Cyan
     Write-Host '────────────────────────────────────────────────────────────────────────────' -ForegroundColor DarkGray
     Write-PmxField 'Status' (ConvertTo-PmxDisplayText $Model.Vm.Status) $(if ($Model.Vm.Status -eq 'running') { 'Green' } else { 'Yellow' })
-    Write-PmxField 'Agent' (ConvertTo-PmxDisplayText $Model.Agent.Status) $(if ($Model.Agent.Available) { 'Green' } else { 'Yellow' })
+    # The Reason is printed beside the state, because a state alone is what made this a dead
+    # end: "Agent unavailable" told the user it had not worked and nothing about what to do.
+    # PF-UX-003 asked for the cause to stay visible, so it is on the same line.
+    $agentText = ConvertTo-PmxDisplayText $Model.Agent.Status
+    if ($Model.Agent.Reason -and -not $Model.Agent.Available) {
+        $agentText += "  -  $(ConvertTo-PmxDisplayText $Model.Agent.Reason)"
+    }
+    Write-PmxField 'Agent' $agentText $(if ($Model.Agent.Available) { 'Green' } else { 'Yellow' })
 }
 
 function Show-PmxNetworkAdapterTable {

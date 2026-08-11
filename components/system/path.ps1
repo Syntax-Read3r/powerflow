@@ -9,7 +9,7 @@
 #            (platform/<os>/adapters/env.ps1)
 # ==============================================================================
 
-function set-path {
+function Set-PFPathEntry {
     param(
         [switch]$System,
         [Parameter(Mandatory, ValueFromRemainingArguments)]
@@ -38,5 +38,12 @@ function set-path {
     }
 }
 
+# ── set-path ──────────────────────────────────────────────────────────
+# The user-facing name is a shim so that --long flags bind at all: a param() block
+# cannot bind them, and worse, misbinds them into the next value parameter. The shim
+# must not declare param() of its own, or $args would not hold the whole line.
+# See docs/plan/ethos/ETHOS.md.
+function set-path { Invoke-PFParamCommand -Target 'Set-PFPathEntry' -Command 'set-path' -Argv $args }
+
 # ── pwsh-h registration ───────────────────────────────────────────────────────
-Register-PFCommand -Name 'set-path' -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'add a directory to PATH (-system needs admin)' -Example 'set-path C:\tools'
+Register-PFCommand -Name 'set-path' -Section '⚙️ CONFIGURATION & SETTINGS' -Synopsis 'add a directory to PATH (--system needs admin)' -Example 'set-path C:\tools'

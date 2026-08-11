@@ -2,12 +2,256 @@
 
 All notable changes to PowerFlow will be documented in this file.
 
-## [Unreleased]
+## [5.0.0] - 2026-08-11
+
+### Changed
+
+- 🏷️ **One flag convention across the whole shell: `-x` short, `--word` long.** PowerFlow's
+  flags were written command by command, and it showed. Measured before the change: `help` had
+  **four spellings** across seven commands and only `pmx` accepted all four — `pwsh-h --help`
+  printed *"Nothing called '--help'"*, from the command whose entire job is help. `-f` meant
+  three different things (force, *follow*, "a filename follows"). "Skip the prompt" had **six
+  spellings, two of which were silently ignored.** `-v` was accepted by nine commands, meant
+  four things, and in two meant nothing at all. And **54 of 301 dashed tokens were never
+  implemented**, so they could not appear in any help text.
+
+  The rule is now the one every other command-line tool uses: **one dash for a short form (one
+  or two letters), two dashes for a word**, kebab-case. A verb stays a word (`srv list`, never
+  `srv --list`), and a target stays positional (`storage D:`, never `storage -D`).
+
+  **Nothing breaks.** Every legacy single-dash word still binds, and mentions its new spelling
+  once per session — not once per run, because the person who asked for this types these daily.
+
+  Getting there needed one non-obvious thing. A PowerShell `param()` block **cannot** bind
+  `--word`; worse, it *misbinds* it — `T --name bob` sets `Name='--name'` and drops `bob` into
+  `$args`. The obvious fix, rewriting twelve commands as hand-parsers, would have destroyed
+  case-insensitivity and prefix matching (`-Stat`, `-status`, `-STATUS` all stop working). So
+  the spelling is translated **at the door** by `Invoke-PFParamCommand` and each implementation
+  keeps its `param()` block untouched. Twelve commands became a one-line shim each. `pmx` gained the same treatment by hand: its `--full`/`--write`/`--destroy` are normalised onto the allow-listed keys, since it parses its own arguments.
+
+- ❌ **An unknown flag is now refused, with a suggestion — never silently dropped.** This is
+  DECISIONS 1.4 fixed in general rather than in one command. `pwsh-font --status` **installed a
+  font**: the unbindable token fell into `$args`, the switch stayed `$false`, and the default
+  action ran. Now:
+
+  ```
+  ❌ pwsh-font: unknown option '--stauts'
+     did you mean --status ?
+     accepts: --status
+  ```
+
+  The suggestion handles transpositions, which is the most common typo there is and needs its
+  own case — it produces *two* differing characters, so an "at most one difference" test misses
+  it entirely.
+
+- 🐧 **`components/` no longer claims a single GNU coreutil name, and Linux needs no bindings
+  file.** PowerShell resolves `Alias → Function → Cmdlet → native binary`, so a function named
+  `rm` hides `/usr/bin/rm`. The old arrangement created that shadowing unconditionally and
+  undid it conditionally, in `platform/linux/bindings.ps1` — fail-dangerous, and that file's own
+  header recorded the bug shipping once already.
+
+  PowerFlow's delete and move now carry PowerFlow's names on **every** platform: **`del`** and
+  **`mvf`**. They are not clones — `del` drives an fzf picker and confirms, `mvf` treats a single
+  argument as a *cut* — so borrowing `rm`/`mv` meant a Linux user's reflexes silently getting
+  different behaviour. Both report themselves as the name they were **invoked** as, so `rm -rf x`
+  on Windows says `rm:` while `del -rf x` says `del:`.
+
+  `mkdir`, `touch` and `rmdir` moved to `windows-only/coreutils.ps1` (Windows ships none of the
+  three). `cat` and `cp` are **gone entirely** — PowerShell already provides both on Windows, so
+  they added nothing there while hiding the real tools on Linux. `platform/linux/bindings.ps1` is
+  deleted. Adding names is now the only operation, and its worst failure is a missing convenience
+  on Windows rather than a substituted `rm` on Linux.
+
+- 🦭 **`pdm` is now `pman`.** `pdm` is a widely used Python package manager; a shell that
+  shadows it would be a poor guest on any machine doing Python work.
+
+### Removed
+
+- ✂️ **`git-a-plus`, `git-aa`, `git-aq`, `git-ad`, `git-am` — 228 lines.** Unused, on the
+  owner's word. `git-a` covers the add-commit-push path; what goes with them is `--dry-run` and
+  `--amend-last`, which can return as flags on `git-a` if ever wanted. The prune also **closes
+  DECISIONS 1.3 by deletion**: `git-a-plus -a` bound to `-AmendLast` by prefix match and rewrote
+  the last commit behind nothing but an fzf message box. That was guarded by declaring a second
+  A-parameter so `-a` errored as ambiguous; a deleted command cannot be mis-bound at all, and
+  the guard could have been removed by anyone who mistook it for a redundant switch.
+
+### Fixed
+
+- 🧪 **Two release gates that did not exist, and one local gate that lied.** `CLAUDE.md`
+  documented a Linux CI job asserting that `rm`/`mv`/`cat`/`grep` resolve to native binaries.
+  There was no such job — the workflow has only ever had one, on `windows-latest`. So the only
+  thing protecting Linux from coreutil shadowing was the bindings file itself, unverified. There
+  are now two static gates (`components/` claims no coreutil name; no Linux bindings file) plus
+  one for flag spelling in help text.
+
+  Separately, the local gate script was a hand-written **copy** of the CI checks and had drifted
+  five adapter names out of date, reporting "clean" on a tree the real gate would reject.
+  `tests/gates.ps1` now parses `release-validate.yml` and runs the real steps, so it cannot
+  disagree with CI. It immediately caught `dkr` and `pman` failing the help-registry gate:
+  registrations built from a loop variable are invisible to a regex looking for
+  `-Name '<literal>'`.
+
+### Added
+
+- 🐳 **`dkr` — Docker without the flags (P0: the daily loop).** The command this replaces,
+  typed several times a day:
+
+  ```
+  sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+  sudo docker stop qbittorrent radarr sonarr jellyfin
+  ```
+
+  `dkr` is that table, grouped by compose stack. With fzf present it then opens one
+  `--multi` picker — **Tab marks several containers**, Enter picks one action for all of
+  them — so the second line becomes four keystrokes instead of four typed names.
+
+  Eight verbs ship in P0: `dkr`, `dkr up`, `dkr down`, `dkr restart`, `dkr logs`,
+  `dkr shell`, `dkr stop`, `dkr start`. Every one of them accepts `--show-native` and
+  prints the real docker command it is about to run, so it teaches rather than hides.
+
+  **Names resolve through the compose labels**, not just container names: `dkr restart
+  sonarr` matches the container, the compose *service*, or the whole *project*, and works
+  **from any directory**. Compose's biggest friction is that it otherwise makes you `cd`
+  first. A miss suggests near-matches instead of docker's bare `No such container`.
+
+  Three behaviours are deliberate and are held by tests:
+
+  - **Stopped containers are listed, not hidden.** When the table holds only what is
+    running, "it is not there" and "it is dead" look identical — and the second is the one
+    worth knowing about.
+  - **`dkr restart` is compose-correct.** Plain `docker restart` on a compose-managed
+    container restarts the container but ignores an edited compose file — the classic
+    "I changed the yml and nothing happened". When the labels are present, the compose
+    form is used.
+  - **`dkr down` can never delete your data.** Verified against Compose v5.3.1: plain
+    `down` removes containers and networks and leaves named volumes alone; `-v` is what
+    deletes them, and `-v` is not reachable from anywhere in the adapter. It still
+    confirms before running, and says that volumes are safe.
+
+  **It never silently elevates.** The docker socket is root-equivalent — anyone who can
+  reach it can start a privileged container that mounts the host filesystem — so `dkr`
+  detects whether the socket is usable and *says so*, rather than quietly prepending
+  `sudo` and prompting halfway through a listing. The engine state is a four-way answer
+  (`missing` / `unreachable` / `needs-sudo` / `ready`), because each needs different
+  advice, and the `usermod` line means nothing on Windows.
+
+  Built on research: a six-lens pass produced 123 findings, of which 21 went through
+  adversarial verification against a live Docker 29.6.2 / Compose v5.3.1 host. **14 were
+  refuted** — including the claim that lazydocker has no ports column (it has had one for
+  about four years) and several that *overstated* prune and `down -v` risk. What shipped
+  is what survived. Findings and refutations are recorded in
+  [the plan](docs/plan/docker/dkr.md).
+
+  New `adapters/docker.ps1` on both platforms (10 functions, full parity). Windows talks
+  to Docker Desktop over the `npipe://./pipe/docker_engine` named pipe and never elevates,
+  because access there is a `docker-users` group question rather than a per-command one.
+
+- 🗄️ **`storage` — one noun for "where did my space go", across every volume.**
+
+  `installed-apps` and `disk-big` both answered that question under unrelated names, and
+  **neither could answer the one that comes first: which drive is full.** `Get-DiskHotspot`
+  only ever returned system-drive locations, so on a machine with data drives everything but
+  the system volume was invisible. Measured on the author's own machine: four volumes, three
+  of them unreachable, including a 1.8 TB external.
+
+  ```
+  storage            every volume, fullest first
+  storage D:         what is on one volume     (Windows)
+  storage /mnt/data  the same word on Linux
+  storage apps       installed apps by size band
+  storage big        large folders and files
+  storage docker     reclaimable container space
+  ```
+
+  **The volume is a positional target, never a flag.** A flag per drive letter is an
+  unbounded set (`-C -D -E -F …`), which is the "memorise flags" trap; drive letters do not
+  exist on Linux, so `-D` could not mean the same thing there; and PowerShell resolves
+  unambiguous parameter **prefixes**, so a `-D` switch would silently compete with
+  `-Detailed` and `-Depth`. A word works on both platforms and cannot collide.
+
+  Two behaviours worth stating. Volumes are coloured by **headroom, not percentage** — 10% of
+  a 4 TB disk is 400 GB and fine, while 10% of a 128 GB SSD is trouble, so both a ratio and an
+  absolute floor must be crossed before it warns. And `storage docker` defers to the daemon's
+  own accounting rather than walking the filesystem, because overlay2 layers are shared
+  between images: summing directory sizes double-counts and reports a number that corresponds
+  to nothing you can free. On the author's machine the daemon reported 14.2 GB of reclaimable
+  images and 5.7 GB of reclaimable volumes.
+
+  **Nothing is renamed.** `installed-apps`, `i-a`, `disk-big` and `d-b` keep working; the new
+  verbs delegate to them, so no muscle memory breaks.
+
+  New adapter contract on both platforms: `Get-StorageVolume`, `Resolve-StorageVolume`,
+  `Get-StorageNativeCommand`. On Linux the **pseudo-filesystem filter** is the load-bearing
+  part — an unfiltered mount list is mostly snap squashfs loops and per-session tmpfs, which
+  would bury the mounts that matter. 140 assertions in `tests/storage/`.
+
+- 🦭 **`pman` — the same command surface, driving podman.** `dkr` drives docker, `pman` drives
+  podman, and they are **one implementation** rather than two. Podman is a deliberate drop-in
+  for the docker CLI, so the adapter takes an engine descriptor and everything above it is
+  engine-agnostic. **The command name is the engine selector**, which is why there is no
+  `--engine` flag — the same reasoning that makes `storage D:` a word rather than `-D`.
+
+  A single switchable alias was considered and rejected: it would make `dkr` mean different
+  things on different machines, so help text, documentation and muscle memory would all become
+  machine-dependent. Someone with docker at work and podman at home wants both names present,
+  each meaning exactly one thing.
+
+  **`dkr` now tells you when it is not actually talking to docker.** Measured on the author's
+  own host: podman can register its API on the standard `npipe:////./pipe/docker_engine`, so
+  the `docker` CLI's default context resolved to **podman**, and `docker version` reported
+  Server 6.0.2 on platform `fedora-44` — a version Docker has never shipped on an OS it does
+  not run on. Without a check, `dkr` would print "docker 6.0.2" and act on podman's containers.
+  The adapter now records which engine actually answered and says so.
+
+  The adapter contract was renamed `*-Docker*` → `*-Container*` (12 functions) while it was
+  still unreleased, which is the cheapest that rename will ever be.
+
+  Three podman/docker differences were measured rather than assumed, and each would have failed
+  silently:
+
+  - **`--format '{{json .}}'` diverges.** Podman keys the id `Id` not `ID`, and returns `Names`,
+    `Labels` and `Ports` as an array, an object and an array of objects where docker returns
+    strings. Replaced with an explicit tab-delimited go-template, which renders identically on
+    both — and is better anyway, since it states exactly which fields are consumed.
+  - **Podman reports a usable version while unreachable.** It prints its *client* version to
+    stdout and exits 125, so `state=ready` for a stopped machine. The probe now gates on
+    `$LASTEXITCODE`, read **before any pipeline** — because `| Select-Object -First 1`
+    short-circuits and leaves `$LASTEXITCODE` at 0, which would have silently defeated the fix.
+  - **Podman announces its compose provider** with an ANSI-wrapped banner ahead of the JSON,
+    making it unparseable in a way that returns "no projects" rather than an error.
+
+  Podman is **never elevated**: it is rootless by design, and `sudo podman ps` queries root's
+  *separate* container store — a different set of containers, not the same ones with more
+  rights, so elevating would show the wrong set and report success.
+
+### Fixed
+
+- 🐳 **Two `dkr` bugs found by its own tests before release.** A `` `t `` inside a
+  single-quoted PowerShell string never becomes a tab — PowerShell does not expand escapes
+  there, so the engine received a literal backtick-t, emitted **zero real tabs**, and the
+  parser would have skipped **every container**. And `TrimEnd()` on each row ate the trailing
+  tab of a container with **no labels**, leaving six fields instead of seven and silently
+  dropping it — so every plain `run` container without compose labels would have vanished from
+  the table. Neither showed up in live testing, because the containers on hand happened to
+  have labels.
+- 📐 **Table columns could collide when a value exactly filled its width.** A cell
+  padded to precisely the column width leaves no separator, so the next column butts
+  straight against it and the two read as one word. A live daemon produced exactly that:
+
+  ```
+  dkrverify-keycloak-1  Restarting (1) 40 seconds.-      <- status, then ports
+  ```
+
+  This is the same defect `team-room` shipped as `no-repo-pathtask:Ready`. The last
+  character of every column is now reserved as a gutter and never written to, and six
+  representative status strings plus the exact-fit case are held under test.
 
 ### Planning
 - Additional database providers
 - Testing framework integration
-- Enhanced Docker optimizations
+- `dkr` P1: `dkr stack`, `dkr clean` (bare = a read-only report that deletes nothing),
+  `dkr doctor`, `dkr why <name>` for restart loops, `dkr update`, and `dkr ui` / `dkr top`
+  hand-offs to lazydocker / ctop
 
 ## [4.4.0] - 2026-08-07
 
@@ -38,18 +282,7 @@ All notable changes to PowerFlow will be documented in this file.
   askpass helpers prompt with `Password for '<alias>':` and interpolate no `user@host` anywhere;
   the Linux cache is `chmod 700`; nothing is persisted.
 
-  The disconnected state validates the alias against `^[a-z0-9][a-z0-9_-]{0,63}# Changelog
-
-All notable changes to PowerFlow will be documented in this file.
-
-## [Unreleased]
-
-### Planning
-- Additional database providers
-- Testing framework integration
-- Enhanced Docker optimizations
-
- **before**
+  The disconnected state validates the alias against `^[a-z0-9][a-z0-9_-]{0,63}$` **before**
   printing it, so a malformed alias degrades to the literal "saved server" rather than echoing
   whatever it contained. It is wired at all 17 session-failure sites — it was 1 of 17 until
   v4.2.0, which is what let raw errors reach the dashboard.

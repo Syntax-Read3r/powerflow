@@ -116,6 +116,122 @@ jobs:
           }
           Write-Host "✅ components/ is platform-agnostic"
 
+      # PowerShell resolves a bare name as Alias -> Function -> Cmdlet -> native binary. So a
+      # FUNCTION beats a native binary, and an ALIAS beats a function. Anything in components/
+      # named after a GNU coreutil therefore HIDES the real tool on Linux — and does it
+      # silently, with different semantics, which is the worst way for a shell to differ.
+      #
+      # This used to be handled the other way around: components/ claimed rm/mv/cp/cat/mkdir/
+      # touch, and platform/linux/bindings.ps1 unpicked them all afterwards. That is fail-
+      # dangerous — the shadowing was unconditional and the undo conditional — and that file's
+      # own header recorded the bug shipping once. The rule is now structural: never claim the
+      # name. PowerFlow's own file commands are `del` and `mvf` on every platform, and the
+      # Windows-only clones live in windows-only/coreutils.ps1.
+      #
+      # Checked statically against the source rather than by resolving names in a live Linux
+      # shell, because it must fail on the ROOT CAUSE (a name defined in components/) and must
+      # not depend on a profile load succeeding in CI.
+      - name: 🐧 Coreutil names are not shadowed
+        shell: pwsh
+        run: |
+          $coreutils = @(
+            'rm','mv','cp','cat','mkdir','touch','rmdir','which','grep','less','pwd',
+            'head','tail','wc','ln','chmod','chown','df','du','ps','kill','sed','awk',
+            'find','sort','uniq','tar','date','echo','env','id','man','mount','sleep',
+            'tee','diff','file','stat','seq','tr','cut','basename','dirname','realpath',
+            'readlink','truncate','link','unlink','mktemp','nproc','printf','whoami',
+            'hostname','uname','free','top','ls'
+          )
+          # `ls` (and its la/ll shorthands) is the ONE deliberate override: the pretty listing
+          # is the whole point of it, it accepts GNU flags, and it degrades to Get-ChildItem
+          # when lsd is absent. Every other name on that list must be left to the real tool.
+          $allowed = @('ls', 'la', 'll')
+
+          $hits = @()
+          foreach ($f in (Get-ChildItem components -Recurse -Filter *.ps1)) {
+            foreach ($pattern in @('^function ([a-z][\w\.-]*)\b', '^Set-Alias(?: -Name)? ([a-z][\w\.-]*)')) {
+              # -CaseSensitive is load-bearing here for the same reason as the help gate:
+              # PowerShell regex is case-insensitive by default, so [a-z] would also match
+              # every Verb-Noun helper and drown the real signal.
+              $hits += Select-String -CaseSensitive -Path $f.FullName -Pattern $pattern | ForEach-Object {
+                $name = $_.Matches[0].Groups[1].Value
+                if (($name -cin $coreutils) -and ($name -cnotin $allowed)) {
+                  "   $name  defined at components/$($f.Directory.Name)/$($f.Name):$($_.LineNumber)"
+                }
+              }
+            }
+          }
+
+          if ($hits) {
+            Write-Error "❌ components/ defines a name that belongs to a GNU coreutil — it would shadow the real tool on Linux:"
+            $hits | ForEach-Object { Write-Host $_ }
+            Write-Host ""
+            Write-Host "   Give it a PowerFlow name that works on both platforms (see del/mvf), or"
+            Write-Host "   put it in windows-only/ if it is a clone of a tool only Windows lacks."
+            exit 1
+          }
+          Write-Host "✅ components/ claims no coreutil name (ls/la/ll allow-listed as deliberate overrides)"
+
+      # THE FLAG CONVENTION (docs/plan/ethos/ETHOS.md): one dash for a single letter, two for a
+      # word. Help text is how a convention propagates, so an -Example teaching `-status` where
+      # the rule says `--status` actively undoes the migration — a user reads the help, types
+      # what it showed, and gets a deprecation notice for a spelling PowerFlow handed them.
+      #
+      # A SHORT form is one or two letters — `-f`, `-sh`, and GNU bundles like `-rf`/`-la` fall
+      # out of that naturally. Only tokens of THREE or more characters are words, and a word
+      # takes two dashes.
+      - name: 🏷️ Registered help teaches the canonical flag spelling
+        shell: pwsh
+        run: |
+          # The remaining exceptions, each for a stated reason. Every entry here is a DOC nit if
+          # it goes stale, not a shipped defect — unlike an allow-list that guards behaviour, it
+          # cannot hide a bug by being out of date.
+          $allowed = @{
+            '-fdx'   = 'git clean -fdx — a GNU bundle on a command that impersonates git'
+            '-tulpn' = 'ss -tulpn — flags of a NATIVE command being taught, not PowerFlow flags'
+            '-srv'   = 'ls -srv <name> — a named root ANCHOR, not a flag'
+            '-pics'  = 'nav -pics — a named root ANCHOR, not a flag'
+          }
+
+          $offenders = @()
+          foreach ($file in (Get-ChildItem components, windows-only, platform -Recurse -Filter *.ps1)) {
+            $text = Get-Content $file.FullName -Raw
+            # Register-PFCommand spans continuation lines, so match the call plus any lines it
+            # continues onto with a backtick.
+            foreach ($call in [regex]::Matches($text, '(?m)^Register-PFCommand(?:[^\r\n]*`\r?\n)*[^\r\n]*')) {
+              $cmd = [regex]::Match($call.Value, "-Name\s+'([^']+)'").Groups[1].Value
+              foreach ($tok in [regex]::Matches($call.Value, "(?<![\w-])(-[a-z][a-z0-9-]{2,})(?![\w-])")) {
+                $flag = $tok.Groups[1].Value
+                # Register-PFCommand's own parameters are not part of the command's surface.
+                if ($flag -in @('-aliases','-synopsis','-example','-section','-name','-platform')) { continue }
+                if ($allowed.ContainsKey($flag)) { continue }
+                $offenders += "   $cmd teaches '$flag' — should be '-$flag' ($($file.Name))"
+              }
+            }
+          }
+
+          if ($offenders) {
+            Write-Error "❌ registered help text teaches a single-dash WORD; the convention is one dash for a letter, two for a word:"
+            $offenders | Sort-Object -Unique | ForEach-Object { Write-Host $_ }
+            Write-Host ""
+            Write-Host "   If the token is a GNU bundle or a named root anchor, add it to the allow-list in this gate with the reason."
+            exit 1
+          }
+          Write-Host "✅ registered help text uses the canonical flag spelling"
+
+      # A Linux bindings file must never come back. It existed only to undo the shadowing that
+      # the gate above now prevents at the source, and its removal is the point — a file that
+      # conditionally undoes an unconditional hazard is strictly worse than not creating the
+      # hazard. Windows still has one, and that is fine: it only ADDS names.
+      - name: 🐧 Linux needs no bindings file
+        shell: pwsh
+        run: |
+          if (Test-Path 'platform/linux/bindings.ps1') {
+            Write-Error "❌ platform/linux/bindings.ps1 is back. If it exists to un-shadow a coreutil, fix the name in components/ instead — see CLAUDE.md, 'Command Shadowing on Linux'."
+            exit 1
+          }
+          Write-Host "✅ no Linux bindings file — nothing needs unbinding"
+
       # PowerShell AUTOMATIC variables are not yours to use as locals. This class has now
       # produced four separate bugs here, the worst of which shipped past a green test run:
       # Get-PmxStableIds did `$matches = @()` and then ran `-match` in the loop, which
@@ -180,6 +296,28 @@ jobs:
                              ForEach-Object { $_.Groups[1].Value } }
           }
 
+          # CASE-FOLD DUPLICATE CHECK. Sort-Object -Unique and -notin are BOTH case-insensitive
+          # in PowerShell, so two commands differing only by case collapse into a single entry
+          # and this gate was STRUCTURALLY BLIND to them — it could never report the problem.
+          #
+          # That is how git-bd and git-bD shipped as the same function: the force-delete loaded
+          # second and silently replaced the documented-safe one, so typing the safe name
+          # force-deleted unmerged work. Names must differ by more than case.
+          $byFold = @{}
+          foreach ($name in $defined) {
+            $fold = $name.ToLowerInvariant()
+            if (-not $byFold.ContainsKey($fold)) { $byFold[$fold] = @() }
+            $byFold[$fold] += $name
+          }
+          $collisions = @($byFold.GetEnumerator() | Where-Object { @($_.Value | Sort-Object -CaseSensitive -Unique).Count -gt 1 })
+          if ($collisions) {
+            foreach ($c in $collisions) {
+              Write-Error "CASE COLLISION: $(($c.Value | Sort-Object -CaseSensitive -Unique) -join ', ') differ only by case - PowerShell treats them as ONE function, and whichever loads last wins"
+            }
+            exit 1
+          }
+          Write-Host "OK no two commands differ only by case"
+
           $missing = @($defined | Where-Object { $_ -notin $registered })
           if ($missing) {
             foreach ($m in $missing) {
@@ -189,36 +327,82 @@ jobs:
           }
           Write-Host "✅ all $($defined.Count) user-facing commands are registered ($($registered.Count) registry entries)"
 
+      # ADAPTER PARITY, DERIVED. Nothing here is hand-maintained.
+      #
+      # This gate used to match component calls against a hardcoded list of ~120 contract
+      # names, and the list drifted: two functions added for the container store work
+      # (Get-ContainerMachines, Resolve-ContainerConnectionMachine) were called from
+      # components/ and were NOT in the regex, so they shipped unchecked. The release
+      # checklist even carries an incident note saying the list is not automatic — which
+      # means the failure mode was known, documented, and still happened, because a human
+      # has to remember it on every adapter change.
+      #
+      # So the contract is now computed: it is the set of adapter-defined functions that
+      # components/ actually calls. Adding an adapter function needs no edit here, and one
+      # added to only one platform fails immediately.
       - name: 🔌 Verify Adapter Contract Parity
         shell: pwsh
         run: |
-          # Every adapter function on one platform must exist on the other, or a
-          # component call will explode at runtime on the platform that lacks it.
-          function Get-Contract($os) {
-            Get-ChildItem "platform/$os/adapters" -Filter *.ps1 |
+          function Get-Defined($path) {
+            if (-not (Test-Path $path)) { return @() }
+            return @(Get-ChildItem $path -Recurse -Filter *.ps1 |
               Select-String -Pattern '^function ([A-Za-z][A-Za-z0-9-]*)' |
-              ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique
+              ForEach-Object { $_.Matches[0].Groups[1].Value })
           }
-          $win   = Get-Contract 'windows'
-          $linux = Get-Contract 'linux'
 
-          # Internal helpers may be platform-specific; the SHARED contract is what
-          # components/ actually call, so check that every component call resolves.
-          $calls = Get-ChildItem components, config -Recurse -Filter *.ps1 |
-                   Select-String -Pattern '\b(Copy-ToClipboard|Get-FromClipboard|Open-Path|Open-Editor|Open-Url|Test-Admin|Assert-Admin|Test-Dependency|Install-Dependency|Uninstall-Dependency|Test-PackageManager|Install-PackageManager|Get-PackageManagerName|Get-DependencyInstallHint|New-TerminalTab|Switch-TerminalTab|Close-TerminalTabAt|Send-TerminalKeys|Invoke-Shutdown|Stop-Shutdown|Add-PersistentPathEntry|Test-PersistentPathEntry|Get-PathScopeLabel|Get-StarshipConfigPath|Get-TerminalSettingsPath|Get-TempPath|Get-HomePath|Get-UserFolderPath|Get-PowerFlowConfigPath|Get-PowerFlowDataPath|Invoke-PowerShellUpdate|Get-InstalledApplication|Uninstall-Application|Get-DiskHotspot|Measure-FolderSize|Move-ToTrash|Remove-PathPermanently|Test-TrashSupport|Test-ProtectedPath|Get-FileMode|Test-PermsSupported|Get-Umask|Set-Umask|Get-MachineInfo|Get-PowerSnapshot|Get-StabilityEvents|Get-FirmwareInfo|Set-CpuMaxState|Export-StabilityReport|Get-NerdFontName|Test-NerdFont|Install-NerdFont|Get-NerdFontInstructions|Get-NerdFontInstallHint|Get-LoginLaunchState|Enable-LoginLaunch|Disable-LoginLaunch|Test-SysConfigSupported|Get-SysConfigOptions|Get-SysConfigChoices|Set-SysConfig|Get-StartupEntry|Set-StartupEntryState|Remove-StartupEntry|Add-StartupEntry|Get-StartupFolderPath|Get-ProcessMemoryUsage|Get-ProcessDetail|Invoke-PFPrivateSshSession|Get-PFPrivateSshSessionResult|Test-ProxmoxSupport|Get-ProxmoxNodeSummary|Get-ProxmoxDisks|Get-ProxmoxStorage|Get-ProxmoxZfsPools|Get-ProxmoxGuests|Get-ProxmoxUpdates|Get-ProxmoxSmartInfo|Get-ProxmoxSmartReport|Start-ProxmoxSmartTest|Get-ProxmoxDiskSafety|Invoke-ProxmoxCapacityProbe|Get-ProxmoxDiskEvidence|Test-ProxmoxManagementTransport|Invoke-ProxmoxManagementQuery|Invoke-ProxmoxManagementChange|Test-TeamRoomSupport|Get-TeamRoomState|Set-TeamRoomArm|Set-TeamRoomTask|Stop-TeamRoomWatcher)\b' |
-                   ForEach-Object { $_.Matches[0].Value } | Sort-Object -Unique
+          $win   = Get-Defined 'platform/windows/adapters'
+          $linux = Get-Defined 'platform/linux/adapters'
+          $adapterAll = @($win + $linux | Sort-Object -Unique)
+
+          # Anything components/ (or config/) defines for itself is not an adapter call.
+          $localDefined = @((Get-Defined 'components') + (Get-Defined 'config') +
+                            (Get-Defined 'windows-only') + (Get-Defined 'platform/windows') +
+                            (Get-Defined 'platform/linux') | Sort-Object -Unique)
+          $localOnly = @($localDefined | Where-Object { $_ -notin $adapterAll })
+
+          # Collect Verb-Noun calls from comment-stripped source: a name mentioned only in
+          # prose is not a call, and three tests in this repo have already been fooled by
+          # matching their own explanatory comments.
+          $called = New-Object System.Collections.Generic.HashSet[string]
+          foreach ($file in (Get-ChildItem components, config -Recurse -Filter *.ps1)) {
+            $tokens = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$null)
+            foreach ($tok in @($tokens | Where-Object { $_.Kind -eq 'Identifier' -or $_.Kind -eq 'Generic' })) {
+              if ($tok.Text -cmatch '^[A-Z][A-Za-z0-9]*-[A-Za-z][A-Za-z0-9-]*$') { $null = $called.Add($tok.Text) }
+            }
+          }
+
+          # The CONTRACT: names components/ calls that an adapter provides.
+          $contract = @($called | Where-Object { $_ -in $adapterAll } | Sort-Object)
 
           $failed = $false
-          foreach ($c in $calls) {
-            $inWin = $win -contains $c; $inLinux = $linux -contains $c
+          foreach ($c in $contract) {
+            $inWin = $win -contains $c
+            $inLinux = $linux -contains $c
             if (-not $inWin -or -not $inLinux) {
-              Write-Error "❌ '$c' is called by components/ but missing on: $(@(if(-not $inWin){'windows'}; if(-not $inLinux){'linux'}) -join ', ')"
+              $where = @(if (-not $inWin) { 'windows' }; if (-not $inLinux) { 'linux' }) -join ', '
+              Write-Error "❌ '$c' is called by components/ but is MISSING on: $where"
               $failed = $true
             }
           }
-          if ($failed) { exit 1 }
-          Write-Host "✅ All $($calls.Count) adapter calls resolve on BOTH platforms"
 
+          # A Verb-Noun call that resolves nowhere is almost always a typo or an invented
+          # name. That has happened here: a helper was called as Format-PmxIecBytes when the
+          # real function was Format-PmxBytes, and nothing caught it until it was run.
+          $builtins = @(Get-Command -CommandType Cmdlet, Function -ErrorAction SilentlyContinue |
+                        ForEach-Object { $_.Name })
+          $unresolved = @($called | Where-Object {
+            $_ -notin $adapterAll -and $_ -notin $localOnly -and $_ -notin $builtins
+          } | Sort-Object)
+          if ($unresolved) {
+            foreach ($u in $unresolved) {
+              Write-Error "❌ '$u' is called by components/ but is defined nowhere and is not a cmdlet - typo, or an invented name?"
+            }
+            $failed = $true
+          }
+
+          if ($failed) { exit 1 }
+          Write-Host "✅ All $($contract.Count) adapter calls resolve on BOTH platforms, and every Verb-Noun call resolves somewhere"
       - name: 🧪 PMX parser, routing, adapter, and mutation regressions
         shell: pwsh
         run: ./tests/proxmox/run.ps1
@@ -230,3 +414,19 @@ jobs:
       - name: 🔐 SRV alias-only display and authenticated info regression
         shell: pwsh
         run: ./tests/network/run.ps1
+
+      - name: 🐳 dkr/pman engine parity, compose-correctness, and flag parsing
+        shell: pwsh
+        run: ./tests/containers/run.ps1
+
+      - name: 🗄️ storage volume enumeration, mount filtering, and selector resolution
+        shell: pwsh
+        run: ./tests/storage/run.ps1
+
+      - name: "\U0001F4C2 GNU argument parsing, coreutil names, and the del/mvf contract"
+        shell: pwsh
+        run: ./tests/files/run.ps1
+
+      - name: 🏷️ Flag convention - one dash for a letter, two for a word
+        shell: pwsh
+        run: ./tests/flags/run.ps1

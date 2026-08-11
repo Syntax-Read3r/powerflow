@@ -64,6 +64,27 @@ function Get-PmxHelpTopics {
         Safety = 'Green. Read only.'
         Story = 'Resolve the friendly sign to its authoritative room number, then inspect it.'
     }
+    # pmx vm config is an alias for pmx vm show, added because qm config <vmid> is the native
+    # habit. It gets its own help topic so someone reaching for the native spelling finds it in
+    # the catalogue rather than concluding PowerFlow lacks it.
+    $topics['vm config'] = [pscustomobject]@{
+        Purpose = 'Show configuration and current status for one VM. Alias for pmx vm show.'
+        Syntax = @('pmx vm config <vmid|name> [--json|--table]')
+        Example = @('pmx vm config 103', 'pmx vm config docker-host')
+        Native = @('qm config <vmid>', 'pvesh get /nodes/<node>/qemu/<vmid>/config --current 1')
+        Safety = 'Green. Read only.'
+        Story = 'The native spelling of a view PowerFlow already had.'
+    }
+    # `pmx vm disks` is a convenience route to the same function `pmx disk list --vm` uses.
+    # It gets a topic because a route nobody can find is not a route.
+    $topics['vm disks'] = [pscustomobject]@{
+        Purpose = 'List one VM virtual disks. Convenience route for pmx disk list --vm.'
+        Syntax = @('pmx vm disks [vmid|name]')
+        Example = @('pmx vm disks 102', 'pmx vm disks')
+        Native = @('qm config <vmid>')
+        Safety = 'Green. Read only. A bare call opens the VM picker.'
+        Story = 'Show VMs, choose one, show its disks - the third step of that walk.'
+    }
     $topics['vm status'] = [pscustomobject]@{
         Purpose = 'Show current power and runtime status for one VM.'
         Syntax = @('pmx vm status <vmid|name> [--json|--table]')

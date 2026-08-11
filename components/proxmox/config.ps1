@@ -444,7 +444,23 @@ function Invoke-PmxConfigCommand {
             Write-Host "✅ PMX configuration is valid; $($session.Connection.Transport) transport reached node $($session.Node)." -ForegroundColor Green
         }
         'discover' { Show-PmxDiscovery -Arguments $rest }
-        default { Write-Host "❌ Unknown config action '$action'. Run: pmx help config" -ForegroundColor Red }
+        default {
+            # `qm config 103` is common Proxmox habit, so `pmx config 103` is a predictable
+            # mistake. It is NOT silently reinterpreted — `pmx config` owns PMX settings, and
+            # overloading that namespace would only get more ambiguous as settings grow. The
+            # error names the command the user actually wanted instead.
+            if (Test-PmxVmId $action) {
+                Write-Host '❌ `pmx config` manages PowerFlow/PMX settings, not VM configuration.' -ForegroundColor Red
+                Write-Host ''
+                Write-Host '   Did you mean:' -ForegroundColor DarkGray
+                Write-Host "     pmx vm config $action" -ForegroundColor Yellow
+                Write-Host "     pmx vm show $action" -ForegroundColor Yellow
+                Write-Host ''
+                Write-Host '   pmx help config   for the settings this namespace does manage' -ForegroundColor DarkGray
+                return
+            }
+            Write-Host "❌ Unknown config action '$action'. Run: pmx help config" -ForegroundColor Red
+        }
     }
 }
 

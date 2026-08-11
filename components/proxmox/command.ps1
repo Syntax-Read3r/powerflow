@@ -27,6 +27,19 @@ function Invoke-PmxLegacyDiskCommand {
         $token = "$argument"
         if ($token.StartsWith('-', [StringComparison]::Ordinal)) {
             $lower = $token.ToLowerInvariant()
+
+            # `--full`, `--write`, `--destroy` are the canonical spellings: these are words, and
+            # a word takes two dashes (docs/plan/ethos/ETHOS.md). The allow-list is kept in the
+            # single-dash form because that is the key the switches below test, so a canonical
+            # token is normalised down to it. The single-dash word still binds and says once
+            # where it moved.
+            if ($lower.StartsWith('--', [StringComparison]::Ordinal)) {
+                $lower = $lower.Substring(1)
+            }
+            elseif ($lower.Length -gt 3) {
+                Write-PFFlagDeprecation -Command 'pmx disk' -Old $lower -New "-$lower"
+            }
+
             if ($lower -notin $allowedFlags) {
                 Write-Host "❌ Unknown physical-disk option '$token'. Run: pmx help" -ForegroundColor Red
                 return
@@ -115,6 +128,16 @@ function Invoke-PmxVmCommand {
     switch ($action) {
         'list'       { Show-PmxManagedVmList -Arguments $rest }
         'show'       { Show-PmxManagedVm -Arguments $rest }
+        # `qm config <vmid>` is native muscle memory, so `pmx vm config` opens the same view.
+        # `show` remains canonical internally — this is another door, not a second room.
+        'config'     { Show-PmxManagedVm -Arguments $rest }
+        # `pmx vm disks [vm]` — the operator workflow is "show VMs, choose one, show its disks",
+        # and this is the third step. `pmx disk list --vm <id>` remains the canonical script
+        # form; both reach the same function, so there is no second implementation to drift.
+        # A bare `pmx vm disks` inherits the VM picker, because an unspecified VM already means
+        # "ask me" everywhere else.
+        'disks'      { Show-PmxManagedVmDisks -Arguments $rest }
+        'disk'       { Show-PmxManagedVmDisks -Arguments $rest }
         'status'     { Show-PmxManagedVm -Arguments $rest -StatusOnly }
         'next-id'    { Show-PmxNextVmId -Arguments $rest }
         'network'    { Invoke-PmxVmNetworkCommand -Arguments $rest }
@@ -211,6 +234,12 @@ function pmx {
             Show-PmxManagedStorage -Arguments (Get-PmxCommandTail -Arguments $tail -Start 1)
         }
         'vm'       { Invoke-PmxVmCommand -Arguments $tail }
+        # Top-level lifecycle shortcuts. `pmx vm start` remains canonical; these forward into
+        # the identical guarded mutation path, so a shortcut never means a weaker safety chain.
+        # Deliberately only start/shutdown: those are the two that get typed reflexively, and
+        # every additional top-level word narrows the namespace for future groups.
+        'start'    { Invoke-PmxVmStart -Arguments $tail }
+        'shutdown' { Invoke-PmxVmShutdown -Arguments $tail }
         'snapshot' { Invoke-PmxSnapshotCommand -Arguments $tail }
         'disk' {
             $action = if ($tail.Count) { "$($tail[0])".ToLowerInvariant() } else { '' }

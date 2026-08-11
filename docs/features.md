@@ -72,6 +72,45 @@
 - **Attached native transport** - Successful direct sessions remain attached to the terminal;
   failed and cancelled connections return categorized alias-only messages
 
+### 🐳 Containers (`dkr` for docker · `pman` for podman)
+
+- **Two names, one implementation** - `dkr` drives docker and `pman` drives podman. The command
+  NAME is the engine selector, so there is no `--engine` flag to remember. A switchable alias was
+  rejected deliberately: it would make `dkr` mean different things on different machines, so help
+  text, documentation and muscle memory would all become machine-dependent. Every verb below
+  works under either name.
+- **`pman stores`** - podman keeps *rootless* and *rootful* containers in entirely separate
+  stores, each with its own images, volumes and networks, reached by connections matched on SSH
+  **port** rather than name. So a container can be plainly running and still invisible: the
+  engine answers truthfully that there are none *here*. `stores` shows the whole inventory.
+
+- **One table, grouped by stack** - `dkr` shows every container with its status and ports,
+  grouped by compose project. Stopped containers are listed, not hidden: when the table holds
+  only what is running, "it is not there" and "it is dead" look identical
+- **Mark several, act once** - with `fzf`, `dkr` opens a multi-select picker. Tab marks
+  containers, Enter picks one action for all of them, so
+  `sudo docker stop qbittorrent radarr sonarr jellyfin` becomes four keystrokes
+- **Names work from anywhere** - `dkr restart sonarr` matches a container, a compose *service*,
+  or a whole *project*, resolved through the compose labels. No `cd` into the stack directory
+  first. A miss suggests near-matches instead of `No such container`
+- **Compose-correct restarts** - plain `docker restart` ignores an edited compose file, which is
+  the classic "I changed the yml and nothing happened". `dkr restart` uses the compose form when
+  the container belongs to a project
+- **Stacks that are down are still reachable** - `dkr up media` works when nothing of `media` is
+  running, because a stopped project is invisible to `docker ps`. `dkr up` with no name uses the
+  compose file in the current directory
+- **`dkr down` cannot delete your data** - plain `down` removes containers and networks and
+  leaves named volumes alone; the `-v` flag that deletes them is not reachable from anywhere in
+  PowerFlow. It confirms first and says so
+- **Logs and shells** - `dkr logs [name]` tails 200 lines (`-f` follows, no name opens a picker);
+  `dkr shell [name]` opens `bash` if the image has it and `sh` otherwise, so you do not have to
+  remember which image ships which
+- **Never silently elevates** - the docker socket is root-equivalent, so `dkr` reports whether it
+  is usable rather than quietly prepending `sudo`. It tells you the four-state answer: not
+  installed, daemon down, needs group membership, or ready
+- **`--show-native` on every command** - prints the real `docker` command it runs, so it teaches
+  the CLI instead of hiding it
+
 ### ⚙️ System Integration
 
 - **Windows Terminal optimization** - Enhanced tab management and terminal control functions

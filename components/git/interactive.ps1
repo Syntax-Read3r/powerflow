@@ -292,4 +292,4 @@ Register-PFCommand -Name 'git-s'     -Aliases @('git-st') -Section '🎯 ENHANCE
 Register-PFCommand -Name 'git-p'     -Aliases @('git-pick') -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'fuzzy-pick commits for cherry-pick'
 Register-PFCommand -Name 'git-stash' -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'interactive stash manager'
 Register-PFCommand -Name 'git-r'     -Aliases @('git-remote') -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'interactive remote manager'
-Register-PFCommand -Name 'git-sh'    -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'show a commit, interactively chosen'
+Register-PFCommand -Name 'git-sh'    -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'shorthand for git-stash - the interactive stash manager'

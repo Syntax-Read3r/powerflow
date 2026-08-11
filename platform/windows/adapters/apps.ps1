@@ -6,7 +6,8 @@
 # Purpose  : Enumerate installed applications with their real on-disk size,
 #            uninstall them properly, and delete paths to the Recycle Bin
 # Contract : Get-InstalledApplication, Uninstall-Application,
-#            Move-ToTrash, Test-TrashSupport, Test-ProtectedPath
+#            Move-ToTrash, Test-TrashSupport, Test-ProtectedPath,
+#            Get-StorageVolume, Resolve-StorageVolume, Get-StorageNativeCommand
 # Depends  : none
 # ==============================================================================
 
@@ -286,4 +287,110 @@ function Remove-PathPermanently {
         Write-Host "❌ Delete failed: $($_.Exception.Message)" -ForegroundColor Red
         return $false
     }
+}
+
+<#
+.SYNOPSIS
+    Every real storage volume on this machine, with size and free space.
+.DESCRIPTION
+    This is the piece that was missing. Get-DiskHotspot only ever returned locations on the
+    SYSTEM drive ($env:LOCALAPPDATA, $env:ProgramFiles, $HOME\...), so on a machine with data
+    drives the bare command was blind to them — it could not answer "which drive is full",
+    which is the first question anyone asks.
+
+    Get-Volume is preferred because it sees volumes that have no drive letter (a mounted
+    folder, a recovery partition), which Get-PSDrive cannot. Get-PSDrive is the fallback for
+    hosts where the Storage module is unavailable.
+
+    Only FIXED and REMOVABLE volumes are returned. Network drives are someone else's disk and
+    walking one is slow enough to look like a hang; CD-ROMs are not actionable.
+#>
+function Get-StorageVolume {
+    $volumes = @()
+
+    try {
+        foreach ($vol in (Get-Volume -ErrorAction Stop)) {
+            if ($vol.DriveType -notin @('Fixed', 'Removable')) { continue }
+            # A volume with no letter and no access path cannot be walked, so it is not
+            # actionable and would only pad the table.
+            $root = if ($vol.DriveLetter) { "$($vol.DriveLetter):\" } else { '' }
+            if (-not $root) { continue }
+            $volumes += [pscustomobject]@{
+                Name       = "$($vol.DriveLetter):"
+                Root       = $root
+                Label      = "$($vol.FileSystemLabel)"
+                FileSystem = "$($vol.FileSystem)"
+                SizeBytes  = [int64]$vol.Size
+                FreeBytes  = [int64]$vol.SizeRemaining
+                IsSystem   = ($root -eq "$($env:SystemDrive)\")
+                DriveType  = "$($vol.DriveType)"
+            }
+        }
+    } catch {
+        # Fallback: Get-PSDrive is always present but only sees lettered filesystem drives.
+        foreach ($drive in (Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue)) {
+            if ($null -eq $drive.Used -and $null -eq $drive.Free) { continue }
+            $size = [int64]($drive.Used) + [int64]($drive.Free)
+            if ($size -le 0) { continue }
+            $volumes += [pscustomobject]@{
+                Name       = "$($drive.Name):"
+                Root       = "$($drive.Name):\"
+                Label      = ''
+                FileSystem = ''
+                SizeBytes  = $size
+                FreeBytes  = [int64]$drive.Free
+                IsSystem   = ("$($drive.Name):\" -eq "$($env:SystemDrive)\")
+                DriveType  = 'Fixed'
+            }
+        }
+    }
+
+    return @($volumes | Sort-Object -Property @{ Expression = 'IsSystem'; Descending = $true }, Name)
+}
+
+<#
+.SYNOPSIS
+    Resolve a user-typed volume selector to a volume, or $null.
+.DESCRIPTION
+    Accepts what a Windows user would actually type for the D: drive: "D", "d", "D:", "D:\",
+    and the filesystem label. Kept in the adapter because "what a volume is called" is exactly
+    the platform-specific knowledge a component must not hold — the Linux adapter resolves
+    mount points through the same contract.
+#>
+function Resolve-StorageVolume {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Selector, [object[]]$Volumes)
+
+    if (-not $Selector) { return $null }
+    if (-not $Volumes) { $Volumes = @(Get-StorageVolume) }
+
+    $wanted = $Selector.Trim().TrimEnd('\', '/')
+    # ${} is load-bearing: "$wanted:" parses as a SCOPE qualifier (the $env:PATH form), not
+    # as the variable followed by a colon, and fails to parse at all.
+    if (-not $wanted.EndsWith(':') -and $wanted.Length -eq 1) { $wanted = "${wanted}:" }
+
+    $hit = @($Volumes | Where-Object { $_.Name -ieq $wanted })
+    if (-not $hit.Count) { $hit = @($Volumes | Where-Object { $_.Root -ieq $Selector }) }
+    if (-not $hit.Count) { $hit = @($Volumes | Where-Object { $_.Label -and $_.Label -ieq $Selector }) }
+    if ($hit.Count) { return $hit[0] }
+    return $null
+}
+
+<#
+.SYNOPSIS
+    The real OS command behind a storage operation, for --show-native.
+.DESCRIPTION
+    The component must not know which OS it is on, so it cannot hold these strings itself —
+    that is the whole point of the adapter layer. `dkr` solves the same problem by returning a
+    .Native field from its adapter; this is the same idea for storage.
+#>
+function Get-StorageNativeCommand {
+    param(
+        [Parameter(Mandatory)][ValidateSet('list', 'measure')][string]$Operation,
+        [string]$Root = ''
+    )
+    switch ($Operation) {
+        'list'    { return 'Get-Volume | Where-Object DriveType -in Fixed,Removable' }
+        'measure' { return "Get-ChildItem -LiteralPath '$Root' -Force | ForEach-Object { measure its size }" }
+    }
+    return ''
 }

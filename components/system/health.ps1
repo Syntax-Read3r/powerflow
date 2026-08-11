@@ -57,17 +57,17 @@ function Get-CpuCapRecord {
 .DESCRIPTION
     pc-whoami            the dashboard: CPU, RAM, BIOS age, power plan, CPU cap,
                          hardware errors, crash dumps
-    pc-whoami -power     every power plan, caps decoded (no hex, no GUIDs)
-    pc-whoami -crashes   hardware errors + bugchecks + dumps  (-export bundles them)
-    pc-whoami -bios      firmware version, age, board model
-    pc-whoami -ram       the MAP: how much memory sits in each level (read-only)
-    pc-whoami -ram huge  one level: huge | large | medium | small | tiny
-    pc-whoami -ram java  that program's processes with command lines — and close one
+    pc-whoami --power     every power plan, caps decoded (no hex, no GUIDs)
+    pc-whoami --crashes   hardware errors + bugchecks + dumps  (-export bundles them)
+    pc-whoami --bios      firmware version, age, board model
+    pc-whoami --ram       the MAP: how much memory sits in each level (read-only)
+    pc-whoami --ram huge  one level: huge | large | medium | small | tiny
+    pc-whoami --ram java  that program's processes with command lines — and close one
     -min N               a custom cut-off in GB instead of a level
     -days N              widen the stability window (default 7)
     -min N               -ram threshold in GB (default 0.5)
 #>
-function pc-whoami {
+function Show-PFMachineHealth {
     param(
         # TWO positional slots, both load-bearing:
         #
@@ -95,9 +95,9 @@ function pc-whoami {
     if ($name -eq '--ram') {
         Write-Host ""
         Write-Host "ℹ️  --ram has been replaced by named levels — they say the same thing, precisely:" -ForegroundColor Cyan
-        Write-Host "   pc-whoami -ram small    10 – 50 MB" -ForegroundColor DarkGray
-        Write-Host "   pc-whoami -ram tiny     under 10 MB" -ForegroundColor DarkGray
-        Write-Host "   pc-whoami -ram          the map of every level" -ForegroundColor DarkGray
+        Write-Host "   pc-whoami --ram small    10 – 50 MB" -ForegroundColor DarkGray
+        Write-Host "   pc-whoami --ram tiny     under 10 MB" -ForegroundColor DarkGray
+        Write-Host "   pc-whoami --ram          the map of every level" -ForegroundColor DarkGray
         Write-Host ""
         return
     }
@@ -111,7 +111,7 @@ function pc-whoami {
     if ($ram -and $name -and $program) {
         Write-Host ""
         Write-Host "❓ Program names with a space need quoting:" -ForegroundColor Yellow
-        Write-Host "   pc-whoami -ram `"$name $program`"" -ForegroundColor Cyan
+        Write-Host "   pc-whoami --ram `"$name $program`"" -ForegroundColor Cyan
         Write-Host ""
         return
     }
@@ -237,7 +237,7 @@ function pc-whoami {
             $years = [math]::Floor(((Get-Date) - $fw.BiosDate).TotalDays / 365)
             if ($years -ge 2) { $ageWarn = "over $years years old" }
         }
-        Write-HealthRow 'BIOS' "$($fw.BiosVersion) ($dateStr)" $ageWarn $(if ($ageWarn) { 'pc-whoami -bios' })
+        Write-HealthRow 'BIOS' "$($fw.BiosVersion) ($dateStr)" $ageWarn $(if ($ageWarn) { 'pc-whoami --bios' })
     } else {
         Write-HealthRow 'BIOS' $fw.Note
     }
@@ -251,7 +251,7 @@ function pc-whoami {
     Write-Host "🔌 POWER" -ForegroundColor Cyan
     if ($snap.Supported) {
         $planWarn = if (-not $snap.IsStockPlan) { 'custom/OEM plan — not a system default' }
-        Write-HealthRow 'Plan' $snap.PlanName $planWarn $(if ($planWarn) { 'pc-whoami -power' })
+        Write-HealthRow 'Plan' $snap.PlanName $planWarn $(if ($planWarn) { 'pc-whoami --power' })
 
         # A desktop has no battery, so the DC number is noise — show it only when
         # there is a battery for it to apply to.
@@ -259,7 +259,7 @@ function pc-whoami {
             "$($snap.ACMaxPercent)% on AC · $($snap.DCMaxPercent)% on battery"
         } else { "$($snap.ACMaxPercent)%" }
         $capWarn = if ($snap.ACMaxPercent -lt 100) { 'full speed is being withheld' }
-        Write-HealthRow 'CPU cap' $capStr $capWarn $(if ($capWarn) { 'pc-whoami -power' })
+        Write-HealthRow 'CPU cap' $capStr $capWarn $(if ($capWarn) { 'pc-whoami --power' })
     } else {
         Write-HealthRow 'Plan' $snap.Note
     }
@@ -276,10 +276,10 @@ function pc-whoami {
     if ($ev.Supported) {
         $hwCount = $ev.HardwareErrors.Count
         $hwWarn  = if ($hwCount -gt 0) { 'the hardware itself reported faults' }
-        Write-HealthRow 'HW errors' "$hwCount" $hwWarn $(if ($hwWarn) { 'pc-whoami -crashes' })
+        Write-HealthRow 'HW errors' "$hwCount" $hwWarn $(if ($hwWarn) { 'pc-whoami --crashes' })
 
         if ($ev.Dumps.Count -gt 0) {
-            Write-HealthRow 'Dumps' "$($ev.Dumps.Count) · newest $($ev.Dumps[0].Time.ToString('MMM d'))" 'the OS crashed hard enough to write these' 'pc-whoami -crashes'
+            Write-HealthRow 'Dumps' "$($ev.Dumps.Count) · newest $($ev.Dumps[0].Time.ToString('MMM d'))" 'the OS crashed hard enough to write these' 'pc-whoami --crashes'
         } else {
             Write-HealthRow 'Dumps' 'none'
         }
@@ -289,6 +289,13 @@ function pc-whoami {
     }
     Write-Host ""
 }
+
+# ── pc-whoami ──────────────────────────────────────────────────────────
+# The user-facing name is a shim so that --long flags bind at all: a param() block
+# cannot bind them, and worse, misbinds them into the next value parameter. The shim
+# must not declare param() of its own, or $args would not hold the whole line.
+# See docs/plan/ethos/ETHOS.md.
+function pc-whoami { Invoke-PFParamCommand -Target 'Show-PFMachineHealth' -Command 'pc-whoami' -Argv $args }
 
 function Show-PowerDetail {
     $snap = Get-PowerSnapshot
@@ -375,7 +382,7 @@ function Show-CrashDetail {
         foreach ($f in $files) { Write-Host "      $f" -ForegroundColor DarkGray }
     } else {
         Write-Host ""
-        Write-Host "   💡 pc-whoami -crashes -export   writes the raw evidence to a folder" -ForegroundColor DarkGray
+        Write-Host "   💡 pc-whoami --crashes --export   writes the raw evidence to a folder" -ForegroundColor DarkGray
     }
     Write-Host ""
 }
@@ -407,7 +414,7 @@ function Get-RamLevel {
     return ($script:PF_RamLevels | Where-Object { $_.Name -eq $Name.ToLower() } | Select-Object -First 1)
 }
 
-# `pc-whoami -ram` with no level: the MAP, not a list.
+# `pc-whoami --ram` with no level: the MAP, not a list.
 #
 # Listing every program at once was the thing to get away from — 162 rows is unreviewable, and
 # an unreviewable list is exactly what should not sit near a kill action. So the bare command
@@ -434,20 +441,20 @@ function Show-RamIndex {
     }
 
     Write-Host ""
-    Write-Host "   pc-whoami -ram huge        open a level — start here, it is where the memory is" -ForegroundColor DarkGray
-    Write-Host "   pc-whoami -ram <program>   that program's processes, with command lines — and close one" -ForegroundColor DarkGray
-    Write-Host "   pc-whoami -ram -min 3      a custom cut-off, in GB" -ForegroundColor DarkGray
+    Write-Host "   pc-whoami --ram huge        open a level — start here, it is where the memory is" -ForegroundColor DarkGray
+    Write-Host "   pc-whoami --ram <program>   that program's processes, with command lines — and close one" -ForegroundColor DarkGray
+    Write-Host "   pc-whoami --ram --min 3      a custom cut-off, in GB" -ForegroundColor DarkGray
     Write-Host ""
 }
 
-# pc-whoami -ram <level> — one band. READ-ONLY, on purpose.
+# pc-whoami --ram <level> — one band. READ-ONLY, on purpose.
 #
 # Grouped by program, because one browser is dozens of processes: per-PID rows would show
 # "chrome 180 MB" forty times and bury the 7 GB answer.
 #
 # Nothing can be killed from here. An earlier build let you close a whole group, which meant
 # one keystroke ended 48 VS Code processes — far too blunt an action to sit against a list
-# this long. Killing lives in `pc-whoami -ram <name>`, where the scope is one program, every
+# this long. Killing lives in `pc-whoami --ram <name>`, where the scope is one program, every
 # process is shown with its command line, and exactly one PID goes at a time.
 function Show-RamDetail {
     param($Level, [double]$MinGB = 0)
@@ -473,7 +480,7 @@ function Show-RamDetail {
 
     if (-not $rows.Count) {
         Write-Host "   ✨ $empty" -ForegroundColor Green
-        Write-Host "   pc-whoami -ram   shows where your memory actually is" -ForegroundColor DarkGray
+        Write-Host "   pc-whoami --ram   shows where your memory actually is" -ForegroundColor DarkGray
         Write-Host ""
         return
     }
@@ -502,8 +509,8 @@ function Show-RamDetail {
     # Prefer an example the hint's promise actually holds for — a protected row or this shell
     # cannot be closed, so pointing at one would teach the wrong thing.
     $eg = @($rows | Where-Object { -not $_.Protected -and -not $_.IsSelf })[0]
-    Write-Host "   💡 pc-whoami -ram <program>   its processes, with command lines — and close one" -ForegroundColor DarkGray
-    if ($eg) { Write-Host "      e.g.  pc-whoami -ram `"$($eg.Name)`"" -ForegroundColor DarkGray }
+    Write-Host "   💡 pc-whoami --ram <program>   its processes, with command lines — and close one" -ForegroundColor DarkGray
+    if ($eg) { Write-Host "      e.g.  pc-whoami --ram `"$($eg.Name)`"" -ForegroundColor DarkGray }
     Write-Host ""
 }
 
@@ -519,7 +526,7 @@ function Show-RamProcesses {
 
     # PATTERNS ARE REFUSED, and this guard is the most important line in the file.
     #
-    # Get-Process -Name is wildcard-enabled, so `pc-whoami -ram *` listed all 529 processes on
+    # Get-Process -Name is wildcard-enabled, so `pc-whoami --ram *` listed all 529 processes on
     # this machine — 428 of them killable, including explorer, dwm and the terminal itself.
     # ctrl-a would then have offered to end all of them behind a confirmation of "type the
     # program name", where the program name IS '*' — a single asterisk, the same character
@@ -527,11 +534,11 @@ function Show-RamProcesses {
     # "the whole session", which is the exact invariant this feature is built on.
     if ($Name -match '[\*\?\[\]]') {
         Write-Host ""
-        Write-Host "🔒 pc-whoami -ram takes ONE program name, not a pattern." -ForegroundColor Red
+        Write-Host "🔒 pc-whoami --ram takes ONE program name, not a pattern." -ForegroundColor Red
         Write-Host "   '$Name' would match many programs at once, and closing a match set is" -ForegroundColor DarkGray
         Write-Host "   not something a single confirmation can meaningfully authorise." -ForegroundColor DarkGray
-        Write-Host "   Name the program:  pc-whoami -ram java" -ForegroundColor DarkGray
-        Write-Host "   Or see the map:    pc-whoami -ram" -ForegroundColor DarkGray
+        Write-Host "   Name the program:  pc-whoami --ram java" -ForegroundColor DarkGray
+        Write-Host "   Or see the map:    pc-whoami --ram" -ForegroundColor DarkGray
         Write-Host ""
         return
     }
@@ -540,7 +547,7 @@ function Show-RamProcesses {
     Write-Host ""
     if (-not $procs.Count) {
         Write-Host "🧠 Nothing called '$Name' is running." -ForegroundColor Yellow
-        Write-Host "   pc-whoami -ram   lists what is actually using memory" -ForegroundColor DarkGray
+        Write-Host "   pc-whoami --ram   lists what is actually using memory" -ForegroundColor DarkGray
         Write-Host ""
         return
     }
@@ -868,5 +875,5 @@ function pc-cap {
 }
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
-Register-PFCommand -Name 'pc-whoami' -Section '🖥️ MACHINE HEALTH' -Synopsis 'vitals: CPU, GPU, RAM, drives, BIOS age, power, errors' -Example 'pc-whoami -ram · -power · -crashes · -bios'
+Register-PFCommand -Name 'pc-whoami' -Section '🖥️ MACHINE HEALTH' -Synopsis 'vitals: CPU, GPU, RAM, drives, BIOS age, power, errors' -Example 'pc-whoami --ram · --power · --crashes · --bios'
 Register-PFCommand -Name 'pc-cap'    -Section '🖥️ MACHINE HEALTH' -Synopsis 'cap CPU speed; prior state recorded for safe undo' -Example 'pc-cap 85 · pc-cap restore'

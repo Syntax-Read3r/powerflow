@@ -287,7 +287,19 @@ function Confirm-PmxAmberPlan {
     param(
         [Parameter(Mandatory)][string]$Title,
         [Parameter(Mandatory)][System.Collections.IDictionary]$Fields,
-        [Parameter(Mandatory)][string]$NativeCommand,
+        # [AllowEmptyString()] is LOAD-BEARING, and its absence was a live defect.
+        #
+        # The guarded-mutation path deliberately passes '' when native display is off:
+        #   $native = if ($showNative) { "$($preview.NativeCommand)" } else { '' }
+        # and the body below already treats the field as optional (`if ($NativeCommand)`).
+        # So the parameter contract contradicted the implementation, and PowerShell rejected
+        # the intentionally-empty string BEFORE the confirmation could run.
+        #
+        # This stayed hidden while ShowNative defaulted to $true — the string was never empty.
+        # Flipping that default to $false made it fire on EVERY guarded mutation: vm start,
+        # shutdown, cpu, memory, clone. The fix belongs here, not in the default: hiding the
+        # native command is deliberate PowerFlow behaviour and must stay.
+        [AllowEmptyString()][string]$NativeCommand = '',
         [string[]]$Warnings = @(),
         [switch]$DryRun
     )
@@ -311,4 +323,72 @@ function Confirm-PmxAmberPlan {
     }
     $answer = Read-Host 'Proceed? [y/N]'
     return [string]::Equals($answer, 'y', [StringComparison]::OrdinalIgnoreCase)
+}
+
+# ==============================================================================
+# THE MANAGED-RESPONSE BOUNDARY (PF-INVESTIGATE-001)
+# ==============================================================================
+# Every PMX read used to print its own generic error, so a failure looked identical whether the
+# transport was down, the payload was truncated, the JSON was malformed, or the VM simply did
+# not exist. That is why PF-BUG-002 could be reproduced but not diagnosed.
+#
+# This lives in shared.ps1 because every PMX component loads it first, so ONE reporter serves
+# all of them and there is no second copy to drift.
+#
+# The adapter already owns the rest of the boundary: execution, stdout/stderr separation,
+# exit-code capture, privacy scrubbing (Protect-PmxDiagnosticText), JSON validation
+# (ConvertFrom-PmxJsonPayload) and the debug record (Get-PmxParseDiagnostics). What was missing
+# was a single place to REPORT it, and wrappers that stop dropping the evidence on the way up.
+# ==============================================================================
+<#
+.SYNOPSIS
+    Report a failed managed query, with scrubbed evidence when --explain is set.
+.DESCRIPTION
+    Ordinary output stays one line, because that is the right amount of noise for a user who
+    just wants to know it did not work. `--explain` adds the evidence the adapter collected:
+    command class, transport, exit code, byte counts, and a preview of what actually arrived.
+    That preview is what separates "stdout had a banner in front of the JSON" from "the
+    payload is genuinely broken" — eight failure classes previously collapsed into one
+    sentence, which is why PF-BUG-002 could be reproduced but not diagnosed.
+
+    Every previewed byte has been through Protect-PmxDiagnosticText in the adapter, so an
+    address, a user@host or a token cannot reach the terminal. That matters here more than
+    usual: PowerFlow's contract is that ordinary output names a saved alias, never an endpoint.
+#>
+function Write-PmxQueryFailure {
+    param(
+        [AllowEmptyString()][string]$Message,
+        $Diagnostics,
+        # Optional: not every call site has parsed options in scope, and a reporter that only
+        # works where they happen to exist is the reason each command grew its own.
+        $Options = $null
+    )
+
+    Write-Host "❌ $Message" -ForegroundColor Red
+
+    if (-not $Diagnostics) {
+        # Only advertise --explain when there is actually something more to show.
+        return
+    }
+    if (-not ($Options -and $Options.Explain)) {
+        Write-Host '   Run again with --explain for the transport and parser evidence.' -ForegroundColor DarkGray
+        return
+    }
+
+    Write-Host ''
+    Write-Host '   EVIDENCE' -ForegroundColor DarkGray
+    foreach ($field in @('CommandClass', 'Transport', 'Parser', 'ExitCode',
+                         'StdOutBytes', 'StdErrBytes', 'StdOutLines', 'LooksLikeJson', 'Note')) {
+        if ($null -eq $Diagnostics.$field) { continue }
+        Write-Host ("     {0,-14} {1}" -f $field, $Diagnostics.$field) -ForegroundColor DarkGray
+    }
+    if ($Diagnostics.StdOutPreview) {
+        Write-Host '     stdout       ' -NoNewline -ForegroundColor DarkGray
+        Write-Host $Diagnostics.StdOutPreview -ForegroundColor DarkGray
+    }
+    if ($Diagnostics.StdErrPreview) {
+        Write-Host '     stderr       ' -NoNewline -ForegroundColor DarkGray
+        Write-Host $Diagnostics.StdErrPreview -ForegroundColor DarkGray
+    }
+    Write-Host ''
 }

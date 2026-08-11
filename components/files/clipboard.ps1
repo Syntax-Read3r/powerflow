@@ -42,7 +42,7 @@ function op {
     open-pwd
 }
 
-function paste-file {
+function Invoke-PFPasteFile {
     param(
         [switch]$Force,
         [string]$Path = (Get-Location).Path
@@ -171,6 +171,13 @@ function paste-file {
     }
 }
 
+# ── paste-file ──────────────────────────────────────────────────────────
+# The user-facing name is a shim so that --long flags bind at all: a param() block
+# cannot bind them, and worse, misbinds them into the next value parameter. The shim
+# must not declare param() of its own, or $args would not hold the whole line.
+# See docs/plan/ethos/ETHOS.md.
+function paste-file { Invoke-PFParamCommand -Target 'Invoke-PFPasteFile' -Command 'paste-file' -Argv $args }
+
 <#
 .SYNOPSIS
     Enhanced copy-file function with better clipboard handling
@@ -210,14 +217,12 @@ function cf {
     copy-file $filePath
 }
 
-function pf {
-    param([switch]$Force, [string]$Path)
-    if ($Path) {
-        paste-file -Force:$Force -Path $Path
-    } else {
-        paste-file -Force:$Force
-    }
-}
+# `pf` is the short name for the same command, so it shims onto the same implementation
+# rather than forwarding through `paste-file`. Forwarding would have gone through the shim
+# and reported `-Force` as a legacy spelling the user never typed. The Path/no-Path branch
+# is gone too: an absent value parameter simply is not passed, which is what the branch was
+# emulating.
+function pf { Invoke-PFParamCommand -Target 'Invoke-PFPasteFile' -Command 'pf' -Argv $args }
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
 Register-PFCommand -Name 'open-pwd'   -Aliases @('op') -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'open the current folder in the file manager'

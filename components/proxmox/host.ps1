@@ -134,7 +134,7 @@ function Show-PmxManagedNodeStatus {
     $session = Get-PmxManagementSession
     if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $result = Invoke-ProxmoxManagementQuery -Operation 'node-status' -Connection $session.Connection -Parameters @{ Node = $session.Node }
-    if (-not $result.Success) { Write-Host "❌ $($result.Error)" -ForegroundColor Red; return }
+    if (-not $result.Success) { Write-PmxQueryFailure -Message $result.Error -Diagnostics $result.Diagnostics -Options $parsed.Options; return }
     $mode = Get-PmxOutputMode -Options $parsed.Options -Config $session.Config
     if (-not $mode.Success) { Write-Host "❌ $($mode.Error)" -ForegroundColor Red; return }
     if ($mode.Mode -eq 'json') { Write-PmxJson $result.Data; return }
@@ -165,7 +165,7 @@ function Show-PmxManagedStorage {
     $session = Get-PmxManagementSession
     if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $result = Invoke-ProxmoxManagementQuery -Operation 'storage-list' -Connection $session.Connection -Parameters @{ Node = $session.Node }
-    if (-not $result.Success) { Write-Host "❌ $($result.Error)" -ForegroundColor Red; return }
+    if (-not $result.Success) { Write-PmxQueryFailure -Message $result.Error -Diagnostics $result.Diagnostics -Options $parsed.Options; return }
     $storage = @($result.Data)
     $mode = Get-PmxOutputMode -Options $parsed.Options -Config $session.Config
     if (-not $mode.Success) { Write-Host "❌ $($mode.Error)" -ForegroundColor Red; return }

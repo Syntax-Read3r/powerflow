@@ -265,7 +265,7 @@ function Show-BandOverview {
 .EXAMPLE
     installed-apps 50gb-200gb # the really big offenders
 #>
-function installed-apps {
+function Show-PFInstalledApps {
     [CmdletBinding()]
     param(
         [Parameter(Position = 0)][string]$Range,
@@ -322,6 +322,13 @@ function installed-apps {
     Show-AppPicker -Items $hits -Label $window.Label
 }
 
+# ── installed-apps ──────────────────────────────────────────────────────────
+# The user-facing name is a shim so that --long flags bind at all: a param() block
+# cannot bind them, and worse, misbinds them into the next value parameter. The shim
+# must not declare param() of its own, or $args would not hold the whole line.
+# See docs/plan/ethos/ETHOS.md.
+function installed-apps { Invoke-PFParamCommand -Target 'Show-PFInstalledApps' -Command 'installed-apps' -Argv $args }
+
 # Shorthand. Set-Alias (rather than a wrapper function) so every parameter forwards
 # untouched — `i-a -o`, `i-a 2gb-4gb` and `i-a 50gb-200gb -Measure` all just work.
 Set-Alias i-a installed-apps
@@ -340,7 +347,7 @@ Set-Alias d-b disk-big
 .EXAMPLE
     disk-big 50gb-200gb   # the really big offenders
 #>
-function disk-big {
+function Show-PFDiskBig {
     [CmdletBinding()]
     param(
         [Parameter(Position = 0)][string]$Range,
@@ -407,6 +414,12 @@ function disk-big {
 
     Show-AppPicker -Items $found -Label $window.Label
 }
+
+# ── disk-big ────────────────────────────────────────────────────────────────
+# A shim so --path binds. With a bare param() block it would bind as the VALUE of $Range
+# and the real path would fall into $args — see docs/plan/ethos/ETHOS.md. d-b points at
+# this name, so the short alias gets the same translation.
+function disk-big { Invoke-PFParamCommand -Target 'Show-PFDiskBig' -Command 'disk-big' -Argv $args }
 
 # The action menu for a chosen app, folder or file.
 function Invoke-AppAction {

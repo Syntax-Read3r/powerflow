@@ -15,8 +15,8 @@
 #   2. platform adapters   — MUST precede components; components call them
 #   3. platform paths      — PATH, prompt, shell integrations
 #   4. components          — shared domain logic (no OS APIs)
-#   5. windows-only        — features with no Linux equivalent (WSL)
-#   6. platform bindings   — MUST follow components; rebinds command names
+#   5. windows-only        — features with no Linux equivalent (WSL, GNU coreutil clones)
+#   6. platform bindings   — OPTIONAL (Windows only); adds names, never removes them
 #   7. help                — references everything above
 # ==============================================================================
 
@@ -99,6 +99,8 @@ $_pf_components = @(
     "components\core\recovery.ps1"
 
     "components\shared\strings.ps1"
+    # flags.ps1 early — every command may route its flags through it.
+    "components\shared\flags.ps1"
 
     # Shell: bash builtins PowerShell lacks, plus the Linux teaching layer.
     # lessons.ps1 MUST precede teach.ps1 and brothers.ps1 — both read its data.
@@ -139,8 +141,13 @@ $_pf_components = @(
     "components\system\shutdown.ps1"
     "components\system\path.ps1"
     "components\system\apps.ps1"
+    # storage.ps1 AFTER apps.ps1 — its verbs delegate to installed-apps / disk-big.
+    "components\system\storage.ps1"
     "components\system\health.ps1"
     # Proxmox is an ordered component domain: shared helpers first, thin router last.
+    # dkr / pman — one component, two engines; the adapter owns every docker/podman call.
+    "components\containers\containers.ps1"
+
     "components\proxmox\shared.ps1"
     "components\proxmox\connection-state.ps1"
     "components\proxmox\config.ps1"
@@ -181,9 +188,15 @@ if ($script:PowerFlowOS -eq 'windows') {
 }
 
 # ------------------------------------------------------------------------------
-# 6. Platform bindings — MUST load after components (rebinds command names)
+# 6. Platform bindings — OPTIONAL, and must load after components
 # ------------------------------------------------------------------------------
-$_p = _pf_path "platform\$script:PowerFlowOS\bindings.ps1"; if ($_p) { . $_p }
+# Only Windows has one, and all it does is ADD names (`rm` -> `del`, plus the Unix
+# helpers Windows lacks). Linux deliberately has no bindings file: components/ no longer
+# claims any coreutil name, so there is nothing left to unbind. Tested with Test-Path
+# rather than _pf_path because a missing file is the normal case here, not a fault —
+# _pf_path would print a warning on every Linux shell start.
+$_p = Join-Path $script:PowerFlowRoot "platform/$script:PowerFlowOS/bindings.ps1"
+if (Test-Path $_p) { . $_p }
 
 # ------------------------------------------------------------------------------
 # 7. Help (last — its text references everything above)

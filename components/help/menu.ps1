@@ -33,12 +33,12 @@
     pwsh-h — every PowerFlow command.
 .DESCRIPTION
     pwsh-h              the manual — grouped, printed, scroll to read (the default)
-    pwsh-h -a           the interactive fzf browser  (pwsh-help -advanced also works)
+    pwsh-h -a           the interactive fzf browser  (pwsh-help --advanced also works)
     pwsh-h git          one section (nav · git · github · files · linux · health …)
     pwsh-h chmod        one command, or its Linux lesson
     pwsh-h permissions  every lesson in a topic
 #>
-function pwsh-h {
+function Show-PFHelpMenu {
     param([Parameter(Position = 0)][string]$Topic = '', [switch]$a, [switch]$advanced, [switch]$all)
 
     # -a / -advanced → the searchable fzf browser. Falls back to the manual when output
@@ -85,10 +85,17 @@ function pwsh-h {
         return
     }
 
-    # Bare pwsh-h (and the legacy -all): the readable manual. No fzf, so it prints and
+    # Bare pwsh-h (and the legacy --all): the readable manual. No fzf, so it prints and
     # scrolls the same at a terminal, down a pipe, or in CI.
     Show-PFManual
 }
+
+# ── pwsh-h ──────────────────────────────────────────────────────────
+# The user-facing name is a shim so that --long flags bind at all: a param() block
+# cannot bind them, and worse, misbinds them into the next value parameter. The shim
+# must not declare param() of its own, or $args would not hold the whole line.
+# See docs/plan/ethos/ETHOS.md.
+function pwsh-h { Invoke-PFParamCommand -Target 'Show-PFHelpMenu' -Command 'pwsh-h' -Argv $args }
 
 # ── the generated print view ──────────────────────────────────────────────────
 function Show-PFHelpRows {
@@ -258,7 +265,7 @@ function Show-PFHelpBrowser {
 }
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
-# pwsh-help is the long name; it takes the same flags, so `pwsh-help -advanced` == `pwsh-h -a`.
+# pwsh-help is the long name; it takes the same flags, so `pwsh-help --advanced` == `pwsh-h -a`.
 Set-Alias pwsh-help pwsh-h
 Register-PFCommand -Name 'pwsh-h' -Section '⚙️ CONFIGURATION & SETTINGS' -Aliases @('pwsh-help') `
     -Synopsis 'the command manual - grouped list; -a for the fzf browser' `

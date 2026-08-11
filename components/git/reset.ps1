@@ -42,5 +42,5 @@ function git-next {
 }
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
-Register-PFCommand -Name 'git-f'    -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'fetch and fast-forward the current branch'
-Register-PFCommand -Name 'git-next' -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'jump forward one commit (walk history upward)'
+Register-PFCommand -Name 'git-f'    -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'DESTRUCTIVE: reset --hard + clean -fdx, then fetch. Removes ignored files'
+Register-PFCommand -Name 'git-next' -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'DESTRUCTIVE: deletes .next, node_modules, lockfile, then npm install'

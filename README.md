@@ -79,9 +79,9 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 
 - **`pc-whoami`**: CPU, GPU, RAM spec, drives, free ports/slots, BIOS age, power plan,
   hardware errors — one screen, no hex, no GUIDs. Custom/OEM power plans get flagged
-- **`pc-whoami -ram`**: a map of where your memory is, in five levels — `huge` `large`
+- **`pc-whoami --ram`**: a map of where your memory is, in five levels — `huge` `large`
   `medium` `small` `tiny`. Read-only, five rows instead of 167. Open one with `-ram huge`
-- **`pc-whoami -ram java`**: that program's processes with **command lines**, so you can tell
+- **`pc-whoami --ram java`**: that program's processes with **command lines**, so you can tell
   eight javas apart. Enter closes one process (confirm with its PID), ctrl-a closes the whole
   program (warned harder) — system-critical processes and your own shell are never killed
 - **`pc-cap 85` / `pc-cap restore`**: cap CPU speed with **guaranteed restoration** —
@@ -108,8 +108,29 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 - **`pmx disk sdg report`**: *is this drive genuine?* Zero WWN, a generic model string, a
   six-digit serial, a drive that refuses SMART, a size that disagrees with itself, kernel
   I/O errors — each is evidence, and the report says which fired and what it means
-- **`-Write`** saves the whole bundle (report, raw SMART, kernel log, stable IDs) so a
+- **`--write`** saves the whole bundle (report, raw SMART, kernel log, stable IDs) so a
   refund request is a file you attach, not a story you tell
+
+### 🐳 Containers Without the Flags (`dkr` · `pman`)
+
+- **`dkr` drives docker, `pman` drives podman** — one implementation, two entry points. The
+  command *name* is the engine, so there is no `--engine` flag to remember and help text never
+  becomes machine-dependent
+- **One table, grouped by compose stack**, replacing
+  `docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"`. Stopped containers are
+  listed, not hidden
+- **Mark several, act once**: with `fzf`, Tab marks containers and Enter picks one action for all
+  of them — so stopping four becomes four keystrokes instead of four typed names
+- **Names resolve from anywhere**: container → compose service → project → substring, so
+  `dkr restart sonarr` works from any directory
+- **`restart` is compose-correct** — a plain restart ignores an edited compose file, which is the
+  classic "I changed the yml and nothing happened"
+- **`down` can never reach `-v`**, so it cannot delete your named volumes
+- **`pman stores`** shows every store a machine has. Podman keeps *rootless* and *rootful*
+  containers in separate stores, so a container can be plainly running and still invisible —
+  the engine answers truthfully that there are none *here*
+- **Never a confident wrong answer**: when zero containers come back it re-probes engine health
+  first, because podman can report a usable client version while the service is unreachable
 
 ### 🎨 Beautiful Interface
 
@@ -153,8 +174,8 @@ changemode 775 dir # runs chmod 775, and tells you it did
 
 # Machine health
 pc-whoami          # CPU, GPU, RAM, drives, BIOS age, power, errors — one screen
-pc-whoami -ram     # a map of where your RAM went, in five levels
-pc-whoami -ram huge # open the level that matters — then drill in to close something
+pc-whoami --ram     # a map of where your RAM went, in five levels
+pc-whoami --ram huge # open the level that matters — then drill in to close something
 
 # Check for updates
 powerflow-update   # Full-tree update via the real installer
@@ -485,23 +506,34 @@ kernel-backed pseudo-filesystem to navigate to. On Windows the folders are read 
 ### File Operations
 
 Single dash is Linux's, long dash is PowerFlow's: `ls -t` sorts by time (GNU),
-`ls --tree` is PowerFlow's tree view. On Linux the real GNU coreutils stay untouched —
-PowerFlow's versions live on as `del` and `mvf`.
+`ls --tree` is PowerFlow's tree view. **PowerFlow's delete and move are `del` and `mvf` on
+every platform** — they are not clones of the GNU tools (`del` opens a picker and confirms;
+`mvf` with one argument *cuts* rather than moves), so they carry their own names rather than
+silently changing what `rm` and `mv` do. On **Windows**, where there is no GNU tool underneath,
+`rm` and `mv` are also bound to them; on **Linux** those two names stay the real coreutils.
+Whichever name you type is the one the messages use.
+
+| Command              | Description                                        |
+| -------------------- | -------------------------------------------------- |
+| `mvf <src> <dst>`    | Move or rename, like bash (`-f` force, `-n` never overwrite) |
+| `mvf <a> <b> <dir>/` | Move several files into a directory                |
+| `mvf <file>`         | ✂️ Cut for moving (1 arg = cut, 2+ = move)          |
+| `mv-t`               | Paste cut file                                     |
+| `rn [file]`          | Interactive file rename                            |
+| `del`                | fzf picker, then confirm before deleting           |
+| `del -rf <dir>`      | Recursive force remove — bash muscle memory works  |
+| `del *.log`          | Wildcard removal — lists every match, one confirm  |
+| `ls -la` / `ls -t`   | Real GNU flags (list all / sort by time)           |
+| `ls --tree`          | PowerFlow's tree view with smart depth             |
+
+On Windows only — these three are GNU clones for a platform that ships none of them
+(`windows-only/coreutils.ps1`). On Linux the real tools are better and are left alone:
 
 | Command             | Description                                        |
 | ------------------- | -------------------------------------------------- |
-| `mv <src> <dst>`    | Move or rename, like bash (`-f` force, `-n` never overwrite) |
-| `mv <a> <b> <dir>/` | Move several files into a directory                |
-| `mv <file>`         | ✂️ Cut for moving (1 arg = cut, 2+ = move)          |
-| `mv-t`              | Paste cut file                                     |
-| `rn [file]`         | Interactive file rename                            |
-| `rm`                | fzf picker, then confirm before deleting           |
-| `rm -rf <dir>`      | Recursive force remove — bash muscle memory works  |
-| `rm *.log`          | Wildcard removal — lists every match, one confirm  |
 | `mkdir -p a/b/c`    | Create the whole chain                             |
 | `touch -c <file>`   | Bump timestamp only if it exists — never truncates |
-| `ls -la` / `ls -t`  | Real GNU flags (list all / sort by time)           |
-| `ls --tree`         | PowerFlow's tree view with smart depth             |
+| `rmdir <dir>`       | Remove a directory; asks before taking contents    |
 
 ### Learn Linux While You Use It
 
@@ -521,12 +553,12 @@ PowerFlow's versions live on as `del` and `mvf`.
 | Command              | Description                                       |
 | -------------------- | ------------------------------------------------- |
 | `pc-whoami`          | Vitals: power plan, CPU cap, HW errors, BIOS age  |
-| `pc-whoami -power`   | Every power plan, caps decoded — no hex, no GUIDs |
-| `pc-whoami -crashes` | Hardware errors, bugchecks, dumps (`-export` bundles the evidence) |
-| `pc-whoami -bios`    | Firmware version, age, board model                |
-| `pc-whoami -ram`     | The map: how much memory sits in each level (read-only) |
-| `pc-whoami -ram huge`| One level: `huge` · `large` · `medium` · `small` · `tiny` (`-min N` for a custom cut-off) |
-| `pc-whoami -ram java`| That program's processes with **command lines** — Enter closes one, ctrl-a closes all |
+| `pc-whoami --power`   | Every power plan, caps decoded — no hex, no GUIDs |
+| `pc-whoami --crashes` | Hardware errors, bugchecks, dumps (`-export` bundles the evidence) |
+| `pc-whoami --bios`    | Firmware version, age, board model                |
+| `pc-whoami --ram`     | The map: how much memory sits in each level (read-only) |
+| `pc-whoami --ram huge`| One level: `huge` · `large` · `medium` · `small` · `tiny` (`-min N` for a custom cut-off) |
+| `pc-whoami --ram java`| That program's processes with **command lines** — Enter closes one, ctrl-a closes all |
 | `pc-cap 85`          | Cap CPU speed — prior state recorded for safe undo |
 | `pc-cap restore`     | Put back exactly what was recorded                |
 | `team-room`          | Every agent watcher on this machine — which are **live**, and stop them |
@@ -565,7 +597,7 @@ Proxmox node. VM management can run there too, or over SSH from Windows/Linux th
 | `pmx disk sdg`           | One disk in full: stable IDs, SMART, and what would be destroyed |
 | `pmx disk sdg smart`     | The SMART report, decoded                       |
 | `pmx disk sdg report`    | **Is this drive genuine?** Evidence-based authenticity + health verdict |
-| `pmx disk sdg report -Write` | Save the evidence bundle (report, raw SMART, kernel log, IDs) for an RMA |
+| `pmx disk sdg report --write` | Save the evidence bundle (report, raw SMART, kernel log, IDs) for an RMA |
 | `pmx pools` / `pmx guests` / `pmx updates` | ZFS pools · VMs and containers · pending updates |
 
 Run `pmx help` for the full surface or a topic such as `pmx help vm network`. Mutations accept
@@ -583,7 +615,7 @@ growth form lists them and stops; it never guesses which disk is the system disk
 | Command                | Description                                              |
 | ---------------------- | ------------------------------------------------------- |
 | `pwsh-font`            | Install the Nerd Font, then show the terminal-font step  |
-| `pwsh-font -status`    | Is the font installed? (installs nothing)                |
+| `pwsh-font --status`    | Is the font installed? (installs nothing)                |
 | `pwsh-autologin`       | Start PowerFlow on login — no installer re-run (Linux)   |
 | `pwsh-autologin off`   | Stop starting on login                                   |
 | `pwsh-exit`            | Drop to bash without closing your SSH session (Linux)    |
@@ -597,7 +629,22 @@ growth form lists them and stops; it never guesses which disk is the system disk
 | `shutdown 1h 30m`        | Schedule a shutdown (10 min – 6 hr range)        |
 | `shutdown cancel` / `s c`| Cancel a scheduled shutdown                     |
 | `set-path <dir>`         | Add a directory to the User PATH (no quotes)     |
-| `set-path -system <dir>` | Add to the System PATH (requires Administrator)  |
+| `set-path --system <dir>` | Add to the System PATH (requires Administrator)  |
+
+### Containers
+
+`dkr` is docker, `pman` is podman. Every verb below works with either name.
+
+| Command             | Description                                                  |
+| ------------------- | ------------------------------------------------------------ |
+| `dkr`               | Every container, grouped by stack; fzf multi-select to act    |
+| `dkr logs [name]`   | Tail a log — `-f` follows, no name opens a picker             |
+| `dkr shell [name]`  | Shell in: `bash` if the image has it, else `sh`               |
+| `dkr up [stack]`    | Bring a compose stack up (works when nothing is running)      |
+| `dkr down [stack]`  | Take it down — confirms, and keeps named volumes              |
+| `dkr restart <name>`| Compose-correct restart, from any directory                   |
+| `dkr stop` / `start`| No name opens a multi-select picker                           |
+| `pman stores`       | Every store this engine sees, and where containers really are |
 
 ### Disk Reclaim
 
@@ -611,7 +658,7 @@ an unreviewable list in front of a delete action is how people destroy things.
 | `installed-apps 2gb-4gb` | Apps in a range (must fit inside a single band)          |
 | `disk-big`               | Large **folders and files** (vhdx, node_modules, caches) |
 | `disk-big 50gb-200gb`    | The biggest offenders on disk                            |
-| `disk-big -Path D:\`     | Scan a specific location instead of the usual hot spots  |
+| `disk-big --path D:\`    | Scan a specific location instead of the usual hot spots  |
 
 Bands: `1–5 GB` · `5–20 GB` · `20–50 GB` · `50 GB+`.
 Each row shows **size and age** — big *and* old is the strongest reclaim signal.
@@ -647,7 +694,7 @@ week · turn off**. Piped/non-interactive shells get one quiet line, never a pro
 | `pwsh-starship` | Edit Starship config           |
 | `pwsh-settings` | Edit Windows Terminal settings |
 | `pwsh-h`        | The command manual — grouped, scroll to read (`pwsh-h -a` for the fzf browser, `pwsh-h git` filters) |
-| `pwsh-help`     | Long alias for `pwsh-h` (`pwsh-help -advanced` = `pwsh-h -a`) |
+| `pwsh-help`     | Long alias for `pwsh-h` (`pwsh-help --advanced` = `pwsh-h -a`) |
 
 ## 🔧 Configuration
 

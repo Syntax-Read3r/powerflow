@@ -83,7 +83,7 @@ function ls {
                 return
             }
             # Ambiguity gets a PICKER, not a refusal. Refusing where a picker would do is the
-            # house anti-pattern — srv, start-folder and pc-whoami -ram all pick. Falls back to
+            # house anti-pattern — srv, start-folder and pc-whoami --ram all pick. Falls back to
             # listing the candidates only when there is no interactive terminal or no fzf.
             $paths = @($resolved.Paths)
             if ($paths.Count -gt 1) {
@@ -154,16 +154,15 @@ function ll { ls -lh @args }     # long, human-readable sizes
 
 Set-Alias clr clear                                 # Clear screen
 
-# NOTE: `cat` and `cp` are aliased here for WINDOWS, which has neither.
-# platform/linux/bindings.ps1 strips both on Linux so the real GNU tools win.
-Set-Alias cat Get-Content
-if (Test-Path Alias:\cp) { Remove-Item Alias:\cp -Force }
-Set-Alias cp Copy-Item
+# `cat` and `cp` are deliberately NOT defined here. PowerShell already ships both as
+# built-in aliases on Windows (cat -> Get-Content, cp -> Copy-Item), so PowerFlow's
+# versions added nothing there — while on Linux they outranked and hid the real GNU
+# tools, which then had to be stripped back out again by a platform file. Defining
+# nothing is both simpler and correct on both platforms.
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
-Register-PFCommand -Name 'ls'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'pretty listing; GNU flags, --tree/--depth, and -<root> starting points' -Example 'ls -la · ls -recurse -depth 2 · ls -srv complete'
+Register-PFCommand -Name 'ls'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'pretty listing; GNU flags, --tree/--depth, and -<root> starting points' -Example 'ls -la · ls --recurse --depth 2 · ls -srv complete'
 Register-PFCommand -Name 'la'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'ls -a: everything, dotfiles included'
-Register-PFCommand -Name 'll'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'ls -lh: permissions, owner, size, date - composes with --tree/--depth' -Example 'll · ll -recurse -depth 2'
+Register-PFCommand -Name 'll'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'ls -lh: permissions, owner, size, date - composes with --tree/--depth' -Example 'll · ll --recurse --depth 2'
 Register-PFCommand -Name 'clr' -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'clear the screen'
-Register-PFCommand -Name 'cat' -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'print a file (the GNU cat on Linux)'
-Register-PFCommand -Name 'cp'  -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'copy files (the GNU cp on Linux)'
+

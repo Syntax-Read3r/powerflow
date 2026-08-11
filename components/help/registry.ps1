@@ -37,6 +37,7 @@ $script:PF_HelpSections = @(
     '🎓 LEARN LINUX'
     '🐚 BASH BUILTINS'
     '🖥️ MACHINE HEALTH'
+    '🐳 CONTAINERS'
     '⚡ PROXMOX VE'
     '🌐 SSH SERVERS'
     '🗄️ DISK RECLAIM'
@@ -56,7 +57,7 @@ $script:PF_HelpChapters = @(
     @{ Title = '📂 FILES';          Sections = @('📂 ENHANCED FILE OPERATIONS') }
     @{ Title = '🎯 GIT & GITHUB';   Sections = @('🎯 ENHANCED GIT WORKFLOW', '🐙 GITHUB BROWSER') }
     @{ Title = '🎓 LEARN LINUX';    Sections = @('🎓 LEARN LINUX', '🐚 BASH BUILTINS') }
-    @{ Title = '🖥️ SYSTEM & DISK';  Sections = @('🖥️ MACHINE HEALTH', '⚡ PROXMOX VE', '🌐 SSH SERVERS', '🗄️ DISK RECLAIM') }
+    @{ Title = '🖥️ SYSTEM & DISK';  Sections = @('🖥️ MACHINE HEALTH', '🐳 CONTAINERS', '⚡ PROXMOX VE', '🌐 SSH SERVERS', '🗄️ DISK RECLAIM') }
     @{ Title = '⚙️ SETUP & CONFIG'; Sections = @('⚙️ CONFIGURATION & SETTINGS', '🪟 TERMINAL TABS', '🧱 PROJECT GENERATORS', '🐧 WSL (WINDOWS-ONLY)') }
 )
 

@@ -69,7 +69,7 @@ function Show-PmxSnapshots {
     $resolved = Resolve-PmxManagedVm -Selector "$($parsed.Options.Vm)" -Session $session
     if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
     $result = Get-PmxSnapshots -Session $session -Vm $resolved.Vm
-    if (-not $result.Success) { Write-Host "❌ $($result.Error)" -ForegroundColor Red; return }
+    if (-not $result.Success) { Write-PmxQueryFailure -Message $result.Error -Diagnostics $result.Diagnostics -Options $parsed.Options; return }
     $mode = Get-PmxOutputMode -Options $parsed.Options -Config $session.Config
     if (-not $mode.Success) { Write-Host "❌ $($mode.Error)" -ForegroundColor Red; return }
     if ($mode.Mode -eq 'json') { Write-PmxJson $result.Snapshots; return }

@@ -70,7 +70,10 @@ function New-PmxUnavailableVmNetworkModel {
             VmId = [int]$Vm.VmId; Name = $Vm.Name; Node = $Vm.Node
             Status = $Vm.Status; Template = [bool]$Vm.Template
         }
-        Agent = New-PmxNetworkAgentState $false $false 'unavailable' $Reason
+        # 'unknown', not 'unavailable'. This model is built when the VM CONFIG could not be
+        # read, which tells us nothing whatsoever about the agent — claiming the agent is
+        # unavailable is an assertion we have no evidence for.
+        Agent = New-PmxNetworkAgentState $false $false 'unknown' $Reason
         Adapters = @(); Interfaces = @()
         AddressSelection = [pscustomobject][ordered]@{
             PrimaryCandidate = $null; Candidates = @(); Inferred = $true; Reason = 'network configuration was unavailable'
@@ -84,6 +87,21 @@ function New-PmxUnavailableVmNetworkModel {
     }
 }
 
+<#
+.SYNOPSIS
+    Turn an agent query failure into a state that names its cause.
+.DESCRIPTION
+    'unavailable' previously meant any of five materially different things, so
+    `pmx vm ip` was a dead end: the message told you it had not worked without telling you
+    what to do. The states are now distinct, and each carries a Reason the view prints.
+      not-responding  the channel is configured and the VM is running, but nothing answered
+                      inside it — usually qemu-guest-agent not installed or not started
+      query-failed    the query itself failed for another reason (transport, parse)
+      timed-out       it answered too slowly
+      unsupported     this agent does not report network information
+    One of the original five — "skipped because runtime status could not be read" — no longer
+    exists: PF-BUG-004 removed the branch that refused to ask.
+#>
 function Get-PmxVmAgentFailureState {
     param($Result)
 
@@ -91,8 +109,14 @@ function Get-PmxVmAgentFailureState {
     switch ($kind) {
         'timeout' { New-PmxNetworkAgentState $true $false 'timed-out' 'VM agent did not respond before the timeout.' }
         'unsupported' { New-PmxNetworkAgentState $true $false 'unsupported' 'VM agent network reporting is unsupported.' }
-        'agent-unavailable' { New-PmxNetworkAgentState $true $false 'unavailable' 'VM agent is not available inside the running VM.' }
-        default { New-PmxNetworkAgentState $true $false 'unavailable' 'VM agent did not return network information.' }
+        'agent-unavailable' {
+            New-PmxNetworkAgentState $true $false 'not-responding' `
+                'The agent channel is configured, but nothing answered inside the VM. Is qemu-guest-agent installed and running?'
+        }
+        default {
+            New-PmxNetworkAgentState $true $false 'query-failed' `
+                'The VM agent query failed. Re-run with --explain for the transport and parser evidence.'
+        }
     }
 }
 
@@ -107,46 +131,92 @@ function Get-PmxVmNetworkModel {
     $parameters = @{ Vmid = [int]$Vm.VmId; Node = "$($Vm.Node)" }
     $configResult = Invoke-ProxmoxManagementQuery -Operation 'vm-config' -Connection $Session.Connection -Parameters $parameters
     if (-not $configResult.Success) {
-        return [pscustomobject]@{ Success = $false; Model = $null; Error = $configResult.Error }
+        # Diagnostics is carried up, not dropped. Re-wrapping a result without it is how
+        # "malformed JSON" reached the user with nothing to act on — the same information leak
+        # Get-PmxManagedVmDetails had.
+        return [pscustomobject]@{ Success = $false; Model = $null; Error = $configResult.Error
+            Diagnostics = $configResult.Diagnostics }
     }
     $adapters = @(Get-PmxConfiguredNetworkAdapters -Config $configResult.Data)
     $agentConfig = Get-PmxVmAgentConfiguration -Config $configResult.Data
     $warnings = @()
-    $status = "$($Vm.Status)"
+
+    # TWO STATUS SOURCES, KEPT APART ON PURPOSE (PF-BUG-004).
+    #
+    # These were previously collapsed into one $status field, which let a single view state
+    # "Status running" AND "Current VM status could not be read" at the same time — because
+    # the inventory value survived the failed runtime read while the warning was also emitted.
+    #
+    #   inventory  what `pmx vm` and `qm list` report. Already fetched; always present.
+    #   runtime    what `qm status <vmid>` reports. Richer, but a separate query that can fail.
+    #
+    # Falling back to inventory is not a guess: it is the same field from the same host, just
+    # read earlier. So the fallback is stated plainly rather than reported as "unknown".
+    $inventoryStatus = "$($Vm.Status)"
+    $status = $inventoryStatus
+    $statusSource = 'inventory'
     $statusNative = $null
     $statusAvailable = ($View -eq 'adapters')
     if ($View -ne 'adapters') {
         $statusResult = Invoke-ProxmoxManagementQuery -Operation 'vm-status' -Connection $Session.Connection -Parameters $parameters
         if ($statusResult.Success) {
             $status = "$(ConvertTo-PmxDisplayText (Get-PmxObjectProperty $statusResult.Data 'status' $status))"
+            $statusSource = 'runtime'
             $statusNative = $statusResult.NativeCommand
             $statusAvailable = $true
         }
-        else { $warnings += 'Current VM status could not be read; VM-reported network data was not queried.' }
+        elseif ($inventoryStatus) {
+            $warnings += "Runtime status could not be read; showing the inventory status ($inventoryStatus)."
+        }
+        else {
+            $warnings += 'VM status could not be determined from the inventory or the runtime query.'
+        }
     }
 
     $vmModel = [pscustomobject][ordered]@{
-        VmId = [int]$Vm.VmId; Name = $Vm.Name; Node = $Vm.Node; Status = $status; Template = [bool]$Vm.Template
+        VmId = [int]$Vm.VmId; Name = $Vm.Name; Node = $Vm.Node; Status = $status
+        StatusSource = $statusSource; Template = [bool]$Vm.Template
     }
     $agent = New-PmxNetworkAgentState ([bool]$agentConfig.Configured) $false 'not-queried' $null
     $interfaces = @()
     $runtimeNative = $null
-    $shouldReadRuntime = $View -ne 'adapters' -and -not $Vm.Template -and $status -eq 'running' -and $agentConfig.Configured -and $statusNative
+    # $statusNative is DELIBERATELY absent from this condition. It is the --show-native display
+    # string for the status query, and gating behaviour on it meant a failed runtime read
+    # silently disabled the guest-agent query — so `pmx vm ip 102` found no addresses on a VM
+    # that both `pmx vm` and `qm list` showed as running. A display value must never decide
+    # whether work happens.
+    #
+    # The agent is now queried whenever the VM is running per EITHER status source and the
+    # agent channel is configured. If the agent is genuinely unreachable, the query says so
+    # with its own precise reason via Get-PmxVmAgentFailureState — which is a better answer
+    # than refusing to ask.
+    $shouldReadRuntime = $View -ne 'adapters' -and -not $Vm.Template -and $status -eq 'running' -and $agentConfig.Configured
     if ($View -eq 'adapters') {
         $agent = New-PmxNetworkAgentState ([bool]$agentConfig.Configured) $false 'not-requested' 'Adapter configuration does not require the VM agent.'
     }
     elseif ($Vm.Template) {
         $agent = New-PmxNetworkAgentState ([bool]$agentConfig.Configured) $false 'template' 'Templates have no running operating system to report addresses.'
     }
+    elseif (-not $status) {
+        # Neither source produced a status. This is the ONLY case that genuinely cannot be
+        # resolved, and it is checked before the "not running" branch so an unknown status is
+        # never reported as stopped.
+        $agent = New-PmxNetworkAgentState ([bool]$agentConfig.Configured) $false 'unavailable' `
+            'VM status could not be determined from the inventory or the runtime query.'
+    }
     elseif ($status -ne 'running') {
         $agent = New-PmxNetworkAgentState ([bool]$agentConfig.Configured) $false 'stopped' 'Start the VM before requesting VM-reported addresses or stats.'
     }
     elseif (-not $agentConfig.Configured) {
-        $agent = New-PmxNetworkAgentState $false $false 'disabled' 'The VM agent channel is not enabled in this VM configuration.'
+        # 'not-configured', not 'disabled': nothing was turned off, the channel was never
+        # enabled. The distinction matters because the fix differs — you add agent=1 to the VM
+        # config, you do not re-enable something.
+        $agent = New-PmxNetworkAgentState $false $false 'not-configured' 'The VM agent channel is not enabled in this VM configuration. Add agent=1 to the VM config.'
     }
-    elseif (-not $statusAvailable) {
-        $agent = New-PmxNetworkAgentState $true $false 'unavailable' 'Current VM status could not be verified.'
-    }
+    # The former `-not $statusAvailable` branch is GONE. It reported the AGENT as unavailable
+    # because the STATUS query had failed — two unrelated facts — and it short-circuited ahead
+    # of the query below, so the agent was never actually asked. That is PF-BUG-004: the view
+    # showed "Status running" and "Agent unavailable" together, and `pmx vm ip` returned nothing.
     elseif ($shouldReadRuntime) {
         $runtimeResult = Invoke-ProxmoxManagementQuery -Operation 'vm-guest-network' -Connection $Session.Connection -Parameters $parameters
         $runtimeNative = "qm guest cmd $($Vm.VmId) network-get-interfaces"
@@ -216,7 +286,7 @@ function Show-PmxVmNetwork {
     $resolved = Resolve-PmxManagedVm -Selector $parsed.Options.Selector -Session $session
     if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
     $result = Get-PmxVmNetworkModel -Session $session -Vm $resolved.Vm -View $View -Options $parsed.Options
-    if (-not $result.Success) { Write-Host "❌ $($result.Error)" -ForegroundColor Red; return }
+    if (-not $result.Success) { Write-PmxQueryFailure -Message $result.Error -Diagnostics $result.Diagnostics -Options $parsed.Options; return }
     if ($mode.Mode -eq 'json') {
         Write-PmxJson (ConvertTo-PmxVmNetworkContract -Model $result.Model -View $View `
             -ShowNative:$parsed.Options.ContainsKey('ShowNative') -Explain:$parsed.Options.ContainsKey('Explain'))

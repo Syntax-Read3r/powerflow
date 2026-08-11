@@ -37,7 +37,9 @@ function Install-PackageManager {
 
 # PowerFlow tool name -> distro package name. Only exceptions are listed.
 $script:PF_PackageNameMap = @{
-    'apt'    = @{ 'bat' = 'bat' }
+    # Debian/Ubuntu package the engine as docker.io; plain 'docker' is an unrelated
+    # GNOME tray applet, so suggesting it would install the wrong thing entirely.
+    'apt'    = @{ 'bat' = 'bat'; 'docker' = 'docker.io' }
     'dnf'    = @{ }
     'pacman' = @{ }
     'zypper' = @{ }

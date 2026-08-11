@@ -246,7 +246,7 @@ function Invoke-TeamRoomAction {
     Disarming is the reversible off switch: the connector keeps ticking but does nothing,
     which is team-room's own dormancy path.
 #>
-function team-room {
+function Invoke-PFTeamRoom {
     param(
         [Parameter(Position = 0)][string]$Command,
         [Parameter(Position = 1)][string]$Name,
@@ -298,6 +298,13 @@ function team-room {
 
     Show-TeamRoomList $rooms
 }
+
+# ── team-room ──────────────────────────────────────────────────────────
+# The user-facing name is a shim so that --long flags bind at all: a param() block
+# cannot bind them, and worse, misbinds them into the next value parameter. The shim
+# must not declare param() of its own, or $args would not hold the whole line.
+# See docs/plan/ethos/ETHOS.md.
+function team-room { Invoke-PFParamCommand -Target 'Invoke-PFTeamRoom' -Command 'team-room' -Argv $args }
 
 Register-PFCommand -Name 'team-room' -Section '🖥️ MACHINE HEALTH' `
     -Synopsis 'see which agent watchers are live; stop or re-arm a room' `

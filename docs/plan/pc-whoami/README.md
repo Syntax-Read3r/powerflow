@@ -71,10 +71,10 @@ mechanism.
 🔌 POWER
    Plan     GameTurbo (High Performance)   ⚠️ custom/OEM plan — not a Windows default
    CPU cap  85% on AC · 100% on DC         ⚠️ full speed is being withheld
-            └─ details:  pc-whoami -power
+            └─ details:  pc-whoami --power
 
 💥 STABILITY (last 7 days)
-   WHEA errors   3    ⚠️  └─ details:  pc-whoami -crashes
+   WHEA errors   3    ⚠️  └─ details:  pc-whoami --crashes
    Crash dumps   2 minidumps · newest Jul 12
 ```
 
@@ -94,10 +94,10 @@ Design rules:
 
 | Flag | Shows |
 |---|---|
-| `pc-whoami -power` | every power plan (active one marked), AC/DC caps decoded, boost mode, min/max processor state |
-| `pc-whoami -crashes` | WHEA events with plain-language summaries · bugcheck 1001 messages · minidump list with dates/sizes |
-| `pc-whoami -crashes -export` | the above, plus raw WHEA XML + minidump inventory written to `~/Desktop/pc-crash-report/` — the bundle you hand to an AI or a forum |
-| `pc-whoami -bios` | firmware version/date/vendor, board model — and the exact string to search for updates ("ASUS PRIME Z690-A BIOS") |
+| `pc-whoami --power` | every power plan (active one marked), AC/DC caps decoded, boost mode, min/max processor state |
+| `pc-whoami --crashes` | WHEA events with plain-language summaries · bugcheck 1001 messages · minidump list with dates/sizes |
+| `pc-whoami --crashes --export` | the above, plus raw WHEA XML + minidump inventory written to `~/Desktop/pc-crash-report/` — the bundle you hand to an AI or a forum |
+| `pc-whoami --bios` | firmware version/date/vendor, board model — and the exact string to search for updates ("ASUS PRIME Z690-A BIOS") |
 
 Windows-style single-dash flags are correct here — these are PowerFlow's own commands, not
 GNU twins, so the single-dash-is-Linux rule does not apply.
@@ -186,7 +186,7 @@ The lesson library already covers `journalctl`. Two additions fit naturally:
 
 - `lesson powercfg` — Windows-only concepts explained the way `lesson chmod` explains
   mode bits: what a plan is, what PROCTHROTTLEMAX means, why `0x55` is 85.
-- The brother pattern in reverse: `pc-whoami -power` can print
+- The brother pattern in reverse: `pc-whoami --power` can print
   `🐧 real windows command: powercfg /query SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX`
   in `full` lesson mode — same muscle-memory trick as `changemode` → `chmod`, so the tool
   teaches the raw command it wraps.

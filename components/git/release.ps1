@@ -202,7 +202,7 @@ function Show-GitReleaseSetupPrompt {
     Write-Host ""
 }
 
-function git-release {
+function Invoke-GitReleaseCommand {
     [CmdletBinding()]
     param(
         [Alias('h', 'help', '?')]
@@ -468,6 +468,13 @@ function git-release {
     }
     Write-Host ""
 }
+
+# ── git-release ──────────────────────────────────────────────────────────
+# The user-facing name is a shim so that --long flags bind at all: a param() block
+# cannot bind them, and worse, misbinds them into the next value parameter. The shim
+# must not declare param() of its own, or $args would not hold the whole line.
+# See docs/plan/ethos/ETHOS.md.
+function git-release { Invoke-PFParamCommand -Target 'Invoke-GitReleaseCommand' -Command 'git-release' -Argv $args }
 
 function git-rl { git-release @args }
 

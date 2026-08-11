@@ -168,7 +168,7 @@ function git-rba {
 # Create shorter alias
 Set-Alias -Name grba -Value git-rba
 
-function git-rb {
+function Invoke-GitRollbackTo {
     param(
         [Parameter(Mandatory = $true)]
         [string]$commitHash,
@@ -269,6 +269,13 @@ function git-rb {
         Write-Host "💡 Check if the commit hash is valid and try again" -ForegroundColor DarkGray
     }
 }
+
+# ── git-rb ──────────────────────────────────────────────────────────
+# The user-facing name is a shim so that --long flags bind at all: a param() block
+# cannot bind them, and worse, misbinds them into the next value parameter. The shim
+# must not declare param() of its own, or $args would not hold the whole line.
+# See docs/plan/ethos/ETHOS.md.
+function git-rb { Invoke-PFParamCommand -Target 'Invoke-GitRollbackTo' -Command 'git-rb' -Argv $args }
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
 Register-PFCommand -Name 'git-rb'  -Section '🎯 ENHANCED GIT WORKFLOW' -Synopsis 'create a rollback branch from any commit, safely'
