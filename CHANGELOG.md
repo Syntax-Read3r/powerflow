@@ -77,12 +77,19 @@ All notable changes to PowerFlow will be documented in this file.
 
 ### Fixed
 
-- 🧪 **Two release gates that did not exist, and one local gate that lied.** `CLAUDE.md`
-  documented a Linux CI job asserting that `rm`/`mv`/`cat`/`grep` resolve to native binaries.
-  There was no such job — the workflow has only ever had one, on `windows-latest`. So the only
-  thing protecting Linux from coreutil shadowing was the bindings file itself, unverified. There
-  are now two static gates (`components/` claims no coreutil name; no Linux bindings file) plus
-  one for flag spelling in help text.
+- 🧪 **Two new static gates, and one local gate that lied.** The coreutil rule is now checked
+  *statically* as well as at runtime: `components/` may not define a name belonging to a GNU
+  coreutil, and `platform/linux/bindings.ps1` may not come back. Both run on the Windows job, so
+  they fail on the offending name in the file that defines it — before the Linux leg installs
+  anything. A third gate checks flag spelling in registered help text.
+
+  **Correction to an earlier draft of this entry:** it claimed these gates did not previously
+  exist anywhere. That was wrong. `release-validate-linux.yml` already runs a `distros` matrix
+  (Alpine, Arch, …) which installs PowerFlow, loads the profile, and asserts `rm`/`mv`/`cp`/
+  `cat`/`grep` all resolve to `Application` and that `del`/`mvf` are present — exactly what
+  `CLAUDE.md` describes. Only `release-validate.yml` had been searched, and "no Linux job in
+  this file" was generalised to "no Linux job at all". The new gates are additive, not a
+  replacement.
 
   Separately, the local gate script was a hand-written **copy** of the CI checks and had drifted
   five adapter names out of date, reporting "clean" on a tree the real gate would reject.

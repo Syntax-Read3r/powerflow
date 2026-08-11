@@ -5,8 +5,14 @@ network.
 
 `coreutil-resolution.ps1` is different: **it must run inside a real Linux pwsh**, because what it
 checks is name *resolution*, and that cannot be faked from Windows. It is the check the deleted
-`platform/linux/bindings.ps1` used to perform at runtime, and the one `CLAUDE.md` claimed CI
-performed — CI never did; the workflow has only ever had a single `windows-latest` job.
+`platform/linux/bindings.ps1` used to perform at runtime.
+
+**CI already covers this too**, in `release-validate-linux.yml`: a `distros` matrix (Alpine,
+Arch, …) installs PowerFlow, loads the profile, and asserts `rm`/`mv`/`cp`/`cat`/`grep` resolve
+to `Application` and that `del`/`mvf`/`nav`/`git-a`/`pwsh-h` exist. This script is the same idea
+run **locally, before pushing**, and it goes further: it also checks that `windows-only/` does
+not load, that GNU `rm` still refuses a directory without `-r`, and that the flag shims bind.
+Use it to find a coreutil regression in a container in one minute rather than in a release run.
 
 ## Running it
 

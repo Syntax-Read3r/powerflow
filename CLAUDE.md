@@ -107,9 +107,15 @@ coreutil list. `ls`/`la`/`ll` are the one deliberate exception — the pretty li
 point — and the gate allow-lists them by name. A second gate fails the release if
 `platform/linux/bindings.ps1` ever comes back.
 
-It is a source scan rather than a live name-resolution test on purpose: it fails on the root
-cause (the name, in the file that defines it) instead of on a symptom two layers away, and it
-does not depend on a profile load succeeding in CI.
+**This is checked twice, on purpose.** `release-validate-linux.yml` already installs PowerFlow on
+an Alpine/Arch matrix, loads the profile, and asserts `rm`/`mv`/`cp`/`cat`/`grep` resolve to
+`Application` and that `del`/`mvf` exist — that proves the real behaviour. The static scan above
+fails earlier and closer to the cause: on the name, in the file that defines it, before anything
+is installed, and without depending on a profile load succeeding.
+
+Run the runtime check locally before pushing with `tests/linux/coreutil-resolution.ps1` in any
+Linux container — see `tests/linux/README.md`. It also covers what the CI job does not: that
+`windows-only/` stays unloaded, and that GNU `rm` still refuses a directory without `-r`.
 
 ---
 

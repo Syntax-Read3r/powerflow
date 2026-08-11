@@ -14,8 +14,13 @@
 # deleted file's own header recorded that this had already shipped once.
 #
 # The rule is now structural — never claim the name — and these assertions are what keep
-# it true. They are deliberately mostly STATIC so that the Linux-side property is provable
-# from Windows, where CI runs.
+# it true. They are deliberately mostly STATIC, so the Linux-side property is provable from
+# Windows without a container.
+#
+# That COMPLEMENTS the runtime check rather than replacing it: CI's release-validate-linux.yml
+# already installs PowerFlow on an Alpine/Arch matrix and asserts these names resolve to real
+# binaries. The value of also doing it statically is WHERE it fails — on the offending name, in
+# the file that defines it, before anything is installed.
 #
 # NOTE ON ABSENCE ASSERTIONS: every "must not contain" check below runs against
 # comment-stripped source. Three separate tests in this tree have passed or failed on

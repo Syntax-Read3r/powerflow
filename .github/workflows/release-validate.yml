@@ -128,9 +128,11 @@ jobs:
       # name. PowerFlow's own file commands are `del` and `mvf` on every platform, and the
       # Windows-only clones live in windows-only/coreutils.ps1.
       #
-      # Checked statically against the source rather than by resolving names in a live Linux
-      # shell, because it must fail on the ROOT CAUSE (a name defined in components/) and must
-      # not depend on a profile load succeeding in CI.
+      # Checked statically against the source, IN ADDITION to the runtime check that
+      # release-validate-linux.yml already performs (it installs PowerFlow on an Alpine/Arch
+      # matrix, loads the profile, and asserts rm/mv/cp/cat/grep resolve to Application). Both are
+      # wanted: that one proves the real behaviour, this one fails on the ROOT CAUSE — the name, in
+      # the file that defines it — before anything is installed.
       - name: 🐧 Coreutil names are not shadowed
         shell: pwsh
         run: |

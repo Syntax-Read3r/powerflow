@@ -1,7 +1,7 @@
 # 11 Aug 2026 — one flag convention, and `components/` stops claiming coreutil names
 
 Three decisions from the owner, and the work that followed each. Plus one bug filed with a root
-cause, and two release gates that turned out not to exist.
+cause, two new static gates — and a correction to a claim I made confidently and got wrong.
 
 ---
 
@@ -116,12 +116,29 @@ be mis-bound at all, so the test now asserts absence rather than the guard.
 
 ---
 
-## 5 · Two release gates that did not exist, and one that lied
+## 5 · Two new static gates, and one that lied
 
-**`CLAUDE.md` documented a Linux CI job** asserting that `rm`/`mv`/`cat`/`grep` resolve to native
-binaries. There is no such job — the workflow has only ever had one, on `windows-latest`. So the
-only thing protecting Linux from coreutil shadowing was the bindings file itself, unverified.
-Two static gates now exist instead.
+**CORRECTION — I got this wrong, and it reached the v5.0.0 notes before anything caught it.**
+
+I claimed `CLAUDE.md` documented a Linux CI job that did not exist. It does exist.
+`release-validate-linux.yml` runs a `distros` matrix (Alpine, Arch, …) that installs PowerFlow,
+loads the profile, and asserts `rm`/`mv`/`cp`/`cat`/`grep` resolve to `Application` and that
+`del`/`mvf`/`nav`/`git-a`/`pwsh-h` exist — precisely what CLAUDE.md describes.
+
+The error was method, not typing. I grepped **one** workflow file, `release-validate.yml`, found
+no Linux job in it, and generalised to the whole directory. There are seven workflow files. A
+claim about "the workflow" had to look at all of them.
+
+Two things made it worse than a wrong grep. The phrasing was confident ("entirely fictional"),
+and it propagated — into the CHANGELOG, this log, two test headers and a gate comment — before
+anything contradicted it. What finally contradicted it was the release run itself, whose green
+`🚀 Profile loads and coreutils stay unshadowed` step is the job I had said was missing.
+
+**What survives:** the two new gates are still worth having, because they are STATIC and run on
+the Windows job — they fail on the offending name in the file that defines it, before the Linux
+leg installs anything. Both checks are wanted; they fail at different distances from the cause.
+The runtime job also passed on this release, which independently corroborates the container run
+by a second, independent route.
 
 **The local gate script was a hand-written copy** of the CI checks, and had drifted five adapter
 names out of date — it reported "clean" on a tree the real gate would reject. `tests/gates.ps1`
@@ -160,8 +177,29 @@ The Linux sibling is correct and is the model: `stty -g` to save, `stty -echo`, 
 |---|---|
 | Suites | files · flags · safety · containers · storage · proxmox · network · windows — **all green** |
 | Gates | 7 runnable, all green (4 skipped locally: they need GitHub's expression context) |
-| New this session | `tests/flags/` (56 assertions), `tests/files/command-names.ps1` (39), `tests/gates.ps1` |
+| Linux leg | run in a podman container against the real profile — coreutils resolve to real binaries, `del`/`mvf` present, `windows-only/` correctly absent, GNU `rm` still refuses a directory without `-r`, flag shims bind. Saved as `tests/linux/coreutil-resolution.ps1` |
+| New this session | `tests/flags/` (99 assertions), `tests/files/command-names.ps1` (39), `tests/linux/coreutil-resolution.ps1`, `tests/gates.ps1` |
 
-**Not done, and it matters for the release:** the checklist's §2 Linux-in-Docker leg
-(install → load → exercise → uninstall) was not run. The coreutil change is precisely a
-Linux-behaviour change, so that leg is the one most worth running before this ships.
+## Released
+
+**v5.0.0**, tag `v5.0.0`, published with six assets. CI green including the Alpine and Arch
+install matrix.
+
+Two notes on the cut itself:
+
+- **The local branch had diverged from `origin/main`** — 4 behind, 5 ahead, because the local
+  v4.1.0–v4.4.0 commits are different objects from the pushed ones (v4.1.0's content genuinely
+  differs; the CHANGELOG's "tag published with 4.2.0" note is the trace of that release going
+  sideways). From v4.2.0 onward the trees are byte-identical, so replaying only the v5.0.0 commit
+  onto `origin/main` produced a fast-forward with **no force push and no history rewrite**. The
+  tree hash was compared before and after the rebase and was unchanged.
+- **`git-rl` cannot be driven non-interactively.** It picks the bump type and the release
+  description through fzf. The owner ran it; the tag and push were done by hand afterwards.
+
+## Still open
+
+- **PF-BUG-006** — the `srv` cleartext password echo. Diagnosed, not fixed.
+- **PF-BUG-007** — `/sbin` and `/usr/sbin` missing from PATH under pwsh on Linux, which is why
+  `swapon` reported "not recognized".
+- The checklist's **uninstall** leg (install → use → uninstall leaves nothing) was not run
+  locally. CI's `linux` job covers it, and passed.
