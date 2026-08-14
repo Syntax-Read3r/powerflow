@@ -433,6 +433,6 @@ jobs:
         shell: pwsh
         run: ./tests/flags/run.ps1
 
-      - name: 🎯 git-rl delivers the setup walkthrough instead of "cancelled"
+      - name: 🎯 git-rl points at the setup flow instead of "cancelled", and writes nothing
         shell: pwsh
         run: ./tests/git/run.ps1

@@ -1,5 +1,5 @@
 # ==============================================================================
-# git-rl in a project that was never set up: deliver the walkthrough, don't lie
+# git-rl in a project that was never set up: report and point, never write, never lie
 # ==============================================================================
 # Reported from a real machine. Running `git-rl` in a repo with no version file and no
 # v* tag printed a small warning, dropped into the bump-type picker anyway, and — when the
@@ -7,10 +7,15 @@
 # That is false twice: no release was possible, so nothing was cancelled, and the message
 # blamed the user for backing out.
 #
-# The walkthrough for setting a project up already existed (`git-rl -h` writes it). The fix
-# routes the not-set-up state to it: write docs/git-release-help.md into the repo, say so,
-# and stop. These assertions hold that behaviour, including the two tripwires that matter:
-# the picker must never open, and nothing may prompt.
+# The correct behaviour, per the owner: say the project is not set up and point at
+# `git-rl -h`, which already owns delivering the walkthrough AND asks "are you in your
+# project folder?" before writing a byte. A first fix wrote the guide straight into the
+# current repo; that was rejected because bare `git-rl` may be run in any repo — a clone,
+# a scratch checkout — and creating files there as the side effect of a status query
+# assumes it is the project the user wants a pipeline in.
+#
+# Three tripwires hold that shape: the picker must not open, nothing may prompt, and
+# nothing may be written.
 # ==============================================================================
 
 $ErrorActionPreference = 'Stop'
@@ -29,21 +34,19 @@ function Register-PFCommand { }
 . (Join-Path $root 'components/git/release.ps1')
 
 $script:POWERFLOW_REPO = 'example/powerflow'
-$script:clipboard = $null
 
 # No version file, no tag — the exact state the report came from.
 function Get-ProjectVersion { param($RepoRoot)
     return [pscustomobject]@{ Version = '0.0.0'; Sources = @(); From = 'default' } }
 
-# The guide content, canned: the test must not depend on the network.
-function Get-GitReleaseDocs {
-    return [pscustomobject]@{ Prompt = 'CANNED SETUP PROMPT'; Manual = 'CANNED MANUAL' } }
-
-function Copy-ToClipboard { param($Text) $script:clipboard = $Text }
-
-# TRIPWIRES. Reaching either one is the old behaviour coming back.
+# TRIPWIRES. Reaching any of these is a regression:
+#   fzf                  -> the bump picker opened for an impossible release
+#   Read-Host            -> something prompted during a status report
+#   Write-GitReleaseGuide -> bare git-rl wrote into a repo nobody confirmed as the target
 function fzf { throw 'TRIPWIRE: the bump picker must not open in a project that is not set up' }
 function Read-Host { param($Prompt) throw "TRIPWIRE: nothing may prompt ($Prompt)" }
+function Write-GitReleaseGuide { param($ProjectRoot)
+    throw 'TRIPWIRE: bare git-rl must not write the guide — only git-rl -h may, after asking' }
 
 # ── a real, empty git repo ────────────────────────────────────────────────────
 $sandbox = Join-Path ([IO.Path]::GetTempPath()) "pf-rl-setup-$([guid]::NewGuid().ToString('N'))"
@@ -52,29 +55,32 @@ Push-Location $sandbox
 try {
     git init --quiet 2>$null
 
-    # ── first run: writes the walkthrough and says so ─────────────────────────
+    # ── no guide present: report, and point at git-rl -h ──────────────────────
     $out = @(Invoke-GitReleaseCommand 6>&1 2>&1 | ForEach-Object { "$_" }) -join "`n"
 
     Ok ($out -notmatch 'Release cancelled') 'must not claim a release was cancelled'
     Ok ($out -match "isn't set up for git-rl") 'must say plainly that the project is not set up'
     Ok ($out -match 'version source') 'must name what a release needs'
-    Ok ($out -match 'walkthrough .* has been written|has been written to docs/git-release-help\.md') `
-        'must inform the user the walkthrough was written'
+    Ok ($out -match 'git-rl -h') 'must point at git-rl -h, the flow that asks before writing'
 
-    $guide = Join-Path $sandbox 'docs/git-release-help.md'
-    Ok (Test-Path $guide) 'docs/git-release-help.md must exist in the project'
-    $guideText = Get-Content $guide -Raw
-    Ok ($guideText -match 'CANNED SETUP PROMPT') 'the guide must contain the AI setup prompt'
-    Ok ($guideText -match 'CANNED MANUAL') 'the guide must contain the manual'
-    Ok ($script:clipboard -eq 'CANNED SETUP PROMPT') 'the AI prompt must land on the clipboard'
+    # NOTHING may have been created. The first fix made a docs/ directory and a guide file
+    # in whatever repo the user stood in; both are asserted away.
+    Ok (-not (Test-Path (Join-Path $sandbox 'docs'))) 'must not create a docs/ directory'
+    Ok (@(Get-ChildItem $sandbox -Force | Where-Object { $_.Name -ne '.git' }).Count -eq 0) `
+        'must not create any file in the repo — this is a status report, not a delivery'
 
-    # ── second run: points at the existing file, rewrites nothing, asks nothing ──
-    $before = (Get-Item $guide).LastWriteTimeUtc
+    # ── guide already present (delivered by git-rl -h earlier): point at IT ───
+    New-Item -ItemType Directory -Path (Join-Path $sandbox 'docs') | Out-Null
+    Set-Content -Path (Join-Path $sandbox 'docs/git-release-help.md') -Value 'existing guide'
+    $before = (Get-Item (Join-Path $sandbox 'docs/git-release-help.md')).LastWriteTimeUtc
+
     $again = @(Invoke-GitReleaseCommand 6>&1 2>&1 | ForEach-Object { "$_" }) -join "`n"
 
-    Ok ($again -match 'already in this project') 'second run should point at the existing walkthrough'
-    Ok ($again -notmatch 'Release cancelled') 'second run must not claim a cancellation either'
-    Ok (((Get-Item $guide).LastWriteTimeUtc) -eq $before) 'second run must not rewrite the guide'
+    Ok ($again -match 'already in this project') 'with the guide present, point at the file'
+    Ok ($again -notmatch 'git-rl -h') 'must not send the user to rewrite a guide they already have'
+    Ok ($again -notmatch 'Release cancelled') 'still no cancellation claim'
+    Ok (((Get-Item (Join-Path $sandbox 'docs/git-release-help.md')).LastWriteTimeUtc) -eq $before) `
+        'the existing guide must not be touched'
 }
 finally {
     Pop-Location

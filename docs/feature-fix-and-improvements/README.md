@@ -94,7 +94,7 @@ the report, because the tree moves and a report can go stale.
 | — | PF-FEAT-004 | FEATURE | Linux/VM identity + storage view in `pc-whoami` | open — overlaps `storage`, see below |
 | — | PF-FEAT-005 | FEATURE | safe Linux hostname change with `/etc/hosts` sync | open |
 | — | PF-BUG-006 | BUG | `srv <name>` echoes the typed password in cleartext | open — **root cause found**, see below |
-| — | PF-UX-005 | UX | `git-rl` in an un-set-up project said "Release cancelled" | **fixed** — writes the setup walkthrough into the project and says so; picker never opens. `tests/git/release-setup.ps1` |
+| — | PF-UX-005 | UX | `git-rl` in an un-set-up project said "Release cancelled" | **fixed** — reports what is missing and points at `git-rl -h` (which asks before writing); bare `git-rl` writes nothing, the picker never opens. `tests/git/release-setup.ps1` |
 
 PF-FEAT-004, PF-FEAT-005 and PF-BUG-006 were added after the implementation order was written
 and are not in it yet.

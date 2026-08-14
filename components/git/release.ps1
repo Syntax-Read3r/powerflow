@@ -233,20 +233,22 @@ function Invoke-GitReleaseCommand {
     $versionSources = @($resolved.Sources)
     $versionSource  = $resolved.From
 
-    # ── Not set up: write the walkthrough instead of pretending a release exists ──
+    # ── Not set up: say so and hand over to `git-rl -h` ──────────────────────────
     # 'default' means Get-ProjectVersion found NO version file and NO v* tag — this project
     # has never been set up for releases, and git-rl's own setup guide says it needs a
     # version source, a parseable CHANGELOG, and a v* tag pipeline before it can work.
     #
-    # The old behaviour warned "starting from v0.0.0" and dropped into the bump picker
-    # anyway. Escaping that picker printed "❌ Release cancelled" — a lie twice over: no
-    # release was possible, so nothing was cancelled, and the message blamed the user for
-    # backing out of a flow that could never have succeeded. The useful thing to do here is
-    # hand over the walkthrough that already exists, so that is what happens.
+    # The original behaviour warned "starting from v0.0.0", opened the bump picker anyway,
+    # and printed "❌ Release cancelled" when the user escaped — a lie twice over: no
+    # release was possible, so nothing was cancelled.
     #
-    # Unlike `git-rl -h` (which may be run from anywhere, so it asks "are you in your
-    # project folder?" first), running bare `git-rl` inside a repo IS the answer to that
-    # question — the guide goes to this repo's root without asking again.
+    # A first fix wrote the setup guide straight into THIS repo's docs/. The owner rejected
+    # that, and the reason is worth keeping: bare `git-rl` may be run in any repo — a
+    # clone, a scratch checkout, someone else's project — and creating files in it as the
+    # side effect of what amounted to a status query assumes this repo is the one the user
+    # wants a release pipeline in. `git-rl -h` already exists for delivering the guide, and
+    # it ASKS "are you in your project folder?" before writing a byte. So this branch only
+    # reports and points; the writing stays behind the flow that confirms intent.
     if ($versionSource -eq 'default') {
         Write-Host "⚠️  This project isn't set up for git-rl yet — no version file and no v* tag." -ForegroundColor Yellow
         Write-Host "   A release needs: a version source · a parseable CHANGELOG · a v* tag pipeline" -ForegroundColor DarkGray
@@ -254,18 +256,17 @@ function Invoke-GitReleaseCommand {
 
         $guidePath = Join-Path $repoRoot 'docs/git-release-help.md'
         if (Test-Path $guidePath) {
-            # Already delivered on a previous run — point at it rather than nagging about
-            # overwriting a file the user may have edited.
+            # The walkthrough was already delivered here on some earlier run — pointing at
+            # the file beats pointing at the command that would ask to overwrite it.
             Write-Host "📖 The setup walkthrough is already in this project: docs/git-release-help.md" -ForegroundColor Cyan
             Write-Host "   Paste its section-1 prompt into an AI assistant open in this repo," -ForegroundColor DarkGray
             Write-Host "   let it build the pipeline, then run git-rl again." -ForegroundColor DarkGray
         }
-        elseif (Write-GitReleaseGuide -ProjectRoot $repoRoot) {
-            Write-Host ""
-            Write-Host "📖 A walkthrough on setting up git-rl has been written to docs/git-release-help.md." -ForegroundColor Cyan
-            Write-Host "   Set the project up (the AI prompt is on your clipboard), then run git-rl again." -ForegroundColor DarkGray
+        else {
+            Write-Host "💡 Run: git-rl -h" -ForegroundColor Cyan
+            Write-Host "   It confirms you're in the right folder, writes the setup walkthrough" -ForegroundColor DarkGray
+            Write-Host "   (docs/git-release-help.md), and puts the AI setup prompt on your clipboard." -ForegroundColor DarkGray
         }
-        # Write-GitReleaseGuide prints its own failure path (offline: the GitHub URL).
         return
     }
 

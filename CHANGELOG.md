@@ -6,16 +6,18 @@ All notable changes to PowerFlow will be documented in this file.
 
 ### Fixed
 
-- 🎯 **`git-rl` in a project that was never set up now delivers the walkthrough instead of
-  lying.** With no version file and no `v*` tag it used to warn, open the bump picker anyway,
-  and — when the user escaped a release that could never have worked — print
-  `❌ Release cancelled`. False twice: no release was possible, and the message blamed the user
-  for backing out. Now it says plainly that the project isn't set up, writes the existing
-  setup walkthrough into the project as `docs/git-release-help.md` (the same document
-  `git-rl -h` produces), puts the AI setup prompt on the clipboard, and says so. A second run
-  points at the existing file rather than nagging about overwriting it. Reported from a real
-  machine; regression at `tests/git/release-setup.ps1`, including tripwires asserting the
-  picker never opens and nothing prompts in that state.
+- 🎯 **`git-rl` in a project that was never set up now says so and points at `git-rl -h`,
+  instead of lying.** With no version file and no `v*` tag it used to warn, open the bump
+  picker anyway, and — when the user escaped a release that could never have worked — print
+  `❌ Release cancelled`. False twice: no release was possible, and the message blamed the
+  user for backing out. Now it reports what is missing and hands over to `git-rl -h`, which
+  already owns delivering the setup walkthrough **and asks "are you in your project folder?"
+  before writing a byte**. Bare `git-rl` deliberately writes nothing: it may be run in any
+  repo — a clone, a scratch checkout — and creating files there as the side effect of a
+  status report would assume it is the project the user wants a pipeline in. If the
+  walkthrough is already present (`docs/git-release-help.md`), it points at the file instead.
+  Reported from a real machine; regression at `tests/git/release-setup.ps1`, with tripwires
+  asserting the picker never opens, nothing prompts, and nothing is written.
 
 ## [5.0.0] - 2026-08-11
 
