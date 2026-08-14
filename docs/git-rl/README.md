@@ -8,7 +8,7 @@ It only works in a repository that is **set up for it**. This directory explains
 
 | File | Purpose |
 |---|---|
-| [SETUP-PROMPT.md](SETUP-PROMPT.md) | The copy-pasteable prompt. `git-rl -h` prints it. Paste it into an AI in the repo you want to set up. |
+| [SETUP-PROMPT.md](SETUP-PROMPT.md) | The setup prompt. `git-rl -h` copies it to your clipboard and embeds it in the guide it writes into your project. |
 | [../git-rl-project-setup.md](../git-rl-project-setup.md) | The deep technical reference — every workflow, field by field. |
 | This file | What the setup *is*, and how to run a release **by hand** if the tooling is unavailable. |
 
@@ -17,7 +17,7 @@ It only works in a repository that is **set up for it**. This directory explains
 ## Quick start
 
 ```powershell
-git-rl -h        # print the setup prompt (also copied to your clipboard)
+git-rl -h        # confirm the folder, write docs/git-release-help.md into it, copy the prompt
 ```
 
 Paste it into an AI assistant that is open in the target repository. It will create the

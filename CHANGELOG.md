@@ -2,9 +2,15 @@
 
 All notable changes to PowerFlow will be documented in this file.
 
-## [Unreleased]
+## [5.0.1] - 2026-08-14
+
+Two field reports on `git-rl`, both about **what it said rather than what it did** — the
+command was correct each time and the sentence was not. A tool that does the right thing while
+describing it badly is, from the user's side, indistinguishable from one that does the wrong
+thing.
 
 ### Fixed
+
 - 🗣️ **`git-rl -h` now says the walkthrough is already in your project, in those words.** The
   command worked — answering "yes" wrote `docs/git-release-help.md` every time — but the
   messaging led with the clipboard ("paste the prompt into your AI assistant"), which read as
@@ -27,6 +33,73 @@ All notable changes to PowerFlow will be documented in this file.
   walkthrough is already present (`docs/git-release-help.md`), it points at the file instead.
   Reported from a real machine; regression at `tests/git/release-setup.ps1`, with tripwires
   asserting the picker never opens, nothing prompts, and nothing is written.
+
+- 📝 **Corrected a false claim in the v5.0.0 notes: the Linux CI job does exist.** v5.0.0 said
+  `CLAUDE.md` documented a Linux job that did not, and that the workflow "has only ever had
+  one, on `windows-latest`". Wrong. `release-validate-linux.yml` runs a `distros` matrix
+  (Alpine, Arch, …) that installs PowerFlow, loads the profile, and asserts
+  `rm`/`mv`/`cp`/`cat`/`grep` resolve to `Application` and that `del`/`mvf`/`nav`/`git-a`/
+  `pwsh-h` exist — precisely what `CLAUDE.md` describes. Only one of the seven workflow files
+  had been searched before generalising about all of them. Corrected in `CHANGELOG.md`,
+  `CLAUDE.md`, the session log, `tests/linux/README.md`, `tests/files/command-names.ps1` and
+  the gate comment in `release-validate.yml`. The two static gates added in v5.0.0 are
+  unaffected and stay — they fail on the offending *name*, in the file that defines it, before
+  the Linux leg installs anything.
+
+- 🔒 **`.claude/settings.json` is now git-ignored, not merely untracked.** It was swept into the
+  tree by a `git add -A` that ran *after* the release privacy scan, carrying machine-absolute
+  paths with the real username. Untracking it was not enough: the tool AUTO-WRITES permission
+  grants into that file as they are approved, so it regenerated and was caught by the scan a
+  second time while preparing this release. A file that rewrites itself with local paths cannot
+  be a shared file, whatever it is named, so `.gitignore` now covers it alongside
+  `settings.local.json`. Entries moved to the already-ignored local file.
+
+- 📰 **A release can no longer publish generic boilerplate as its notes.** The release body is
+  extracted from the CHANGELOG section matching the tag; if that section was missing,
+  `release-generate-scripts.yml` silently substituted *"Enhanced terminal profile — smart
+  navigation, Git workflows..."* with no warning and no failure. A new gate fails the release
+  when the CHANGELOG has no section for the tag, when the section carries no ISO date, or when
+  an `[Unreleased]` header is still present at tag time — the last being the exact condition
+  that let a failed v3.3.2 sit unnoticed for three days.
+
+### Fixed (documentation accuracy)
+
+An audit of the tree before this release, run with independent reviewers and every finding
+verified against the code, turned up eleven documented claims that contradicted it. All are
+corrected here.
+
+- **The v5.0.0 correction had missed a file.** `tests/linux/coreutil-resolution.ps1` still
+  carried the false *"there has never been a Linux job"* — and it is the file `CLAUDE.md` tells
+  the reader to run, so the correction had landed everywhere except its own destination.
+- **`README.md` documented `git-mrb`, a command that has never existed** in any commit on any
+  branch. It was listed between two working commands in the Git table since v1.0.0. The
+  help-registry gate cannot catch this: it checks defined→registered, so a name that was never
+  defined is invisible to it.
+- **`docs/release-checklist.md` still told the maintainer to update a hardcoded adapter regex**
+  that no longer exists — the gate was rewritten to derive the contract in v5.0.0. The item now
+  says there is nothing to update by hand, and keeps the incident as resolved history.
+- **The intake index disagreed with itself:** the header said "14 of 17 closed" above a table
+  showing 12 closed and 5 open. And PF-BUG-002's section still asked for an evidence run,
+  months after its root cause was found and fixed.
+- **`git-bD` was still named in `COMPONENTS.md` and in `branches.ps1`'s own header** — the very
+  file that renamed it to `git-bd-force`. That name must never come back: PowerShell's function
+  table is case-insensitive, so `git-bd` and `git-bD` were one function and the force-delete
+  silently replaced the documented-safe one.
+- **The `git-rl` setup docs described behaviour that changed in this release** — that `-h`
+  "prints the prompt" (it writes a guide into the project, after confirming the folder), and
+  that a project with no version source "falls back to 0.0.0 with a warning" (it now stops and
+  points at `-h`).
+- **Two historical CHANGELOG dates were wrong**: `[1.0.4]` carried the file's only non-ISO date
+  and `[1.0.5]` was six months early. Both now match their tags.
+
+### Added
+
+- 🧪 **`tests/git/` — 19 assertions over the `git-rl` setup path,** wired into the release
+  workflow. Built around **tripwires** rather than assertions alone: stubs for `fzf`,
+  `Read-Host` and `Write-GitReleaseGuide` all *throw*, so the suite fails loudly if bare
+  `git-rl` ever opens the picker, prompts, or writes a file again. A separate probe drives the
+  real `git-rl -h` flow headless and asserts the delivered-first wording; a fourth check proves
+  a **set-up** project still reaches the picker, so the fix cannot have over-corrected.
 
 ## [5.0.0] - 2026-08-11
 
@@ -2393,7 +2466,7 @@ The profile is no longer a single monolithic file. `Microsoft.PowerShell_profile
 - Release workflow updated: version validation now checks `config/PowerFlow.settings.ps1`; releases now ship a `powerflow-v2.0.0.zip` archive containing the full component tree
 - Install script updated to download and extract the zip archive into the profile directory
 
-## [1.0.5] - 2025-01-23
+## [1.0.5] - 2025-07-31
 
 ### Added
 - 🚀 **Automatic GitHub Repository Creation**: `git-a` now creates remote repositories on-the-fly
@@ -2436,7 +2509,7 @@ The profile is no longer a single monolithic file. `Microsoft.PowerShell_profile
   - **Enhanced patterns**: Better regex patterns for detecting transitions between words and acronyms
   - **Examples**: "MyProject" → "my-project", "XMLParser" → "xml-parser", "back" → "back" (not "b-a-c-k")
 
-## [1.0.4] - 10-07-2025
+## [1.0.4] - 2025-07-05
 
 ### Added
 - 🚀 **Professional Next.js Project Creator**: `create-next` / `create-n` command

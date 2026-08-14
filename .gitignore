@@ -1,7 +1,17 @@
-# Claude Code machine-local settings — permission grants tied to one machine.
-# Never commit: they leak local paths (a username) and are useless to anyone else.
-# The shared/team file, .claude/settings.json, is fine to track.
+# Claude Code settings — BOTH files, deliberately.
+#
+# settings.local.json was always machine-local. settings.json is nominally the shared/team
+# file and used to be tracked, but in practice the tool AUTO-WRITES permission grants into it
+# as they are approved, and those grants embed absolute paths — `C:\Users\<name>\...` and
+# `additionalDirectories` entries. It has therefore leaked a username into a commit twice:
+# once swept in by a `git add -A` that ran after the release privacy scan, and again while
+# fixing that, because the file had regenerated in between.
+#
+# A file that rewrites itself with local paths cannot be a shared file, whatever it is called.
+# If a genuinely shared, path-free team config is ever wanted, add it under another name and
+# keep it hand-edited.
 .claude/settings.local.json
+.claude/settings.json
 
 # Stray docker-pull output from interactive sessions
 pull_*.log

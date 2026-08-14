@@ -84,6 +84,52 @@ jobs:
 
           Write-Host "✅ Version validated"
 
+      # The release BODY comes from the CHANGELOG section matching the tag. If that section is
+      # missing, release-generate-scripts.yml silently substitutes generic boilerplate
+      # ("Enhanced terminal profile — smart navigation, Git workflows...") — no warning, no
+      # failure. The release publishes green and says nothing about what shipped, and nobody
+      # finds out until they read it.
+      #
+      # This is the same shape as the incidents the release checklist already records: a step
+      # that degrades quietly is worse than one that fails, because a failure gets fixed.
+      - name: 📰 CHANGELOG has a section for this tag
+        shell: pwsh
+        run: |
+          $version = "${{ steps.parse_tag.outputs.version }}"
+          if (-not (Test-Path 'CHANGELOG.md')) {
+            Write-Error "❌ CHANGELOG.md is missing — the release body would be generic boilerplate"
+            exit 1
+          }
+
+          $log = Get-Content 'CHANGELOG.md' -Raw
+          $escaped = [regex]::Escape($version)
+
+          if ($log -notmatch "(?m)^## \[$escaped\]") {
+            Write-Error "❌ CHANGELOG.md has no '## [$version]' section — the published release notes would silently fall back to boilerplate."
+            Write-Host "   Sections present (newest first):" -ForegroundColor DarkGray
+            [regex]::Matches($log, '(?m)^## \[([^\]]+)\][^\r\n]*') |
+              Select-Object -First 5 | ForEach-Object { Write-Host "     $($_.Value)" }
+            exit 1
+          }
+
+          # An undated heading means the section was never closed out for release.
+          if ($log -notmatch "(?m)^## \[$escaped\] - \d{4}-\d{2}-\d{2}\s*$") {
+            Write-Error "❌ '## [$version]' exists but carries no ISO date (YYYY-MM-DD). Date the section before tagging."
+            exit 1
+          }
+
+          # A leftover [Unreleased] at release time means work was documented but not moved
+          # into the released section - the 3.3.2 incident, where a failed release sat
+          # unnoticed for three days behind a stale header.
+          if ($log -match '(?m)^## \[Unreleased\]') {
+            Write-Error "❌ CHANGELOG.md still has an [Unreleased] section while cutting $version. Fold it into the released section or date it."
+            exit 1
+          }
+
+          $body = [regex]::Match($log, "(?s)## \[$escaped\].*?(?=## \[|\z)").Value
+          $body = ($body -replace "## \[$escaped\][^\r\n]*[\r\n]*", '').Trim()
+          Write-Host "✅ CHANGELOG section for $version found — $($body.Length) characters will become the release body"
+
       - name: 🧪 Test Bootloader Syntax
         shell: pwsh
         run: |

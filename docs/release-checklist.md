@@ -24,10 +24,17 @@ nobody relitigates the item.**
   ```
   *Incident: `$(?:` inside a double-quoted string parsed as a subexpression and killed a whole file.*
 
-- [ ] **Adapter parity** — every contract function exists on BOTH platforms, **and any NEW
-  contract name is added to the hardcoded regex in `release-validate.yml`** (it is NOT
-  picked up automatically):
-  *Incident: the 3.4.0 plan doc assumed the parity list was automatic. It is a hardcoded regex.*
+- [ ] **Adapter parity** — every contract function exists on BOTH platforms. **Nothing to
+  update by hand:** the gate is derived, computing the contract as the set of adapter-defined
+  functions that `components/` actually calls. It also fails on a Verb-Noun call that resolves
+  nowhere. Run it locally:
+  ```powershell
+  pwsh -File tests/gates.ps1 -Filter Adapter
+  ```
+  *Incident (resolved): this used to be a hardcoded ~120-name regex, and it drifted — two
+  container functions shipped uncovered because a human had to remember to add them. This very
+  checklist item warned that the list was not automatic, which is exactly why the gate was
+  rewritten to derive it: a rule that depends on remembering is a rule that eventually fails.*
 
 - [ ] **New command shadows nothing on Linux** — `rm/mv/cp/cat/mkdir/touch/rmdir/which/grep`
   must resolve to `Application`, and any new function wrapping a real command name is wrong

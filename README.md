@@ -494,11 +494,11 @@ kernel-backed pseudo-filesystem to navigate to. On Windows the folders are read 
 | Command           | Description                                          |
 | ----------------- | ---------------------------------------------------- |
 | `git-a`           | Beautiful add → commit → push workflow               |
-| `git-rl`          | Interactive release: bump version, commit, tag, push. Works in **any** project — reads `package.json`, `pyproject.toml`, `Cargo.toml`, `*.csproj`, `build.gradle`, `VERSION`, and keeps multiple version files in sync |
-| `git-rl -h`       | Set up `git-rl` in **another** project — writes a guide into it and copies an AI setup prompt to your clipboard |
+| `git-rl`          | Interactive release: bump version, commit, tag, push. Reads any project's own version file — `package.json`, `pyproject.toml`, `Cargo.toml`, `*.csproj`, `build.gradle`, `VERSION` — and keeps several in sync. In a project **not yet set up** for releases it says so and points at `git-rl -h`, writing nothing |
+| `git-rl -h`       | Set up `git-rl` in **another** project. Confirms you are in the right folder first, then writes the walkthrough to `docs/git-release-help.md` **in that project** and copies an AI setup prompt to your clipboard. With an assistant open in the repo there is nothing to paste — point it at the file |
 | `git-rb <commit>` | Create rollback branch from commit                   |
 | `git-rba`         | Rollback branch add-commit-push                      |
-| `git-mrb`         | Merge rollback branch to main                        |
+
 | `git-l`           | Interactive log viewer with actions                  |
 | `git-b`           | Branch picker and manager                            |
 | `git-s`           | Interactive status viewer                            |

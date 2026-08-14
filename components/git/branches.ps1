@@ -4,7 +4,7 @@
 # Domain   : Git
 # File     : components/git/branches.ps1
 # Purpose  : Interactive branch creation, switching, and deletion with fzf interface
-# Functions: git-branch, Invoke-DeleteBranch, git-b, git-cm, git-bd, git-bD, git-c.sb
+# Functions: git-branch, Invoke-DeleteBranch, git-b, git-cm, git-bd, git-bd-force, git-c.sb
 # Depends  : none
 # ==============================================================================
 

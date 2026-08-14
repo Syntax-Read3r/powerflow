@@ -9,7 +9,7 @@
 >
 > | | |
 > |---|---|
-> | [`docs/git-rl/SETUP-PROMPT.md`](git-rl/SETUP-PROMPT.md) | The prompt `git-rl -h` prints. |
+> | [`docs/git-rl/SETUP-PROMPT.md`](git-rl/SETUP-PROMPT.md) | The prompt `git-rl -h` copies to your clipboard and embeds in the guide. |
 > | [`docs/git-rl/README.md`](git-rl/README.md) | The short manual — releasing by hand, aborting a bad release. |
 > | **This file** | The deep technical reference: every workflow, field by field. |
 
@@ -34,7 +34,7 @@ Both parts must be set up for the full system to work. The sections below descri
 |----------|--------|-------------|
 | 1 | `config/PowerFlow.settings.ps1` | File exists AND contains `$script:POWERFLOW_VERSION = "X.Y.Z"` |
 | 2 | Latest git tag | A tag matching `vX.Y.Z` exists |
-| 3 | Default | Falls back to `0.0.0` (with a warning) |
+| 3 | Neither | **Stops.** `git-rl` reports that the project is not set up and points at `git-rl -h`, writing nothing. It does not fall back to `0.0.0` and open the bump picker |
 
 **Priority 1 is the recommended setup** — it auto-updates the version file as part of the release commit. Priority 2 (tag-only) works but leaves no version in source files.
 

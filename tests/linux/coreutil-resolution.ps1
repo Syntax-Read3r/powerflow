@@ -3,8 +3,12 @@
 # coreutils reachable?
 # ==============================================================================
 # Runs INSIDE a Linux container with the working tree mounted at /pf. This is the check the
-# deleted bindings file used to make at runtime, and the check CLAUDE.md claimed CI performed
-# (it did not — there has never been a Linux job).
+# deleted platform/linux/bindings.ps1 used to make at runtime.
+#
+# CI covers it too, in release-validate-linux.yml: a `distros` matrix (Debian, Ubuntu, Fedora,
+# Arch, openSUSE, Alpine) and a dedicated `linux` job, both asserting these names resolve to
+# real binaries. This script is the same check run LOCALLY, before pushing — a coreutil
+# regression found here costs a minute, found in a release run it costs the release.
 # ==============================================================================
 
 $ErrorActionPreference = 'Continue'

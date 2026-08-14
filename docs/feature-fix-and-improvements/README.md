@@ -11,9 +11,10 @@ clear it** until a copy has been made and a reset is explicitly asked for.
      renaming the file to powerflow_backlog.md would remove the need, but it is the owner's file
      and the link works as-is. -->
 
-> **Where things stand:** 14 of 17 closed. Two remain gated on the flag convention
-> (PF-FEAT-001, PF-FEAT-002), and PF-BUG-006 is newly filed with a root cause but not yet fixed.
-> Each status below is verified against the current tree, not trusted from the report.
+> **Where things stand:** 12 of 17 closed. Five remain open: PF-FEAT-001 and PF-FEAT-002 (both
+> unblocked now the flag convention is decided), PF-FEAT-004, PF-FEAT-005, and PF-BUG-006 —
+> filed with a root cause but not yet fixed. Each status below is verified against the current
+> tree, not trusted from the report.
 >
 > **Three of the reported items collapsed into fewer defects than were filed.** PF-BUG-005 and
 > PF-BUG-001 were the *same* defect in two dimensions — a mandatory parameter rejecting a
@@ -184,7 +185,13 @@ lives.
 
 ## PF-BUG-002 — what is needed from you
 
-The root cause is **not** found yet, and it cannot be from here: it needs a live Proxmox. Two
+**RESOLVED — this section is kept as the diagnostic record.** The root cause was the 2000-char
+stdout truncation in `ConvertTo-PmxManagementSafeText`, which cut single-line `pvesh` JSON
+mid-token; the payload limit is now 1 MiB and diagnostics keep the 2000-char cap. No evidence
+run is needed. What follows is what was ruled out on the way there, because the eliminations are
+worth keeping.
+
+The original request read: the root cause is not found yet, and it cannot be from here — Two
 of the report's own hypotheses were ruled out first, so the search is narrower now.
 
 **Ruled out — the invocation parser.** `Get-PmxReadInvocation` was run over `--vm 102`,
