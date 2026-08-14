@@ -2,6 +2,21 @@
 
 All notable changes to PowerFlow will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- 🎯 **`git-rl` in a project that was never set up now delivers the walkthrough instead of
+  lying.** With no version file and no `v*` tag it used to warn, open the bump picker anyway,
+  and — when the user escaped a release that could never have worked — print
+  `❌ Release cancelled`. False twice: no release was possible, and the message blamed the user
+  for backing out. Now it says plainly that the project isn't set up, writes the existing
+  setup walkthrough into the project as `docs/git-release-help.md` (the same document
+  `git-rl -h` produces), puts the AI setup prompt on the clipboard, and says so. A second run
+  points at the existing file rather than nagging about overwriting it. Reported from a real
+  machine; regression at `tests/git/release-setup.ps1`, including tripwires asserting the
+  picker never opens and nothing prompts in that state.
+
 ## [5.0.0] - 2026-08-11
 
 ### Changed

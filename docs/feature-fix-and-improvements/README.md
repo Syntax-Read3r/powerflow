@@ -11,7 +11,7 @@ clear it** until a copy has been made and a reset is explicitly asked for.
      renaming the file to powerflow_backlog.md would remove the need, but it is the owner's file
      and the link works as-is. -->
 
-> **Where things stand:** 13 of 16 closed. Two remain gated on the flag convention
+> **Where things stand:** 14 of 17 closed. Two remain gated on the flag convention
 > (PF-FEAT-001, PF-FEAT-002), and PF-BUG-006 is newly filed with a root cause but not yet fixed.
 > Each status below is verified against the current tree, not trusted from the report.
 >
@@ -94,6 +94,7 @@ the report, because the tree moves and a report can go stale.
 | — | PF-FEAT-004 | FEATURE | Linux/VM identity + storage view in `pc-whoami` | open — overlaps `storage`, see below |
 | — | PF-FEAT-005 | FEATURE | safe Linux hostname change with `/etc/hosts` sync | open |
 | — | PF-BUG-006 | BUG | `srv <name>` echoes the typed password in cleartext | open — **root cause found**, see below |
+| — | PF-UX-005 | UX | `git-rl` in an un-set-up project said "Release cancelled" | **fixed** — writes the setup walkthrough into the project and says so; picker never opens. `tests/git/release-setup.ps1` |
 
 PF-FEAT-004, PF-FEAT-005 and PF-BUG-006 were added after the implementation order was written
 and are not in it yet.
@@ -106,12 +107,13 @@ Three pieces of work outside this folder change what some of these items should 
 are recorded here so an item does not get built twice or built against a convention that is
 about to change.
 
-**The flag ethos is undecided.** [docs/plan/ethos/DECISIONS.md](../plan/ethos/DECISIONS.md) has
-an unresolved choice about whether PowerFlow's own flags are `-word`, `--word`, or split by
-whether a command impersonates a native tool. Until it is settled, **PF-FEAT-001 (`rn --chmod`)
-and PF-FEAT-002 (`ls --perms`) would be inventing a spelling** — both are written with `--long`,
-which is correct for `ls` (hand-parsed) but is not yet the house rule. Worth settling the
-convention before adding two more flags to argue about.
+**The flag ethos is decided: `-x` short, `--word` long.** The owner chose Option A
+(GNU-strict) — see [docs/plan/ethos/ETHOS.md](../plan/ethos/ETHOS.md). **PF-FEAT-001
+(`rn --chmod`) and PF-FEAT-002 (`ls --perms`) are unblocked**: both are written with `--long`,
+which is now the house rule. `ls` is hand-parsed and takes it directly; `rn` has a `param()`
+block, so its flag must route through `Invoke-PFParamCommand`
+(`components/shared/flags.ps1`) — a bare `param()` block cannot bind `--word` and misbinds it
+into the next value parameter.
 
 **`rn` is proposed for rename.** The naming audit finds `rn` is one edit from `rm` and
 recommends `rename-file`. PF-FEAT-001 adds a flag to `rn`, so the two should be sequenced

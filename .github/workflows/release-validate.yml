@@ -432,3 +432,7 @@ jobs:
       - name: 🏷️ Flag convention - one dash for a letter, two for a word
         shell: pwsh
         run: ./tests/flags/run.ps1
+
+      - name: 🎯 git-rl delivers the setup walkthrough instead of "cancelled"
+        shell: pwsh
+        run: ./tests/git/run.ps1

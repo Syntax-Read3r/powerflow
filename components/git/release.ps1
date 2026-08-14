@@ -233,8 +233,40 @@ function Invoke-GitReleaseCommand {
     $versionSources = @($resolved.Sources)
     $versionSource  = $resolved.From
 
+    # ── Not set up: write the walkthrough instead of pretending a release exists ──
+    # 'default' means Get-ProjectVersion found NO version file and NO v* tag — this project
+    # has never been set up for releases, and git-rl's own setup guide says it needs a
+    # version source, a parseable CHANGELOG, and a v* tag pipeline before it can work.
+    #
+    # The old behaviour warned "starting from v0.0.0" and dropped into the bump picker
+    # anyway. Escaping that picker printed "❌ Release cancelled" — a lie twice over: no
+    # release was possible, so nothing was cancelled, and the message blamed the user for
+    # backing out of a flow that could never have succeeded. The useful thing to do here is
+    # hand over the walkthrough that already exists, so that is what happens.
+    #
+    # Unlike `git-rl -h` (which may be run from anywhere, so it asks "are you in your
+    # project folder?" first), running bare `git-rl` inside a repo IS the answer to that
+    # question — the guide goes to this repo's root without asking again.
     if ($versionSource -eq 'default') {
-        Write-Host "⚠️  No version file or tag found — starting from v0.0.0" -ForegroundColor Yellow
+        Write-Host "⚠️  This project isn't set up for git-rl yet — no version file and no v* tag." -ForegroundColor Yellow
+        Write-Host "   A release needs: a version source · a parseable CHANGELOG · a v* tag pipeline" -ForegroundColor DarkGray
+        Write-Host ""
+
+        $guidePath = Join-Path $repoRoot 'docs/git-release-help.md'
+        if (Test-Path $guidePath) {
+            # Already delivered on a previous run — point at it rather than nagging about
+            # overwriting a file the user may have edited.
+            Write-Host "📖 The setup walkthrough is already in this project: docs/git-release-help.md" -ForegroundColor Cyan
+            Write-Host "   Paste its section-1 prompt into an AI assistant open in this repo," -ForegroundColor DarkGray
+            Write-Host "   let it build the pipeline, then run git-rl again." -ForegroundColor DarkGray
+        }
+        elseif (Write-GitReleaseGuide -ProjectRoot $repoRoot) {
+            Write-Host ""
+            Write-Host "📖 A walkthrough on setting up git-rl has been written to docs/git-release-help.md." -ForegroundColor Cyan
+            Write-Host "   Set the project up (the AI prompt is on your clipboard), then run git-rl again." -ForegroundColor DarkGray
+        }
+        # Write-GitReleaseGuide prints its own failure path (offline: the GitHub URL).
+        return
     }
 
     # ── Version drift: several version files that disagree ────────────────────
