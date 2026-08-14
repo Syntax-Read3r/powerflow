@@ -39,6 +39,58 @@ $script:POWERFLOW_REPO = 'example/powerflow'
 function Get-ProjectVersion { param($RepoRoot)
     return [pscustomobject]@{ Version = '0.0.0'; Sources = @(); From = 'default' } }
 
+# The guide content, canned: no test may depend on the network.
+function Get-GitReleaseDocs {
+    return [pscustomobject]@{ Prompt = 'CANNED SETUP PROMPT'; Manual = 'CANNED MANUAL' } }
+$script:clipboard = $null
+function Copy-ToClipboard { param($Text) $script:clipboard = $Text }
+
+# Defined before EVERY section: an unexpected prompt must fail loudly, not hang a headless
+# run waiting for input that will never come.
+function Read-Host { param($Prompt) throw "TRIPWIRE: nothing may prompt ($Prompt)" }
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  A · `git-rl -h`, answered "yes": deliver, and SAY the delivery already happened
+# ══════════════════════════════════════════════════════════════════════════════
+# Second field report on this command. The guide was written correctly, but the
+# clipboard-led messaging ("paste the prompt into your AI assistant") read as though some
+# paste step was still needed to get the file into the repo — when selecting "yes" had
+# already put it there. The message must now lead with that fact, put the nothing-to-paste
+# in-repo assistant route first, and spell out that "paste" means Ctrl+V.
+#
+# fzf is stubbed to pick the first choice — the "yes" row — so the interactive flow runs
+# headless with the REAL Write-GitReleaseGuide underneath.
+function fzf { $input | Select-Object -First 1 }
+
+$sandboxA = Join-Path ([IO.Path]::GetTempPath()) "pf-rl-h-$([guid]::NewGuid().ToString('N'))"
+New-Item -ItemType Directory -Path $sandboxA | Out-Null
+Push-Location $sandboxA
+try {
+    git init --quiet 2>$null
+    $out = @(Show-GitReleaseSetupPrompt 6>&1 2>&1 | ForEach-Object { "$_" }) -join "`n"
+
+    Ok (Test-Path (Join-Path $sandboxA 'docs/git-release-help.md')) `
+        'answering yes must write docs/git-release-help.md'
+    Ok ($script:clipboard -eq 'CANNED SETUP PROMPT') 'the AI prompt must land on the clipboard'
+
+    Ok ($out -match 'walkthrough is in your project') `
+        'the message must lead with the fact the file is ALREADY in the project'
+    Ok ($out -match 'nothing to paste') `
+        'the in-repo assistant route must say nothing needs pasting'
+    Ok ($out -match 'Claude Code|IN this repo') 'the in-repo assistant route must come first and be named'
+    Ok ($out -match 'Ctrl\+V') '"paste" must be spelled out as Ctrl+V for the web-chat route'
+    Ok ($out -match 'git-rl') 'must end by pointing back at git-rl for the first release'
+    Ok ($out -notmatch 'paste it into your assistant now') `
+        'the old instruction-shaped clipboard line must not come back'
+}
+finally {
+    Pop-Location
+    Remove-Item $sandboxA -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  B · bare `git-rl` in a project that was never set up
+# ══════════════════════════════════════════════════════════════════════════════
 # TRIPWIRES. Reaching any of these is a regression:
 #   fzf                  -> the bump picker opened for an impossible release
 #   Read-Host            -> something prompted during a status report

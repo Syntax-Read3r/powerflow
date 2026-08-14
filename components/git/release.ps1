@@ -121,7 +121,9 @@ $($docs.Manual)
 
     try {
         Copy-ToClipboard $docs.Prompt
-        Write-Host "📋 The AI prompt is on your clipboard — paste it into your assistant now." -ForegroundColor Green
+        # A statement of fact, not an instruction — the caller's "Next" block explains what
+        # to do with it, and only for the web-chat route where the clipboard matters.
+        Write-Host "📋 The AI setup prompt is also on your clipboard (Ctrl+V pastes it)." -ForegroundColor Green
     } catch {
         Write-Host "💡 Open docs/git-release-help.md and copy the prompt from section 1." -ForegroundColor DarkGray
     }
@@ -192,11 +194,26 @@ function Show-GitReleaseSetupPrompt {
 
     if (-not (Write-GitReleaseGuide -ProjectRoot $cwd)) { return }
 
+    # Selecting "yes" already did the delivering — the walkthrough is IN the project now.
+    # Say that first and loudest: a real user read the old clipboard-led instructions as
+    # "some paste step is still needed to get the file into the repo" when nothing was.
+    # Then give both routes concretely, in-repo assistant first — with Claude Code or
+    # Cursor open in this repo there is nothing to paste at all, just tell it to read the
+    # file. The clipboard is the fallback for a web-chat assistant, and "paste" means
+    # Ctrl+V, which is worth spelling out because nothing on screen shows what a
+    # clipboard is holding.
     Write-Host ""
-    Write-Host "Next:" -ForegroundColor Cyan
-    Write-Host "  1. Paste the prompt into your AI assistant (it is on your clipboard)." -ForegroundColor White
-    Write-Host "  2. Let it create the version file, CHANGELOG and .github/workflows/." -ForegroundColor White
-    Write-Host "  3. Run " -NoNewline -ForegroundColor White
+    Write-Host "✅ Done — the walkthrough is in your project: docs/git-release-help.md" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Next, have an AI assistant build the pipeline. Either way works:" -ForegroundColor Cyan
+    Write-Host "  •  Assistant open IN this repo (Claude Code, Cursor):" -ForegroundColor White
+    Write-Host "       tell it:  follow docs/git-release-help.md and set this project up for git-rl" -ForegroundColor Yellow
+    Write-Host "       (nothing to paste — the file is already here)" -ForegroundColor DarkGray
+    Write-Host "  •  Assistant somewhere else (a web chat):" -ForegroundColor White
+    Write-Host "       the setup prompt is on your clipboard — click its message box and press Ctrl+V" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "It will create the version file, CHANGELOG and .github/workflows/." -ForegroundColor White
+    Write-Host "Then run " -NoNewline -ForegroundColor White
     Write-Host "git-rl" -NoNewline -ForegroundColor Yellow
     Write-Host " to cut your first release." -ForegroundColor White
     Write-Host ""

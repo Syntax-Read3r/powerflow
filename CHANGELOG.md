@@ -5,6 +5,15 @@ All notable changes to PowerFlow will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- 🗣️ **`git-rl -h` now says the walkthrough is already in your project, in those words.** The
+  command worked — answering "yes" wrote `docs/git-release-help.md` every time — but the
+  messaging led with the clipboard ("paste the prompt into your AI assistant"), which read as
+  though some paste step was still needed to get the file into the repo. Reported from a real
+  run. The message now leads with `✅ Done — the walkthrough is in your project`, puts the
+  route with an assistant open **in** the repo first ("tell it: follow docs/git-release-help.md"
+  — nothing to paste), keeps the clipboard as the web-chat route, and spells out that paste
+  means Ctrl+V. Regression in `tests/git/release-setup.ps1` drives the real flow headless and
+  asserts the wording.
 
 - 🎯 **`git-rl` in a project that was never set up now says so and points at `git-rl -h`,
   instead of lying.** With no version file and no `v*` tag it used to warn, open the bump

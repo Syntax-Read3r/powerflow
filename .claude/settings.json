@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/munya/.claude/projects/c--Users-munya-Code-Projects-Application-Windows-Application-powerflow/memory/**)",
+      "Bash(printf -- '- [Surface Existing Mechanisms Before Building]\\(surface-existing-mechanisms-before-building.md\\) — name the existing flow before implementing a sketch; bare commands report and point, never write on an unconfirmed target\\\\n')"
+    ]
+  }
+}
