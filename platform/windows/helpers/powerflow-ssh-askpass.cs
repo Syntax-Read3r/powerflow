@@ -29,6 +29,25 @@ internal static class PowerFlowSshAskPass
     [DllImport("kernel32.dll")]
     private static extern bool CloseHandle(IntPtr handle);
 
+    // ── Console input mode ───────────────────────────────────────────────────
+    // A console handle arrives with ENABLE_ECHO_INPUT and ENABLE_LINE_INPUT already ON.
+    // Without clearing them the console prints every keystroke ITSELF, so the password
+    // appeared in cleartext — and ENABLE_LINE_INPUT made ReadConsole block until Enter, so
+    // this program's own masking arrived afterwards, in a block, on the line below. Both
+    // observed symptoms came from these two flags.
+    //
+    // The Linux sibling (platform/linux/helpers/powerflow-ssh-askpass.sh) has always done
+    // this correctly: `stty -g` to save, `stty -echo` to clear, and a restore from an
+    // EXIT/HUP/INT/TERM trap. This is the same three steps in Win32 terms.
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetConsoleMode(IntPtr handle, out uint mode);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetConsoleMode(IntPtr handle, uint mode);
+
+    private const uint EnableEchoInput = 0x0004;
+    private const uint EnableLineInput = 0x0002;
+
     private static bool WriteTerminal(IntPtr output, string text)
     {
         uint written;
@@ -48,6 +67,19 @@ internal static class PowerFlowSshAskPass
             if (input != InvalidHandle) CloseHandle(input);
             if (output != InvalidHandle) CloseHandle(output);
             return 1;
+        }
+
+        // Save the mode BEFORE changing it, and only claim it is restorable if the read
+        // succeeded — restoring a mode that was never captured would set the console to 0,
+        // which is worse than leaving it alone.
+        uint originalMode;
+        bool modeSaved = GetConsoleMode(input, out originalMode);
+        if (modeSaved)
+        {
+            // Clearing ENABLE_LINE_INPUT as well as ENABLE_ECHO_INPUT is deliberate: it is
+            // what makes ReadConsole return per keystroke, so the '*' appears AS the user
+            // types rather than in a block after Enter.
+            SetConsoleMode(input, originalMode & ~(EnableEchoInput | EnableLineInput));
         }
 
         var password = new List<char>();
@@ -107,6 +139,13 @@ internal static class PowerFlowSshAskPass
         {
             for (int i = 0; i < password.Count; i++) password[i] = '\0';
             password.Clear();
+
+            // Restore BEFORE closing the handle, and on every exit path — the early returns
+            // for Ctrl+C, Ctrl+D and a failed read all pass through here. A helper that exits
+            // with echo still disabled hands back a console that looks dead: the user types
+            // and nothing appears. That is the one failure mode worse than the bug being fixed.
+            if (modeSaved) SetConsoleMode(input, originalMode);
+
             CloseHandle(input);
             CloseHandle(output);
         }

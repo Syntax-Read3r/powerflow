@@ -2,6 +2,61 @@
 
 All notable changes to PowerFlow will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- 🔐 **`srv` no longer echoes your password in cleartext (PF-BUG-006).** Reported from a real
+  connection: the typed password appeared on screen — and therefore in scrollback, screenshots
+  and any recorded session — with the masking asterisks arriving afterwards on their own line.
+
+  A Windows console handle arrives with `ENABLE_ECHO_INPUT` and `ENABLE_LINE_INPUT` already on,
+  and `platform/windows/helpers/powerflow-ssh-askpass.cs` never cleared them. The first flag
+  made the *console* print each keystroke; the second made `ReadConsole` block until Enter, so
+  the helper's own per-character masking arrived in a block afterwards. Both observed lines are
+  explained exactly by those two flags.
+
+  The helper now saves the mode, clears both flags before printing the prompt, and restores the
+  original in a `finally` — the same three steps the Linux sibling has always done with
+  `stty -g` / `stty -echo` / a trap. The restore is guarded on the save having succeeded and
+  runs before the handle closes, because a helper that exits with echo still disabled hands
+  back a console that looks dead. The compiled helper is cached and rebuilt when the source is
+  newer, so this applies on the next connection with no manual step.
+  Regression: `tests/network/askpass-echo.ps1` (23 assertions, both platforms).
+
+- 🐧 **PowerFlow replaced your entire `PATH` on Linux — a shipped bug found while fixing
+  PF-BUG-007.** In an interpolated string a colon after `$env:NAME` is read as part of the
+  *variable name*, so `"$env:PATH:$dir"` asks for an environment variable literally called
+  `PATH:`, gets nothing, and evaluates to just `$dir`. Measured:
+
+  ```powershell
+  $env:PATH = '/usr/bin:/bin'
+  $env:PATH = "$env:PATH:/home/you/.local/bin"
+  $env:PATH   # -> /home/you/.local/bin      ← everything else gone
+  ```
+
+  `config/paths.linux.ps1` had appended `~/.local/bin` in exactly that form. It escaped notice
+  because the guard only fires when the directory exists AND is missing from `PATH`: on a fresh
+  machine `~/.local/bin` is created by the dependency install, which runs *later* in the load
+  than that file — so the first session, the one people test, never triggers it. Every
+  assignment now braces the name (`${env:PATH}`), and a check in
+  `tests/linux/sbin-path.ps1` fails if the unbraced form returns.
+
+- 🔧 **`swapon`, `fdisk`, `blkid` and friends now resolve on Linux (PF-BUG-007).** Reported as
+  *"swapon: The term 'swapon' is not recognized"* while `sudo /sbin/swapon --show` worked fine.
+  The tool was never missing: it lives in `/sbin`, which Debian keeps off a normal user's
+  `PATH`. In bash this is easy to miss because `sudo` runs with root's own `secure_path`; under
+  pwsh it is not, because PowerShell resolves the command name against *your* `PATH` before
+  sudo runs at all — so it fails at the resolution step with a message that reads "not
+  installed" rather than "not on your PATH", and you go looking for a package that is already
+  there.
+
+  `/usr/local/sbin`, `/usr/sbin` and `/sbin` are now appended when they exist. **Appended, never
+  prepended:** a same-named binary earlier on your `PATH` must keep winning. Distros that merge
+  these into `/usr/bin` (Arch, recent Fedora) are unaffected — a directory that does not exist
+  is not added. Verified in a container against the reported condition, including that the
+  pre-existing `PATH` keeps its exact order and that a second profile load adds no duplicates.
+
 ## [5.0.1] - 2026-08-14
 
 Two field reports on `git-rl`, both about **what it said rather than what it did** — the
