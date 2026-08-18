@@ -1,5 +1,11 @@
 # PowerFlow — Claude Code Instructions
 
+> **Starting fresh on a new machine?** `docs/agent-memory/` holds the archived per-project
+> memory notes — the architecture rule and why it exists, the flag ethos, the convenience
+> creed, the agreed build order, and the decisions still open. Claude Code's own memory lives
+> outside the repo and does not survive a reset; that folder does, and its README has the
+> restore command. Verify anything it names still exists before acting on it.
+
 ## The Architecture Rule (read this first)
 
 PowerFlow runs on **Windows and Linux from one codebase**.
