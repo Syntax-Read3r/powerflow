@@ -652,3 +652,118 @@ function Resolve-ContainerConnectionMachine {
     if ($hit.Count) { return $hit[0] }
     return $null
 }
+
+<#
+.SYNOPSIS
+    Log lines, CAPTURED, with timestamps.
+.DESCRIPTION
+    Separate from Get-ContainerLogCommand on purpose. That one builds a command for
+    Invoke-ContainerInteractive, which deliberately does not capture output because
+    `--follow` and `exec -it` must inherit the real terminal. A cleaned, grouped view needs
+    the opposite: the lines in hand, before anything is printed.
+
+    Timestamps are always requested. They are the axis the grouping and the lifecycle
+    correlation both rely on, and a log read without them cannot answer "when did it stop".
+#>
+function Get-ContainerLogText {
+    param(
+        [Parameter(Mandatory)]$Engine,
+        [Parameter(Mandatory)]$Container,
+        [int]$Tail = 30,
+        [switch]$All
+    )
+
+    $engineArgs = @('logs', '--timestamps')
+    # `--tail all` is how both engines spell "everything"; omitting --tail is NOT the same,
+    # because compose defaults differently from a plain container.
+    if ($All) { $engineArgs += @('--tail', 'all') } else { $engineArgs += @('--tail', "$Tail") }
+    $engineArgs += $Container.Name
+
+    $raw = @(Invoke-PFContainerEngine -Engine $Engine -EngineArgs $engineArgs)
+    $ok = ($LASTEXITCODE -eq 0)
+    $lines = @($raw | ForEach-Object { "$_" -replace '[\r\n]+$', '' })
+
+    return [pscustomobject]@{
+        Success = $ok
+        Lines   = @($lines)
+        Native  = "$($Engine.Binary) " + ($engineArgs -join ' ')
+        Error   = $(if ($ok) { '' } else { ($lines -join "`n") })
+    }
+}
+
+<#
+.SYNOPSIS
+    The lifecycle fields from `inspect`, without anyone writing a Go template.
+.DESCRIPTION
+    The whole point of the readable view: `.State.ExitCode`, `.State.FinishedAt` and
+    `.Config.StopSignal` are useful and nobody remembers the paths. Read from the JSON
+    rather than `--format`, so one query answers every field instead of one per field.
+
+    Supported is false rather than throwing when inspect fails — a container that has been
+    removed between listing and inspecting is a normal race, not an error worth an
+    exception.
+#>
+function Get-ContainerInspectState {
+    param([Parameter(Mandatory)]$Engine, [Parameter(Mandatory)]$Container)
+
+    $engineArgs = @('inspect', $Container.Name)
+    $raw = @(Invoke-PFContainerEngine -Engine $Engine -EngineArgs $engineArgs)
+    $native = "$($Engine.Binary) inspect $($Container.Name)"
+    if ($LASTEXITCODE -ne 0) {
+        return [pscustomobject]@{ Supported = $false; Native = $native
+            Error = "inspect failed: $((@($raw) -join ' ').Trim())" }
+    }
+
+    $text = (@($raw) -join "`n").Trim()
+    try { $data = @($text | ConvertFrom-Json) } catch {
+        return [pscustomobject]@{ Supported = $false; Native = $native
+            Error = 'inspect returned output that is not JSON' }
+    }
+    if (-not @($data).Count) {
+        return [pscustomobject]@{ Supported = $false; Native = $native; Error = 'inspect returned no records' }
+    }
+    $record = @($data)[0]
+    $state  = $record.State
+    $config = $record.Config
+
+    # Podman and Docker disagree on capitalisation in a few places, so each field is read
+    # through a fallback rather than one spelling being assumed.
+    function Get-Field { param($Object, [string[]]$Names)
+        foreach ($n in $Names) {
+            if ($null -ne $Object -and $Object.PSObject.Properties.Name -contains $n) { return $Object.$n }
+        }
+        return $null
+    }
+
+    $exitCode = Get-Field $state @('ExitCode', 'exitCode')
+    $ports = @()
+    $portMap = Get-Field $record.NetworkSettings @('Ports', 'ports')
+    if ($portMap) {
+        foreach ($p in $portMap.PSObject.Properties) {
+            foreach ($binding in @($p.Value)) {
+                if (-not $binding) { continue }
+                $hostPort = Get-Field $binding @('HostPort', 'hostPort')
+                if ($hostPort) { $ports += "$hostPort -> $($p.Name)" }
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Supported  = $true
+        Native     = $native
+        Error      = ''
+        Image      = "$(Get-Field $config @('Image', 'image'))"
+        Status     = "$(Get-Field $state @('Status', 'status'))"
+        Running    = [bool](Get-Field $state @('Running', 'running'))
+        Paused     = [bool](Get-Field $state @('Paused', 'paused'))
+        Restarting = [bool](Get-Field $state @('Restarting', 'restarting'))
+        OOMKilled  = [bool](Get-Field $state @('OOMKilled', 'oomKilled'))
+        Dead       = [bool](Get-Field $state @('Dead', 'dead'))
+        ExitCode   = $(if ($null -ne $exitCode) { [int]$exitCode } else { $null })
+        StateError = "$(Get-Field $state @('Error', 'error'))"
+        StartedAt  = "$(Get-Field $state @('StartedAt', 'startedAt'))"
+        FinishedAt = "$(Get-Field $state @('FinishedAt', 'finishedAt'))"
+        StopSignal = "$(Get-Field $config @('StopSignal', 'stopSignal'))"
+        Ports      = @($ports)
+    }
+}

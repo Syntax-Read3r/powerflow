@@ -6,6 +6,70 @@ All notable changes to PowerFlow will be documented in this file.
 
 ### Added
 
+- 📜 **`pman logs` you can actually read, and `pman inspect` without Go templates
+  (PF-FEAT-005 b2).** The native sequence being replaced is four questions behind several
+  flags and three template property paths:
+
+  ```bash
+  podman logs --tail 30 --timestamps web-test
+  podman inspect web-test --format 'Exit={{.State.ExitCode}} Finished={{.State.FinishedAt}}'
+  podman inspect web-test --format 'StopSignal={{.Config.StopSignal}}'
+  ```
+
+  `pman logs web-test` now defaults to **timestamps on, 30 lines, tidied**, and ends with a
+  lifecycle footer so the last log lines can be correlated with how the container ended
+  without a second command:
+
+  ```
+    10:48:47  nginx 1.31.3 starting
+    10:48:47  worker processes started   · x5
+    10:48:47  GET / HTTP/1.1 200
+    10:48:47  ERROR /favicon.ico missing 404
+    10:48:47  ERROR /favicon.ico missing 404
+    10:48:47  SIGTERM received
+
+    ────────────────────────────────────────────
+    Container     web-test
+    State         exited
+    Exit          0 · clean
+    Finished      10:48:47
+    Stop signal   SIGTERM  (configured)
+  ```
+
+  **"Tidied" is deliberately weak.** Runs of *identical, adjacent* lines collapse to one row
+  with a count — nothing is reordered, nothing unique is dropped, and nothing collapses
+  across a gap. Shape-matching ("these two nginx worker lines are the same *kind* of line")
+  was rejected: it means deciding two **different** messages are equivalent, and the first
+  time that is wrong it hides the line someone was reading the log to find. Note the two
+  identical `ERROR` lines above, which stayed two lines.
+
+  **The never-collapse list**, however often a line repeats: errors, warnings, fatals,
+  panics, exceptions and stack frames, OOM kills, authentication and permission failures,
+  non-zero exits, signals, HTTP request lines, and 4xx/5xx statuses. Writing the test for
+  that list found two real holes in it — `(exception)` never matched
+  `NullPointerException` (no word boundary inside CamelCase), and the exit pattern did not
+  allow *"exited **with** code 137"*.
+
+  Escape hatches: `--raw` prints exactly what the engine printed, `-a` reads all history,
+  `--tail 100` or the positional `pman logs web-test 100` sets the depth. Not `-n` — podman's
+  own `logs -n` means `--names`, so borrowing it would build a habit that silently means
+  something else natively. **`-f` streams untouched**: timing and order are the evidence
+  while tailing, and a grouping pass cannot group what has not arrived without holding lines
+  back. The final state prints after the stream ends.
+
+  `pman inspect <name>` (or `pman show`) renders image, state, exit verdict, start/finish,
+  error, stop signal and ports; `--json` keeps the structured form. Two claims it refuses to
+  make: the stop signal is labelled **`(configured)`** — podman does not report which signal
+  actually stopped the container, so anything stronger invents a causal link out of a default
+  — and `0 · clean` only appears once the container has *finished*, because a running
+  container also has exit code 0 and calling that a clean exit describes something that has
+  not happened yet.
+
+  The human time-range grammar (`t@12:35`, `yd@23:50`) is **not** here. The item asks for it
+  to be the *shared* podman time parser rather than an event-specific one, and that parser
+  arrives with PF-FEAT-004 — writing a second copy now is the exact duplication the item
+  warns against.
+
 - 🌐 **`pmx net status` — which VMs can I actually get into, in one table (PF-FEAT-008 b2).**
   The question is asked constantly on a Proxmox box and answering it by hand is `qm list`,
   then `qm guest cmd <vmid> network-get-interfaces` once per VM, then an ssh attempt per
