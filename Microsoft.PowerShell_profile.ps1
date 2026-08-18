@@ -101,6 +101,8 @@ $_pf_components = @(
     "components\shared\strings.ps1"
     # flags.ps1 early — every command may route its flags through it.
     "components\shared\flags.ps1"
+    # educate.ps1 early too — any command may register an --educate topic.
+    "components\shared\educate.ps1"
 
     # Shell: bash builtins PowerShell lacks, plus the Linux teaching layer.
     # lessons.ps1 MUST precede teach.ps1 and brothers.ps1 — both read its data.

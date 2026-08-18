@@ -21,6 +21,11 @@ function Register-PFCommand {
 $script:PowerFlowOS = 'windows'
 
 . (Join-Path $root 'platform/windows/adapters/apps.ps1')
+# educate.ps1 is SOURCED, not stubbed. storage.ps1 registers --educate topics at load time,
+# and the profile loads educate.ps1 before it — so stubbing Register-PFEducation here would
+# let a broken topic (a missing Term, a malformed Lines array) pass a test that the real
+# runtime would reject. Sourcing it also lets the assertions below read the registry back.
+. (Join-Path $root 'components/shared/educate.ps1')
 . $componentPath
 
 # ---------------------------------------------------------------------------------
@@ -152,5 +157,79 @@ Assert-True ($storageAt -gt 0) 'storage.ps1 is not loaded by the bootloader'
 Assert-True ($appsAt -gt 0 -and $storageAt -gt $appsAt) `
     'storage.ps1 must load AFTER system/apps.ps1 - it delegates to installed-apps and disk-big'
 $assertions += 2
+
+# ---------------------------------------------------------------------------------
+# PF-FEAT-006 — `storage report`, the grouped view
+# ---------------------------------------------------------------------------------
+# It replaces five commands (lsblk, fdisk, swapon, free, cat /etc/fstab), one of which
+# wanted a password. The contract that makes that a real replacement rather than a
+# convenience wrapper: it composes ADAPTER calls, so both platforms render the same view
+# and no external binary has to be installed.
+$component = Get-Content -LiteralPath $componentPath -Raw
+$tokens = $null
+$null = [System.Management.Automation.Language.Parser]::ParseFile($componentPath, [ref]$tokens, [ref]$null)
+$code = (($tokens | Where-Object { $_.Kind -ne 'Comment' } | ForEach-Object { $_.Text }) -join ' ')
+
+Assert-True ($component -match '(?m)^function Show-StorageReport') 'storage report needs a view function'
+Assert-True (@($script:Registered | Where-Object { $_.Name -eq 'storage report' }).Count -eq 1) `
+    'storage report must be registered for pwsh-h'
+$assertions += 2
+
+# It must go through the adapters, never shell out. A component that runs `free` or `lsblk`
+# itself has broken the platform boundary AND made the view depend on procps being present.
+foreach ($call in @('Get-StorageMemory', 'Get-StorageLayout', 'Get-StorageVolume')) {
+    Assert-True ($code -match $call) "Show-StorageReport should compose $call"
+    $assertions++
+}
+foreach ($native in @('free -h', 'swapon --show', 'fdisk -l', '/proc/meminfo')) {
+    Assert-True ($code -notmatch [regex]::Escape($native)) `
+        "the component must not invoke '$native' itself - that is the adapter's job"
+    $assertions++
+}
+
+# ---------------------------------------------------------------------------------
+# PF-FEAT-007 — --educate
+# ---------------------------------------------------------------------------------
+# The flag is stripped BEFORE the verb switch. storage hand-parses its arguments, so an
+# unrecognised token falls through and is reported as "no volume or command matching
+# '--educate'" — the unbindable-token failure the flag convention exists to prevent.
+Assert-True ($code -match 'Split-PFEducateFlag') '--educate must be split out before parsing'
+# Whitespace-tolerant: $code is rebuilt by joining tokens with a space, so
+# `switch ($verb.ToLowerInvariant())` comes back as `switch ( $verb . ToLowerInvariant ( ) )`
+# and an exact-spacing IndexOf silently finds nothing — reporting a position failure that is
+# really a harness artefact.
+$splitAt = $code.IndexOf('Split-PFEducateFlag')
+$switchAt = [regex]::Match($code, 'switch\s*\(\s*\$verb').Index
+Assert-True ($splitAt -ge 0 -and $splitAt -lt $switchAt) `
+    '--educate must be stripped BEFORE the verb switch, or it reads as a volume name'
+$assertions += 2
+
+# Every topic the component asks to print must exist, or --educate silently does nothing.
+$printed = @([regex]::Matches($code, "Write-PFEducation -Topic '([^']+)'") | ForEach-Object { $_.Groups[1].Value })
+Assert-True ($printed.Count -ge 2) 'at least the overview and report views should teach'
+foreach ($topic in $printed) {
+    Assert-True (Test-PFEducationTopic -Topic $topic) "the topic '$topic' is printed but never registered"
+    $assertions++
+}
+$assertions++
+
+# The lesson's shape is the contract: an analogy gives the reader somewhere to put the facts,
+# and each line decodes something actually on screen. A topic that drifts into general theory
+# has become documentation, which belongs in `lesson`.
+foreach ($topic in (Get-PFEducationTopics)) {
+    $entry = $script:PF_Education[$topic]
+    Assert-True ([bool]$entry.Analogy) "topic '$topic' should open with an analogy"
+    Assert-True (@($entry.Lines).Count -ge 3) "topic '$topic' should decode at least three things"
+    foreach ($line in $entry.Lines) {
+        Assert-True ([bool]$line.Term) "every line in '$topic' needs a Term"
+        Assert-True ([bool]$line.Means) "every line in '$topic' needs a Means"
+        Assert-True ($line.Means.Trim().EndsWith('.')) `
+            "'$($line.Term)' in '$topic' should be one sentence ending in a full stop"
+        Assert-True ($line.Means.Length -le 130) `
+            "'$($line.Term)' in '$topic' is $($line.Means.Length) chars - keep it scannable"
+        $assertions += 4
+    }
+    $assertions += 2
+}
 
 Write-Host "  storage behaviour: $assertions assertions passed" -ForegroundColor Green

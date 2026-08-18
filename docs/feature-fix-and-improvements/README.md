@@ -11,7 +11,7 @@ clear it** until a copy has been made and a reset is explicitly asked for.
      renaming the file to powerflow_backlog.md would remove the need, but it is the owner's file
      and the link works as-is. -->
 
-> **Where things stand:** 14 of 18 closed. Four remain open: PF-FEAT-001 and PF-FEAT-002 (both
+> **Where things stand:** 16 of 20 closed. Four remain open: PF-FEAT-001 and PF-FEAT-002 (both
 > unblocked now the flag convention is decided), PF-FEAT-004 and PF-FEAT-005. Each status below
 > is verified against the current tree, not trusted from the report.
 >
@@ -95,6 +95,8 @@ the report, because the tree moves and a report can go stale.
 | — | PF-FEAT-005 | FEATURE | safe Linux hostname change with `/etc/hosts` sync | open |
 | — | PF-BUG-006 | BUG | `srv <name>` echoes the typed password in cleartext | **fixed** — the Windows askpass helper never cleared `ENABLE_ECHO_INPUT`/`ENABLE_LINE_INPUT`; both are now cleared before the prompt and the original mode restored in `finally`. `tests/network/askpass-echo.ps1` |
 | — | PF-BUG-007 | BUG | `swapon` "not recognized" under pwsh on Linux | **fixed** — `/usr/local/sbin`, `/usr/sbin`, `/sbin` appended when present. Found a second, worse bug on the way: `"$env:PATH:$dir"` was REPLACING PATH, not appending. `tests/linux/sbin-path.ps1` |
+| — | PF-FEAT-006 | FEATURE | one grouped storage/memory diagnostic instead of five commands | **done** — `storage report`: volumes, memory, swap and disk layout, read-only and no sudo. Composed from adapters, so it needs neither procps nor lsblk to render the rest. `tests/linux/storage-report.ps1` |
+| — | PF-FEAT-007 | FEATURE | `--educate` footer explaining the output in plain words | **done** — analogy then one line per element, after the output and opt-in. `components/shared/educate.ps1`; shape enforced by `tests/storage/storage-behaviour.ps1` |
 | — | PF-UX-005 | UX | `git-rl` in an un-set-up project said "Release cancelled" | **fixed** — reports what is missing and points at `git-rl -h` (which asks before writing); bare `git-rl` writes nothing, the picker never opens. `tests/git/release-setup.ps1` |
 
 PF-FEAT-004, PF-FEAT-005 and PF-BUG-006 were added after the implementation order was written

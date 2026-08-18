@@ -2,6 +2,60 @@
 
 All notable changes to PowerFlow will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- 🗄️ **`storage report` — one read-only view instead of five commands.** The sequence an admin
+  runs on a fresh box to answer a single question ("how is this laid out, and is anything under
+  pressure?") was:
+
+  ```bash
+  lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINTS
+  sudo fdisk -l /dev/sda
+  swapon --show
+  free -h
+  cat /etc/fstab
+  ```
+
+  `storage report` is all of it: mounted volumes fullest-first, RAM with cache called out,
+  swap (or the pagefile on Windows) with each area listed, and the physical disk/partition
+  layout. **It needs no sudo** — everything comes from `/proc` and `lsblk --json` on Linux and
+  from CIM on Windows, which is deliberate: a diagnostic that asks for a password is one people
+  stop running.
+
+  It is not a wrapper that shells out to those five. Each section is built from the adapter
+  contract (`Get-StorageMemory`, `Get-StorageLayout`, `Get-StorageVolume`), so the same view
+  renders on both platforms and neither `procps` nor `lsblk` needs to be installed for the rest
+  to work — a missing tool degrades that section and says why, rather than failing the command.
+
+  Cache gets its own line because it is the most misread number on the screen: it looks like
+  consumed memory and is handed straight back the moment anything asks for it.
+
+- 🎓 **`--educate` — a plain-English footer explaining what you are looking at.** Modelled on a
+  walkthrough the owner wrote for `ss -tulpn`: an analogy first, so there is somewhere to put
+  the facts, then one line per element actually on screen.
+
+  ```
+  ─── what you are looking at ─────────────────────────────────
+  Think of the machine as a building: the volumes are rooms and how full they are, memory
+  is the desk space being worked on right now, and the layout is the floor plan underneath.
+
+  MOUNTED   Filesystems you can actually write to, fullest first.
+  cache     Memory holding recently-read files. It counts as used but is given back on demand.
+  swap      Disk standing in for RAM — swap on Linux, pagefile on Windows.
+  ```
+
+  Four rules the mechanism enforces, because the goal is a reliable teaching voice rather than
+  occasional prose: the footer comes **after** the output (so an expert ignores it by not
+  reading down, instead of scrolling past a lesson to reach their data), it is opt-in, every
+  line is one sentence under ~130 characters, and it explains what is **on screen** rather than
+  drifting into theory — that is what `lesson <command>` is for.
+
+  Available on `storage` and `storage report` today; `Register-PFEducation` sits beside the
+  view it explains, so a topic moves with its code instead of rotting in a doc nobody edits in
+  the same commit.
+
 ## [5.0.2] - 2026-08-14
 
 ### Fixed

@@ -94,6 +94,7 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `components/core/dependencies.ps1` | Core | `Get-RequiredTools`, `Initialize-Dependencies`, `Check-PowerShellUpdates` |
 | `components/core/recovery.ps1` | Core | `pwsh-recovery`, `powerflow-uninstall` |
 | `components/shared/strings.ps1` | Shared | `Convert-ToKebabCase`, `Convert-ToSnakeCase`, `Convert-ToPascalCase`, `Convert-ToCamelCase` |
+| `components/shared/educate.ps1` | Both | `Register-PFEducation`, `Write-PFEducation`, `Split-PFEducateFlag`, `Test-PFEducationTopic`, `Get-PFEducationTopics` — the `--educate` footer. Analogy first, then one line per element on screen. Prints **after** the output, opt-in only, and a topic is registered beside the view it explains so the two move together |
 | `components/shared/flags.ps1` | Both | `Invoke-PFParamCommand`, `ConvertTo-PFCanonicalFlags`, `Write-PFFlagDeprecation`, `Get-PFFlagSuggestion`, `ConvertTo-PFKebab` — **the one place the flag convention is enforced**¹¹. Loads early; every command may route through it |
 | `components/shell/bash-compat.ps1` | Shell | `export`, `unset`, `source`, `alias`¹, `unalias`, `jobs`, `fg`, `bg` — the bash builtins PowerShell lacks |
 | `components/shell/history.ps1` | Shell | `history`, `Get-LastCommand`, `Get-LastArg` + PSReadLine handlers for **`!!`** and **`!$`** |

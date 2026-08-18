@@ -20,6 +20,27 @@
 # ==============================================================================
 
 $ErrorActionPreference = 'Continue'
+
+# ── find the profile, wherever this is running ────────────────────────────────
+# Three homes, deliberately in this order:
+#   /pf                     a container with the working tree mounted (local runs)
+#   $HOME/.config/...       the INSTALLED profile (CI, after install.sh)
+#   ../../ from this file   the repo itself, run in place
+# CI must exercise the installed copy, and a local container run must exercise the working
+# tree — a hardcoded path can only ever serve one of those.
+$profileCandidates = @(
+    '/pf/Microsoft.PowerShell_profile.ps1'
+    (Join-Path $HOME '.config/powershell/Microsoft.PowerShell_profile.ps1')
+    (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'Microsoft.PowerShell_profile.ps1')
+)
+$profilePath = $profileCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+if (-not $profilePath) {
+    Write-Host "could not find a PowerFlow profile in any of:"
+    $profileCandidates | ForEach-Object { Write-Host "   $_" }
+    exit 1
+}
+$pfRoot = Split-Path $profilePath -Parent
+Write-Host "using profile: $profilePath"
 $fail = 0
 function Ok([bool]$c, [string]$m, [string]$d = '') {
     if (-not $c) { $script:fail++ }
@@ -46,7 +67,7 @@ if (Test-Path '/usr/sbin/swapon') {
     Ok ($null -eq $swaponBefore) 'precondition: swapon is NOT resolvable before the profile loads'
 }
 
-. /pf/Microsoft.PowerShell_profile.ps1 *> $null
+. $profilePath *> $null
 
 Write-Host ''
 Write-Host "-- the admin directories are on PATH afterwards ---------------"
@@ -99,7 +120,7 @@ foreach ($dir in @('/usr/local/sbin', '/usr/sbin', '/sbin')) {
 
 Write-Host ''
 Write-Host "-- no duplicates, however many times the profile loads --------"
-. /pf/Microsoft.PowerShell_profile.ps1 *> $null
+. $profilePath *> $null
 foreach ($dir in @('/usr/local/sbin', '/usr/sbin', '/sbin')) {
     if (-not (Test-Path $dir)) { continue }
     $count = @($env:PATH -split ':' | Where-Object { $_ -eq $dir }).Count
@@ -112,7 +133,7 @@ Write-Host "-- the interpolation trap that caused this ---------------------"
 # `PATH:`, gets nothing, and yields just $dir — replacing PATH instead of appending to it.
 # The ~/.local/bin line shipped in exactly that form. Static check, because the broken form
 # only misbehaves when its guard fires, and the guard is machine-dependent.
-$pathsFile = '/pf/config/paths.linux.ps1'
+$pathsFile = Join-Path $pfRoot 'config/paths.linux.ps1'
 $src = Get-Content -LiteralPath $pathsFile -Raw
 $code = [regex]::Replace($src, '(?m)^\s*#.*$', '')
 

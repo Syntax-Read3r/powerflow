@@ -235,6 +235,17 @@ jobs:
           if ($help -notmatch '\bdel\b' -or $help -notmatch '\bmvf\b') { Write-Error "❌ pwsh-h is missing the Linux del/mvf entries"; exit 1 }
           Write-Host "✅ pwsh-h renders from the registry (and documents del/mvf)"
 
+      # These two run against the INSTALLED profile, so they exercise the same code path a
+      # user gets. Both were written after a reported defect and both check something that
+      # cannot be observed from Windows: PATH composition, and reading /proc.
+      - name: 🔧 Admin directories are on PATH, and PATH itself survives
+        shell: pwsh
+        run: ./tests/linux/sbin-path.ps1
+
+      - name: 🗄️ storage report and --educate
+        shell: pwsh
+        run: ./tests/linux/storage-report.ps1
+
       - name: 🛡️ THE regression that matters — coreutils are not shadowed
         shell: pwsh
         run: |

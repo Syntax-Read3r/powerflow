@@ -133,6 +133,16 @@ function Show-StorageOverview {
     Only the immediate children are measured. Going deeper re-reports the same bytes at every
     level, which reads as a much bigger problem than it is.
 #>
+Register-PFEducation -Topic 'storage-overview' `
+    -Analogy 'Each row is one place files can live — a drive on Windows, a mounted filesystem on Linux — with a bar showing how full it is.' `
+    -Lines @(
+        @{ Term = 'the bar';  Means = 'How much of that volume is already used. It turns amber, then red, as it fills.' }
+        @{ Term = 'free';     Means = 'What is left. This is the number that runs out and stops things working.' }
+        @{ Term = 'order';    Means = 'Fullest first, because the one about to cause a problem should be the one you see.' }
+        @{ Term = 'missing?'; Means = 'Pseudo-filesystems (snap loops, per-session tmpfs) are hidden — they are not real storage.' }
+    ) `
+    -Footer 'storage <name> drills into one · storage report adds memory and layout · read-only, both.'
+
 function Show-StorageVolumeDetail {
     param([Parameter(Mandatory)]$Volume, [switch]$ShowNative)
 
@@ -245,13 +255,154 @@ function Show-StorageHelp {
 .SYNOPSIS
     Where did my space go - across every volume.
 #>
+# ══════════════════════════════════════════════════════════════════════════════
+#  storage report — PF-FEAT-006
+# ══════════════════════════════════════════════════════════════════════════════
+# Replaces the sequence an admin runs on a new box to answer ONE question — how is this
+# machine laid out, and is anything under pressure:
+#
+#     lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINTS
+#     sudo fdisk -l /dev/sda
+#     swapon --show
+#     free -h
+#     cat /etc/fstab
+#
+# Five commands, four of them read-only and one asking for a password. This is one command,
+# read-only throughout, and it needs no sudo: everything comes from /proc and lsblk's JSON
+# on Linux, and from CIM on Windows.
+#
+# Deliberately NOT a wrapper that shells out to all five. Each section is built from the
+# adapter contract, so the same view renders on both platforms and neither `free` nor
+# procps needs to be installed.
+function Show-StorageReport {
+    param([switch]$ShowNative)
+
+    $volumes = @(Get-StorageVolume)
+    $memory  = Get-StorageMemory
+    $layout  = Get-StorageLayout
+
+    Write-Host ''
+    Write-Host '  🗄️  STORAGE AND MEMORY' -ForegroundColor Cyan
+    Write-Host '  ────────────────────────────────────────────────────────────' -ForegroundColor DarkGray
+
+    # ── 1. volumes: the question people actually open this for ────────────────
+    if ($volumes.Count) {
+        Write-Host ''
+        Write-Host '  MOUNTED' -ForegroundColor White
+        $nameWidth = 4
+        foreach ($v in $volumes) { if ("$($v.Name)".Length -gt $nameWidth) { $nameWidth = "$($v.Name)".Length } }
+        # Used is DERIVED: the adapter contract is { Name; SizeBytes; FreeBytes }. Reading a
+        # $v.UsedBytes that does not exist yields $null, and $null/Size is 0 — which rendered
+        # every bar empty beside a free-space figure that said otherwise.
+        foreach ($v in ($volumes | Sort-Object {
+                if ($_.SizeBytes) { ($_.SizeBytes - $_.FreeBytes) / $_.SizeBytes } else { 0 } } -Descending)) {
+            $fraction = if ($v.SizeBytes) { ($v.SizeBytes - $v.FreeBytes) / $v.SizeBytes } else { 0 }
+            Write-Host ("    {0}  " -f "$($v.Name)".PadRight($nameWidth)) -NoNewline -ForegroundColor White
+            Write-Host ("{0}  " -f (Format-StorageBar -UsedFraction $fraction)) -NoNewline
+            Write-Host ("{0,4:N0}%  " -f ($fraction * 100)) -NoNewline `
+                -ForegroundColor (Get-StorageColour -UsedFraction $fraction -FreeBytes $v.FreeBytes)
+            Write-Host ("{0} free of {1}" -f (Format-StorageSize $v.FreeBytes), (Format-StorageSize $v.SizeBytes)) -ForegroundColor DarkGray
+        }
+    }
+
+    # ── 2. memory and swap ────────────────────────────────────────────────────
+    if ($memory.Supported) {
+        Write-Host ''
+        Write-Host '  MEMORY' -ForegroundColor White
+        # Measured, not hardcoded: the swap label is "swap" on Linux and "pagefile" on
+        # Windows, so a fixed width lines up on one platform and overflows on the other.
+        $labelWidth = @('RAM', 'cache', "$($memory.SwapLabel)") |
+                      ForEach-Object { $_.Length } | Sort-Object -Descending | Select-Object -First 1
+
+        # Memory gets its own colour rule rather than Get-StorageColour's: that one requires an
+        # absolute free-BYTES floor tuned for disks (25/50 GB), which RAM would essentially never
+        # cross, so every machine would read green no matter how squeezed it was.
+        $memFraction = if ($memory.TotalBytes) { $memory.UsedBytes / $memory.TotalBytes } else { 0 }
+        $memColour = if ($memFraction -ge 0.90) { 'Red' } elseif ($memFraction -ge 0.75) { 'Yellow' } else { 'Green' }
+        Write-Host ('    {0}  ' -f 'RAM'.PadRight($labelWidth)) -NoNewline -ForegroundColor White
+        Write-Host ("{0}  " -f (Format-StorageBar -UsedFraction $memFraction)) -NoNewline
+        Write-Host ("{0,4:N0}%  " -f ($memFraction * 100)) -NoNewline -ForegroundColor $memColour
+        Write-Host ("{0} available of {1}" -f (Format-StorageSize $memory.AvailableBytes), (Format-StorageSize $memory.TotalBytes)) -ForegroundColor DarkGray
+
+        # Cache is called out because it is the single most misread number here: it looks
+        # like consumed memory and is handed straight back when something needs it.
+        if ($memory.CacheBytes -gt 0) {
+            Write-Host ('    {0}  ' -f 'cache'.PadRight($labelWidth)) -NoNewline -ForegroundColor DarkGray
+            Write-Host ("{0} — counted as used, but yours the moment anything asks" -f (Format-StorageSize $memory.CacheBytes)) -ForegroundColor DarkGray
+        }
+
+        if ($memory.SwapTotalBytes -gt 0) {
+            # Swap in use at all is worth noticing, so this is stricter than the RAM rule:
+            # sustained swapping is the symptom people actually chase.
+            $swapFraction = $memory.SwapUsedBytes / $memory.SwapTotalBytes
+            $swapColour = if ($swapFraction -ge 0.50) { 'Red' } elseif ($swapFraction -ge 0.20) { 'Yellow' } else { 'Green' }
+            Write-Host ('    {0}  ' -f "$($memory.SwapLabel)".PadRight($labelWidth)) -NoNewline -ForegroundColor White
+            Write-Host ("{0}  " -f (Format-StorageBar -UsedFraction $swapFraction)) -NoNewline
+            Write-Host ("{0,4:N0}%  " -f ($swapFraction * 100)) -NoNewline -ForegroundColor $swapColour
+            Write-Host ("{0} used of {1}" -f (Format-StorageSize $memory.SwapUsedBytes), (Format-StorageSize $memory.SwapTotalBytes)) -ForegroundColor DarkGray
+            foreach ($area in @($memory.SwapAreas)) {
+                Write-Host ("      {0}  {1}" -f $area.Name, $area.Type) -ForegroundColor DarkGray
+            }
+        }
+        else {
+            Write-Host ('    {0}  none configured' -f "$($memory.SwapLabel)".PadRight($labelWidth)) -ForegroundColor DarkGray
+        }
+    }
+
+    # ── 3. the physical layout ────────────────────────────────────────────────
+    if ($layout.Supported -and @($layout.Devices).Count) {
+        Write-Host ''
+        Write-Host '  LAYOUT' -ForegroundColor White
+        foreach ($device in $layout.Devices) {
+            Write-Host ("    {0}  {1}" -f $device.Name, (Format-StorageSize $device.SizeBytes)) -ForegroundColor White
+            foreach ($part in @($device.Partitions)) {
+                $where = if ($part.MountPoint) { $part.MountPoint } else { 'not mounted' }
+                $fs    = if ($part.FsType) { $part.FsType } else { '—' }
+                Write-Host ("      {0,-10} {1,8}  {2,-8}  {3}" -f $part.Name, (Format-StorageSize $part.SizeBytes), $fs, $where) -ForegroundColor DarkGray
+            }
+        }
+    }
+    elseif (-not $layout.Supported -and $layout.Reason) {
+        Write-Host ''
+        Write-Host "  LAYOUT unavailable — $($layout.Reason)" -ForegroundColor DarkGray
+    }
+
+    if ($ShowNative) {
+        Write-Host ''
+        Show-StorageNative
+    }
+
+    Write-Host ''
+    Write-Host '  storage <name> drills into one volume · storage big finds what is eating it' -ForegroundColor DarkGray
+}
+
+Register-PFEducation -Topic 'storage-report' `
+    -Analogy 'Think of the machine as a building: the volumes are rooms and how full they are, memory is the desk space being worked on right now, and the layout is the floor plan underneath both.' `
+    -Lines @(
+        @{ Term = 'MOUNTED';   Means = 'Filesystems you can actually write to, fullest first.' }
+        @{ Term = 'free';      Means = 'Space left on that volume — the number that runs out and stops things.' }
+        @{ Term = 'RAM';       Means = 'Working memory. "Available" is what a new program could take right now.' }
+        @{ Term = 'cache';     Means = 'Memory holding recently-read files. It counts as used but is given back on demand.' }
+        @{ Term = 'swap / pagefile'; Means = 'Disk standing in for RAM — swap on Linux, pagefile on Windows. A little is normal; climbing steadily is not.' }
+        @{ Term = 'LAYOUT';    Means = 'The physical disks and the partitions cut from them.' }
+        @{ Term = 'not mounted'; Means = 'A partition with no path attached, so nothing can read or write it yet.' }
+    ) `
+    -Footer 'Everything here is read-only — this command changes nothing.'
+
 function storage {
     # NO param() block. A param() would bind -a and -D as parameter NAMES, and PowerShell's
     # prefix matching would make -D ambiguous with any other D parameter. See the header.
     $showNative = $false
     $words      = @()
 
-    foreach ($argument in $args) {
+    # --educate is pulled out FIRST. This command hand-parses its arguments, so an
+    # unrecognised token falls through to the verb switch and is reported as "no volume or
+    # command matching '--educate'" — the unbindable-token failure the flag convention
+    # exists to prevent.
+    $educated = Split-PFEducateFlag -Argv $args -Command 'storage'
+    $educate  = $educated.Educate
+
+    foreach ($argument in $educated.Argv) {
         $token = "$argument"
         if (-not $token) { continue }
         if ($token -eq '--show-native') { $showNative = $true; continue }
@@ -263,8 +414,17 @@ function storage {
     $rest = @($words | Select-Object -Skip 1)
 
     switch ($verb.ToLowerInvariant()) {
-        ''       { Show-StorageOverview -ShowNative:$showNative; return }
+        ''       {
+            Show-StorageOverview -ShowNative:$showNative
+            if ($educate) { Write-PFEducation -Topic 'storage-overview' }
+            return
+        }
         'help'   { Show-StorageHelp; return }
+        'report' {
+            Show-StorageReport -ShowNative:$showNative
+            if ($educate) { Write-PFEducation -Topic 'storage-report' }
+            return
+        }
         'docker' { Show-StorageDocker -ShowNative:$showNative; return }
         'apps'   {
             # Delegates rather than reimplements: installed-apps already owns the size-band
@@ -293,6 +453,8 @@ function storage {
 
 Register-PFCommand -Name 'storage' -Section '🗄️ DISK RECLAIM' `
     -Synopsis 'every volume, fullest first; a name drills into one' -Example 'storage · storage D: · storage apps'
+Register-PFCommand -Name 'storage report' -Section '🗄️ DISK RECLAIM' `
+    -Synopsis 'volumes, memory, swap and disk layout in one read-only view' -Example 'storage report --educate'
 Register-PFCommand -Name 'storage apps' -Section '🗄️ DISK RECLAIM' `
     -Synopsis 'installed apps by size band' -Example 'storage apps 2gb-4gb'
 Register-PFCommand -Name 'storage big' -Section '🗄️ DISK RECLAIM' `

@@ -381,3 +381,136 @@ function Get-StorageNativeCommand {
     }
     return ''
 }
+
+# ── PF-FEAT-006: memory, swap, and the partition layout ───────────────────────
+# The reported sequence was five commands to answer one question — "how is this box laid
+# out, and is it under pressure?":
+#
+#     lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINTS
+#     sudo fdisk -l /dev/sda
+#     swapon --show
+#     free -h
+#     cat /etc/fstab
+#
+# Everything below is READ-ONLY. Nothing here writes, mounts, or needs a password —
+# /proc/meminfo, /proc/swaps and /etc/fstab are all world-readable, which is why this
+# deliberately does NOT shell out to `fdisk -l` (that one does want root, and asking for a
+# password to answer a question is how a diagnostic becomes something people avoid running).
+
+<#
+.SYNOPSIS
+    Memory and swap, from /proc — no external binary, no sudo.
+.DESCRIPTION
+    `free` parses /proc/meminfo and does arithmetic. Reading it directly avoids depending on
+    procps being installed (it is absent from minimal container images) and on `free`'s
+    output format, which differs between versions — the shape of its columns has changed
+    twice in living memory.
+
+    "Available" is the number that matters and the one people misread. It is NOT free memory:
+    the kernel counts reclaimable cache in it, so a box showing almost no "free" can be
+    perfectly healthy. Reporting both, and labelling which is which, is the whole point.
+#>
+function Get-StorageMemory {
+    $meminfo = @{}
+    if (Test-Path '/proc/meminfo') {
+        foreach ($line in (Get-Content '/proc/meminfo' -ErrorAction SilentlyContinue)) {
+            if ($line -match '^([A-Za-z_()]+):\s+(\d+)') { $meminfo[$matches[1]] = [int64]$matches[2] * 1KB }
+        }
+    }
+
+    $total     = if ($meminfo.ContainsKey('MemTotal')) { $meminfo['MemTotal'] } else { 0 }
+    $free      = if ($meminfo.ContainsKey('MemFree')) { $meminfo['MemFree'] } else { 0 }
+    $available = if ($meminfo.ContainsKey('MemAvailable')) { $meminfo['MemAvailable'] } else { $free }
+    $buffers   = if ($meminfo.ContainsKey('Buffers')) { $meminfo['Buffers'] } else { 0 }
+    $cached    = if ($meminfo.ContainsKey('Cached')) { $meminfo['Cached'] } else { 0 }
+    $swapTotal = if ($meminfo.ContainsKey('SwapTotal')) { $meminfo['SwapTotal'] } else { 0 }
+    $swapFree  = if ($meminfo.ContainsKey('SwapFree')) { $meminfo['SwapFree'] } else { 0 }
+
+    # Each swap area, from /proc/swaps — the same rows `swapon --show` prints, without
+    # needing /sbin on PATH or a sudo prompt.
+    $areas = @()
+    if (Test-Path '/proc/swaps') {
+        $rows = @(Get-Content '/proc/swaps' -ErrorAction SilentlyContinue | Select-Object -Skip 1)
+        foreach ($row in $rows) {
+            $parts = @($row -split '\s+' | Where-Object { $_ })
+            if ($parts.Count -lt 4) { continue }
+            $areas += [pscustomobject]@{
+                Name     = $parts[0]
+                Type     = $parts[1]
+                SizeBytes = [int64]$parts[2] * 1KB
+                UsedBytes = [int64]$parts[3] * 1KB
+                Priority = if ($parts.Count -ge 5) { $parts[4] } else { '' }
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Supported      = ($total -gt 0)
+        TotalBytes     = $total
+        FreeBytes      = $free
+        AvailableBytes = $available
+        CacheBytes     = ($buffers + $cached)
+        UsedBytes      = ($total - $available)
+        SwapTotalBytes = $swapTotal
+        SwapUsedBytes  = ($swapTotal - $swapFree)
+        SwapAreas      = $areas
+        # Windows has one pagefile concept; Linux can have several areas. Named so the
+        # renderer does not have to know which platform it is on.
+        SwapLabel      = 'swap'
+    }
+}
+
+<#
+.SYNOPSIS
+    The block-device tree — what `lsblk` shows.
+.DESCRIPTION
+    Uses lsblk's JSON output when present, because parsing its columnar form is exactly the
+    kind of brittle text-scraping the adapter layer exists to contain. Absent lsblk, returns
+    empty rather than guessing: a partial disk layout presented as complete is worse than
+    saying nothing.
+#>
+function Get-StorageLayout {
+    if (-not (Get-Command lsblk -ErrorAction SilentlyContinue)) {
+        return [pscustomobject]@{ Supported = $false; Devices = @(); Reason = 'lsblk is not installed' }
+    }
+
+    $raw = & lsblk -J -b -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $raw) {
+        return [pscustomobject]@{ Supported = $false; Devices = @(); Reason = 'lsblk returned nothing' }
+    }
+
+    try { $parsed = ($raw -join "`n") | ConvertFrom-Json }
+    catch { return [pscustomobject]@{ Supported = $false; Devices = @(); Reason = 'lsblk output was not JSON' } }
+
+    $devices = @()
+    foreach ($disk in @($parsed.blockdevices)) {
+        # Loop devices are snap packages and similar; they are noise in a layout view, and
+        # burying three real partitions under twenty loops is what makes people stop reading.
+        if ($disk.type -eq 'loop') { continue }
+        $children = @()
+        # `Where-Object { $_ }` is load-bearing. A disk with no partitions has children = $null,
+        # and @($null) is a ONE-ELEMENT array containing null — not an empty one. Without the
+        # filter every unpartitioned disk rendered a phantom child row: blank name, 0 B,
+        # "not mounted". Whole-disk filesystems and raw devices are common enough that this
+        # showed up on the first real machine it ran on.
+        foreach ($part in @($disk.children | Where-Object { $_ })) {
+            $children += [pscustomobject]@{
+                Name       = $part.name
+                SizeBytes  = [int64]($part.size)
+                Type       = $part.type
+                FsType     = $part.fstype
+                MountPoint = $part.mountpoint
+            }
+        }
+        $devices += [pscustomobject]@{
+            Name       = $disk.name
+            SizeBytes  = [int64]($disk.size)
+            Type       = $disk.type
+            FsType     = $disk.fstype
+            MountPoint = $disk.mountpoint
+            Partitions = $children
+        }
+    }
+
+    return [pscustomobject]@{ Supported = $true; Devices = $devices; Reason = '' }
+}

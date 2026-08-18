@@ -394,3 +394,117 @@ function Get-StorageNativeCommand {
     }
     return ''
 }
+
+# ── PF-FEAT-006: memory, swap, and the partition layout ───────────────────────
+# The Linux sibling answers "how is this box laid out, and is it under pressure?" from
+# /proc. Windows has no /proc, so the same two questions are answered through CIM — and
+# the shapes returned here are IDENTICAL, because the renderer in components/ must not
+# know which platform produced them.
+#
+# Read-only throughout, and no elevation: a diagnostic that prompts for admin is one people
+# stop running.
+
+<#
+.SYNOPSIS
+    Memory and the pagefile — the Windows answer to `free` and `swapon --show`.
+.DESCRIPTION
+    Windows reports FreePhysicalMemory but has no direct MemAvailable equivalent, so
+    "available" is reported as free plus the standby/cache set where that is obtainable, and
+    falls back to free otherwise. Labelled "pagefile" rather than "swap" because that is what
+    a Windows user will search for, while the field names stay shared.
+#>
+function Get-StorageMemory {
+    $total = 0; $free = 0; $cache = 0
+    try {
+        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        $total = [int64]$os.TotalVisibleMemorySize * 1KB
+        $free  = [int64]$os.FreePhysicalMemory * 1KB
+    } catch { }
+
+    try {
+        $perf = Get-CimInstance Win32_PerfRawData_PerfOS_Memory -ErrorAction Stop
+        if ($perf.StandbyCacheNormalPriorityBytes) {
+            $cache = [int64]$perf.StandbyCacheNormalPriorityBytes +
+                     [int64]$perf.StandbyCacheReserveBytes +
+                     [int64]$perf.StandbyCacheCoreBytes
+        }
+    } catch { }
+
+    $areas = @()
+    $swapTotal = 0; $swapUsed = 0
+    try {
+        foreach ($pf in @(Get-CimInstance Win32_PageFileUsage -ErrorAction Stop)) {
+            $size = [int64]$pf.AllocatedBaseSize * 1MB
+            $used = [int64]$pf.CurrentUsage * 1MB
+            $swapTotal += $size
+            $swapUsed  += $used
+            $areas += [pscustomobject]@{
+                Name      = $pf.Name
+                Type      = 'file'
+                SizeBytes = $size
+                UsedBytes = $used
+                Priority  = ''
+            }
+        }
+    } catch { }
+
+    return [pscustomobject]@{
+        Supported      = ($total -gt 0)
+        TotalBytes     = $total
+        FreeBytes      = $free
+        AvailableBytes = ($free + $cache)
+        CacheBytes     = $cache
+        UsedBytes      = ($total - $free - $cache)
+        SwapTotalBytes = $swapTotal
+        SwapUsedBytes  = $swapUsed
+        SwapAreas      = $areas
+        SwapLabel      = 'pagefile'
+    }
+}
+
+<#
+.SYNOPSIS
+    The disk and partition tree — the Windows answer to `lsblk`.
+.DESCRIPTION
+    Get-Disk/Get-Partition come from the Storage module, which is present on every supported
+    Windows but can be absent in a stripped image; an unsupported result says so rather than
+    returning a half-built tree, matching how the Linux side handles a missing lsblk.
+#>
+function Get-StorageLayout {
+    if (-not (Get-Command Get-Disk -ErrorAction SilentlyContinue)) {
+        return [pscustomobject]@{ Supported = $false; Devices = @(); Reason = 'the Storage module is not available' }
+    }
+
+    $devices = @()
+    try {
+        foreach ($disk in @(Get-Disk -ErrorAction Stop | Sort-Object Number)) {
+            $children = @()
+            # Same @($null) guard as the Linux sibling: a disk with no partitions must render
+            # no child rows, not one blank one.
+            foreach ($part in @(Get-Partition -DiskNumber $disk.Number -ErrorAction SilentlyContinue | Where-Object { $_ })) {
+                $vol = $null
+                try { $vol = Get-Volume -Partition $part -ErrorAction SilentlyContinue } catch { }
+                $children += [pscustomobject]@{
+                    Name       = "Partition $($part.PartitionNumber)"
+                    SizeBytes  = [int64]$part.Size
+                    Type       = 'part'
+                    FsType     = if ($vol) { $vol.FileSystemType } else { '' }
+                    MountPoint = if ($part.DriveLetter) { "$($part.DriveLetter):" } else { '' }
+                }
+            }
+            $devices += [pscustomobject]@{
+                Name       = if ($disk.FriendlyName) { $disk.FriendlyName } else { "Disk $($disk.Number)" }
+                SizeBytes  = [int64]$disk.Size
+                Type       = 'disk'
+                FsType     = ''
+                MountPoint = ''
+                Partitions = $children
+            }
+        }
+    }
+    catch {
+        return [pscustomobject]@{ Supported = $false; Devices = @(); Reason = 'the disk layout could not be read' }
+    }
+
+    return [pscustomobject]@{ Supported = $true; Devices = $devices; Reason = '' }
+}
