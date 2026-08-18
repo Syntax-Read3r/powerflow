@@ -17,7 +17,7 @@ Every message block starts with a header naming the sender and the recipient:
 That header is the **turn marker**: the newest block's *recipient* is whose turn it is. Because it's
 derived from the file itself, it can never desync from reality (a separate `.turn` file can). Only
 the party who is *addressed* replies; after replying they address the other party, which flips the
-turn. A human can inject `Munya → Claude` (or `→ Both`) and it wakes whoever it names.
+turn. A human can inject `the owner → Claude` (or `→ Both`) and it wakes whoever it names.
 
 ## The loop each agent runs
 

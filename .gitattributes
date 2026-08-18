@@ -1,0 +1,8 @@
+# Archived session transcripts are machine-written records, not source.
+#
+# -diff        never attempt a textual diff; a 43 MB single-line-per-record JSONL produces
+#              a diff nobody can read and slows every `git log -p` in the repository.
+# -merge       there is no sensible merge of two append-only transcripts.
+# linguist-generated  keep them out of GitHub's language statistics and collapse them by
+#              default in pull requests.
+docs/log/**/session-raw.jsonl   -diff -merge linguist-generated

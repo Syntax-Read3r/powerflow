@@ -103,7 +103,7 @@ Example:
 🛑 DESTROY VM — IRREVERSIBLE
 ────────────────────────────────────────────
 VM            103 web-prod
-Node          chikara
+Node          pve
 Status        stopped
 Protected     no
 

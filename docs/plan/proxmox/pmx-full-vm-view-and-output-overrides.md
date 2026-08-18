@@ -92,7 +92,7 @@ NIC model is a dependency of `--full`; the full VM view must not invoke QEMU Gue
 🧱 VM 102 — docker-host
 ──────────────────────────────────────────────────────────────
 GENERAL
-  Node          chikara
+  Node          pve
   Status        stopped
   Type          Virtual machine
   Template      no

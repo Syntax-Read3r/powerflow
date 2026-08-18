@@ -201,8 +201,8 @@ Provisioned capacity   132 GiB
   "executed": false,
   "verified": false,
   "plan": {
-    "source": { "vmid": 100, "name": "debian13-base", "node": "chikara" },
-    "target": { "vmid": 102, "name": "docker-host", "node": "chikara" },
+    "source": { "vmid": 100, "name": "debian13-base", "node": "pve" },
+    "target": { "vmid": 102, "name": "docker-host", "node": "pve" },
     "clone_type": "full",
     "placement_policy": "same-as-source",
     "provisioned_bytes": 141733920768,

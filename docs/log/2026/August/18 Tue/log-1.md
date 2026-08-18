@@ -1,5 +1,11 @@
 # 18 Aug 2026 — closing round 1, opening round 2, and a leak the checklist caught one commit late
 
+> **The full session is archived beside this file.** [`session-transcript.md`](session-transcript.md)
+> is the readable conversation (185 turns); [`session-raw.jsonl`](session-raw.jsonl) holds the
+> complete records. Both were scrubbed before they were committed — username, home paths, the
+> real home subnet, machine names, email and every credential-shaped string are placeholders,
+> because this repository is public. Archived ahead of a machine reset.
+
 Four backlog items shipped and one privacy incident. The incident is the part worth reading:
 the grep that found it works, it just ran a week after the commit that needed it.
 

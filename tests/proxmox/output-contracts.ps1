@@ -16,8 +16,8 @@ function Invoke-ProxmoxManagementQuery {
     throw "Unexpected fixture query: $Operation"
 }
 
-$session = [pscustomobject]@{ Connection = [pscustomobject]@{}; Node = 'chikara' }
-$vm = [pscustomobject]@{ VmId = 100; Name = 'debian13-base'; Node = 'chikara'; Template = $true }
+$session = [pscustomobject]@{ Connection = [pscustomobject]@{}; Node = 'pve' }
+$vm = [pscustomobject]@{ VmId = 100; Name = 'debian13-base'; Node = 'pve'; Template = $true }
 $config = [pscustomobject]@{
     digest = ('a' * 40); boot = 'order=scsi0;net0'
     scsi0 = 'local-zfs:vm-100-disk-0,size=32G'
@@ -49,23 +49,23 @@ Assert-PmxTest ($json -match '"size_bytes":34359738368' -and $json -match '"targ
     'Clone JSON omitted exact bytes or per-disk target storage.'
 $verifiedMutation = [pscustomobject]@{ Success = $true; Executed = $true; DryRun = $false }
 $verifiedContract = ConvertTo-PmxCloneContract -Plan $clone.Plan -Mutation $verifiedMutation `
-    -VerifiedTarget ([pscustomobject]@{ VmId = 102; Name = 'docker-host'; Node = 'chikara' })
+    -VerifiedTarget ([pscustomobject]@{ VmId = 102; Name = 'docker-host'; Node = 'pve' })
 $verifiedJson = $verifiedContract | ConvertTo-Json -Depth 12 -Compress
 Assert-PmxTest ($verifiedJson -match '"verified":true' -and $verifiedJson -match '"result":\{"vmid":102') `
     'Verified clone JSON did not preserve the plan and add a separate result.'
 
 $disk = $details.Disks[0]
 $target = ConvertFrom-PmxSize -Value '100GiB' -Kind disk
-$growth = New-PmxDiskGrowthPlan -Session $session -Vm ([pscustomobject]@{ VmId=102; Name='docker-host'; Node='chikara' }) `
+$growth = New-PmxDiskGrowthPlan -Session $session -Vm ([pscustomobject]@{ VmId=102; Name='docker-host'; Node='pve' }) `
     -Config $config -Disk $disk -Target $target
 Assert-PmxTest ($growth.Success -and $growth.Plan.CurrentBytes -eq 32GB -and $growth.Plan.DeltaBytes -eq 68GB) `
     'Disk growth did not calculate current and delta from exact bytes.'
 Assert-PmxTest ($growth.Plan.NativeDelta -ceq '+68G' -and $growth.Plan.TargetDisplay -ceq '100 GiB') `
     'Disk growth native delta or IEC target display is wrong.'
-$same = New-PmxDiskGrowthPlan -Session $session -Vm ([pscustomobject]@{ VmId=102; Name='docker-host'; Node='chikara' }) `
+$same = New-PmxDiskGrowthPlan -Session $session -Vm ([pscustomobject]@{ VmId=102; Name='docker-host'; Node='pve' }) `
     -Config $config -Disk $disk -Target (ConvertFrom-PmxSize -Value '32GiB')
 Assert-PmxTest ($same.Success -and $same.NoOp) 'Equal disk target is not an idempotent no-op.'
-$shrink = New-PmxDiskGrowthPlan -Session $session -Vm ([pscustomobject]@{ VmId=102; Name='docker-host'; Node='chikara' }) `
+$shrink = New-PmxDiskGrowthPlan -Session $session -Vm ([pscustomobject]@{ VmId=102; Name='docker-host'; Node='pve' }) `
     -Config $config -Disk $disk -Target (ConvertFrom-PmxSize -Value '16GiB')
 Assert-PmxTest (-not $shrink.Success -and $shrink.Error -match 'cannot be shrunk') 'Disk shrink was not rejected.'
 

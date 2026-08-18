@@ -25,7 +25,7 @@ the first still believes it owns the task.
 |---|---|---|
 | **Working** | No chat post, but tool calls, CI polling, a build or a device run in flight | **Do nothing.** A nudge here can duplicate work or corrupt a run. |
 | **Holding for Codex** | Last chat block is `Claude → Codex`; the protocol requires waiting | **Do nothing.** This is obedience, not a stall. Nudging invites a self-approval breach. |
-| **Blocked on the owner** | Reported a blocker only Munya can clear (billing, hardware) | **Do nothing** — the owner already has it. |
+| **Blocked on the owner** | Reported a blocker only the owner can clear (billing, hardware) | **Do nothing** — the owner already has it. |
 | **API-error stall** | No chat post, **and** no tool activity, **and** not holding for Codex | **Nudge** — this is the only case the feature exists for. |
 
 The whole value of the feature is in telling the fourth row apart from the first three. A watchdog

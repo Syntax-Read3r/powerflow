@@ -63,7 +63,7 @@ Assert-PmxTest ((Get-PmxNetworkAddressRecord 'ff02::1').Scope -ceq 'multicast') 
 
 $model = [pscustomobject][ordered]@{
     GeneratedAt = '2026-08-06T00:00:00.0000000Z'
-    Vm = [pscustomobject]@{ VmId = 102; Name = 'docker-host'; Node = 'chikara'; Status = 'running'; Template = $false }
+    Vm = [pscustomobject]@{ VmId = 102; Name = 'docker-host'; Node = 'pve'; Status = 'running'; Template = $false }
     Agent = [pscustomobject]@{ Configured = $true; Available = $true; Status = 'available'; Reason = $null }
     Adapters = $joined.Adapters; Interfaces = $filtered; AddressSelection = $selection
     Sources = [pscustomobject]@{
@@ -124,8 +124,8 @@ function Invoke-ProxmoxManagementQuery {
         default { throw "Unexpected network fixture query: $Operation" }
     }
 }
-$session = [pscustomobject]@{ Connection = [pscustomobject]@{}; Node = 'chikara' }
-$runningVm = [pscustomobject]@{ VmId = 102; Name = 'docker-host'; Node = 'chikara'; Status = 'running'; Template = $false }
+$session = [pscustomobject]@{ Connection = [pscustomobject]@{}; Node = 'pve' }
+$runningVm = [pscustomobject]@{ VmId = 102; Name = 'docker-host'; Node = 'pve'; Status = 'running'; Template = $false }
 $runtimeQueryCount = 0
 $runningModel = Get-PmxVmNetworkModel -Session $session -Vm $runningVm -View combined
 Assert-PmxTest ($runningModel.Success -and $runningModel.Model.Agent.Available -and $script:runtimeQueryCount -eq 1) `
@@ -148,7 +148,7 @@ Assert-PmxTest ($timeoutModel.Model.Agent.Status -ceq 'timed-out' -and
     ($timeoutModel.Model.Warnings -join ' ') -notmatch 'private fixture') `
     'VM-agent timeout was not safely categorized.'
 function Get-PmxManagementSession {
-    return [pscustomobject]@{ Success = $true; Connection = [pscustomobject]@{}; Node = 'chikara'; Config = [pscustomobject]@{ Output = 'table' }; Error = '' }
+    return [pscustomobject]@{ Success = $true; Connection = [pscustomobject]@{}; Node = 'pve'; Config = [pscustomobject]@{ Output = 'table' }; Error = '' }
 }
 function Resolve-PmxManagedVm {
     return [pscustomobject]@{ Success = $true; Vm = $runningVm; Error = '' }
