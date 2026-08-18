@@ -61,13 +61,13 @@ function Resolve-PmxManagedVm {
     # confirm \u2192 revalidate \u2192 verify chain, and Confirm-PmxAmberPlan already refuses
     # non-interactive sessions outright.
     if (-not $Selector) {
-        if ([Console]::IsOutputRedirected -or -not (Get-Command fzf -ErrorAction SilentlyContinue)) {
-            return [pscustomobject]@{ Success = $false; Vm = $null
+        if (-not (Test-PmxCanPick)) {
+            return [pscustomobject]@{ Success = $false; Cancelled = $false; Vm = $null
                 Error = 'name a VM, or run this in a terminal with fzf to pick one' }
         }
         $rows = @($inventory.Vms)
         if (-not $rows.Count) {
-            return [pscustomobject]@{ Success = $false; Vm = $null; Error = 'this node has no VMs' }
+            return [pscustomobject]@{ Success = $false; Cancelled = $false; Vm = $null; Error = 'this node has no VMs' }
         }
         $tab = [char]9
         $lines = $rows | ForEach-Object {
@@ -77,7 +77,7 @@ function Resolve-PmxManagedVm {
         $picked = $lines | fzf --height=60% --layout=reverse --border=rounded --delimiter="$tab" `
             --with-nth=1.. --prompt='\uD83D\uDDA5\uFE0F  VM: ' `
             --header="$($rows.Count) VMs \u00B7 type to filter \u00B7 Enter selects \u00B7 Esc cancels" --header-first
-        if (-not $picked) { return [pscustomobject]@{ Success = $false; Vm = $null; Error = 'cancelled' } }
+        if (-not $picked) { return (New-PmxCancelledResult -Kind 'Vm') }
         $Selector = ("$picked" -split "$tab", 2)[0]
     }
 
@@ -89,12 +89,12 @@ function Resolve-PmxManagedVm {
     }
 
     if ($hits.Count -eq 1) {
-        return [pscustomobject]@{ Success = $true; Vm = $hits[0]; Error = '' }
+        return [pscustomobject]@{ Success = $true; Cancelled = $false; Vm = $hits[0]; Error = '' }
     }
     if ($hits.Count -gt 1) {
-        return [pscustomobject]@{ Success = $false; Vm = $null; Error = "VM name '$Selector' is ambiguous; use a VMID" }
+        return [pscustomobject]@{ Success = $false; Cancelled = $false; Vm = $null; Error = "VM name '$Selector' is ambiguous; use a VMID" }
     }
-    return [pscustomobject]@{ Success = $false; Vm = $null; Error = "VM '$Selector' was not found" }
+    return [pscustomobject]@{ Success = $false; Cancelled = $false; Vm = $null; Error = "VM '$Selector' was not found" }
 }
 
 function Get-PmxManagedVmDetails {
@@ -211,7 +211,7 @@ function Show-PmxManagedVm {
     $session = Get-PmxManagementSession
     if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $resolved = Resolve-PmxManagedVm -Selector $parsed.Options.Selector -Session $session
-    if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
+    if (-not $resolved.Success) { Write-PmxResolveFailure -Resolved $resolved; return }
     $details = Get-PmxManagedVmDetails -Session $session -Vm $resolved.Vm
     if (-not $details.Success) { Write-PmxQueryFailure -Message $details.Error -Diagnostics $details.Diagnostics -Options $parsed.Options; return }
     $mode = Get-PmxOutputMode -Options $parsed.Options -Config $session.Config
@@ -286,7 +286,7 @@ function Show-PmxManagedVmDisks {
     $session = Get-PmxManagementSession
     if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $resolved = Resolve-PmxManagedVm -Selector $parsed.Options.Selector -Session $session
-    if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
+    if (-not $resolved.Success) { Write-PmxResolveFailure -Resolved $resolved; return }
     $details = Get-PmxManagedVmDetails -Session $session -Vm $resolved.Vm
     if (-not $details.Success) {
         Write-PmxQueryFailure -Message $details.Error -Diagnostics $details.Diagnostics -Options $parsed.Options

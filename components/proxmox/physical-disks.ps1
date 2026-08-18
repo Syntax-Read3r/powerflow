@@ -9,17 +9,23 @@
 # Depends  : components/proxmox/shared.ps1, Proxmox adapter contract
 # ==============================================================================
 
+# PF-UX-002: returns the same envelope as Resolve-PmxManagedVm, so escaping a picker is
+# told apart from failing to open one. It used to answer $null to both, and the caller
+# reacted by re-printing the whole disk list — which is right when there was no picker and
+# noise when the user had just closed one.
 function Resolve-PmxDisk {
     param([string]$Selector, [switch]$Interactive)
     $disks = @(Get-ProxmoxDisks)
     if (-not $disks.Count) {
-        Write-Host '❌ No physical disks were returned by the host.' -ForegroundColor Red
-        return $null
+        return [pscustomobject]@{ Success = $false; Cancelled = $false; Disk = $null
+            Error = 'no physical disks were returned by the host' }
     }
 
     if (-not $Selector) {
-        if (-not $Interactive -or [Console]::IsOutputRedirected -or -not (Get-Command fzf -ErrorAction SilentlyContinue)) {
-            return $null
+        if (-not $Interactive -or -not (Test-PmxCanPick)) {
+            # Not a cancellation — nobody chose anything. The caller shows the list instead,
+            # which is the useful answer when there is no way to pick from one.
+            return [pscustomobject]@{ Success = $false; Cancelled = $false; Disk = $null; Error = '' }
         }
         $tab = [char]9
         $rows = for ($i = 0; $i -lt $disks.Count; $i++) {
@@ -28,9 +34,9 @@ function Resolve-PmxDisk {
             "$i$tab$($d.Name)$tab$(Format-PmxBytes $d.SizeBytes)$tab$media$tab$($d.Model)$tab$($d.Serial)"
         }
         $picked = $rows | fzf --height=60% --layout=reverse --border --delimiter="$tab" --with-nth=2.. --header='disk  size  type  model  serial'
-        if (-not $picked) { return $null }
+        if (-not $picked) { return (New-PmxCancelledResult -Kind 'Disk') }
         $index = [int]("$picked" -split "$tab", 2)[0]
-        return $disks[$index]
+        return [pscustomobject]@{ Success = $true; Cancelled = $false; Disk = $disks[$index]; Error = '' }
     }
 
     $needle = $Selector.Trim()
@@ -42,14 +48,18 @@ function Resolve-PmxDisk {
         $_.StableId -ieq $needle -or [IO.Path]::GetFileName($_.StableId) -ieq $needle -or
         @($_.StableIds | Where-Object { $_ -ieq $needle -or [IO.Path]::GetFileName($_) -ieq $needle }).Count -gt 0
     })
-    if ($hits.Count -eq 1) { return $hits[0] }
+    if ($hits.Count -eq 1) {
+        return [pscustomobject]@{ Success = $true; Cancelled = $false; Disk = $hits[0]; Error = '' }
+    }
     if ($hits.Count -gt 1) {
+        # The candidate list is part of the message, so it is printed here rather than
+        # squeezed into a single Error string the renderer would have to reflow.
         Write-Host "❌ '$Selector' matches more than one disk. Use the device name or full stable ID:" -ForegroundColor Red
         $hits | ForEach-Object { Write-Host "   $($_.Name)  $($_.StableId)" -ForegroundColor DarkGray }
-    } else {
-        Write-Host "❌ No physical disk matches '$Selector'. Run: pmx disks" -ForegroundColor Red
+        return [pscustomobject]@{ Success = $false; Cancelled = $false; Disk = $null; Error = '' }
     }
-    return $null
+    return [pscustomobject]@{ Success = $false; Cancelled = $false; Disk = $null
+        Error = "no physical disk matches '$Selector'. Run: pmx disks" }
 }
 
 function Show-PmxDisks {

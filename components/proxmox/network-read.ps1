@@ -284,7 +284,7 @@ function Show-PmxVmNetwork {
     $mode = Get-PmxOutputMode -Options $parsed.Options -Config $session.Config
     if (-not $mode.Success) { Write-Host "❌ $($mode.Error)" -ForegroundColor Red; return }
     $resolved = Resolve-PmxManagedVm -Selector $parsed.Options.Selector -Session $session
-    if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
+    if (-not $resolved.Success) { Write-PmxResolveFailure -Resolved $resolved; return }
     $result = Get-PmxVmNetworkModel -Session $session -Vm $resolved.Vm -View $View -Options $parsed.Options
     if (-not $result.Success) { Write-PmxQueryFailure -Message $result.Error -Diagnostics $result.Diagnostics -Options $parsed.Options; return }
     if ($mode.Mode -eq 'json') {

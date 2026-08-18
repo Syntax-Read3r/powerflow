@@ -61,11 +61,17 @@ function Invoke-PmxLegacyDiskCommand {
     $action = if ($positionals.Count -ge 2) { $positionals[1].ToLowerInvariant() } else { '' }
     $option = if ($positionals.Count -ge 3) { $positionals[2] } else { '' }
     if (-not (Test-PmxReady)) { return }
-    $disk = Resolve-PmxDisk -Selector $selector -Interactive
-    if (-not $disk) {
+    $resolvedDisk = Resolve-PmxDisk -Selector $selector -Interactive
+    if (-not $resolvedDisk.Success) {
+        # Escaping the picker ends the command quietly. Only the no-picker case falls
+        # through to the list — re-printing it after the user closed a picker of the same
+        # rows is noise, and reads as though the Escape did not register.
+        if ($resolvedDisk.Cancelled) { Write-PmxResolveFailure -Resolved $resolvedDisk; return }
+        if ($resolvedDisk.Error) { Write-PmxResolveFailure -Resolved $resolvedDisk; return }
         if (-not $selector) { Show-PmxDisks }
         return
     }
+    $disk = $resolvedDisk.Disk
 
     switch ($action) {
         ''              { Show-PmxDisk -Disk $disk -Full:$flags.ContainsKey('-full') }

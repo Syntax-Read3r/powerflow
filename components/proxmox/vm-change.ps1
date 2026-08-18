@@ -75,7 +75,7 @@ function Invoke-PmxAmberMutation {
         Write-Host '  ⛔ Cancelled — no Proxmox state was changed.' -ForegroundColor Yellow
         Write-PmxAuditRecord -Operation $Operation -Target $Session.Connection.Label -Outcome 'cancelled' `
             -Message 'confirmation declined or unavailable' -VmId $VmId -Config $Session.Config
-        return [pscustomobject]@{ Success = $false; Executed = $false; Error = 'cancelled' }
+        return [pscustomobject]@{ Success = $false; Executed = $false; Cancelled = $true; Error = 'cancelled' }
     }
 
     $fresh = & $Revalidate
@@ -552,7 +552,7 @@ function Invoke-PmxVmCpuSet {
     $session = Get-PmxManagementSession
     if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $resolved = Resolve-PmxManagedVm -Selector "$($parsed.Options.Vm)" -Session $session
-    if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
+    if (-not $resolved.Success) { Write-PmxResolveFailure -Resolved $resolved; return }
     if ($resolved.Vm.Template) { Write-Host '❌ Clone the template before changing its CPU allocation.' -ForegroundColor Red; return }
     $desired = Get-PmxDesiredVmConfig -Session $session -Vm $resolved.Vm
     if (-not $desired.Success) { Write-Host "❌ $($desired.Error)" -ForegroundColor Red; return }
@@ -598,7 +598,7 @@ function Invoke-PmxVmMemorySet {
     $session = Get-PmxManagementSession
     if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $resolved = Resolve-PmxManagedVm -Selector "$($parsed.Options.Vm)" -Session $session
-    if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
+    if (-not $resolved.Success) { Write-PmxResolveFailure -Resolved $resolved; return }
     if ($resolved.Vm.Template) { Write-Host '❌ Clone the template before changing its memory allocation.' -ForegroundColor Red; return }
     $desired = Get-PmxDesiredVmConfig -Session $session -Vm $resolved.Vm
     if (-not $desired.Success) { Write-Host "❌ $($desired.Error)" -ForegroundColor Red; return }
@@ -651,7 +651,7 @@ function Invoke-PmxVmLifecycleChange {
     $session = Get-PmxManagementSession
     if (-not $session.Success) { Write-PmxDisconnectedState -Session $session; return }
     $resolved = Resolve-PmxManagedVm -Selector "$($parsed.Options.Selector)" -Session $session
-    if (-not $resolved.Success) { Write-Host "❌ $($resolved.Error)" -ForegroundColor Red; return }
+    if (-not $resolved.Success) { Write-PmxResolveFailure -Resolved $resolved; return }
     if ($resolved.Vm.Template) { Write-Host '❌ Templates cannot be started or shut down.' -ForegroundColor Red; return }
     $wanted = if ($Action -eq 'start') { 'running' } else { 'stopped' }
     if ($resolved.Vm.Status -eq $wanted) { Write-Host "✅ VM $($resolved.Vm.VmId) is already $wanted; nothing changed." -ForegroundColor Green; return }

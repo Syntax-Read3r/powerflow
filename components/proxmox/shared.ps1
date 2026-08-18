@@ -8,7 +8,8 @@
 #            Write-PmxField, Test-PmxReady,
 #            ConvertTo-PmxDisplayText, ConvertFrom-PmxArguments,
 #            ConvertFrom-PmxSize, ConvertFrom-PmxProxmoxSize,
-#            Get-PmxOutputMode, Confirm-PmxAmberPlan
+#            Get-PmxOutputMode, Confirm-PmxAmberPlan,
+#            Test-PmxCanPick, New-PmxCancelledResult, Write-PmxResolveFailure
 # Depends  : Proxmox adapter contract (platform/<os>/adapters/proxmox.ps1)
 # ==============================================================================
 
@@ -355,6 +356,75 @@ function Confirm-PmxAmberPlan {
     address, a user@host or a token cannot reach the terminal. That matters here more than
     usual: PowerFlow's contract is that ordinary output names a saved alias, never an endpoint.
 #>
+# ── PF-UX-002: escaping a picker is a decision, not a failure ────────────────
+#
+# Every resolver here returns the same envelope, and callers all rendered a falsy
+# .Success the same way:
+#
+#     ❌ cancelled
+#
+# in red. Pressing Escape is the user saying "not this one" — marking it as an error
+# teaches them to distrust the red marker, which is the one piece of output that has to
+# stay trustworthy. Five outcomes, and they are NOT all the same:
+#
+#     Esc pressed        →  neutral. Nothing to fix.
+#     no VMs exist       →  a state worth reporting
+#     fzf unavailable    →  an instruction: name one, or install fzf
+#     transport failed   →  an error
+#     invalid selector   →  an error
+#
+# The middle three are actionable and the last two are faults; only the first is neither.
+# Fixed here rather than at each call site because there are nine of those, and a
+# convention enforced in nine places is a convention that will drift in one of them.
+
+<#
+.SYNOPSIS
+    May this session open an interactive picker at all?
+.DESCRIPTION
+    One predicate rather than the same two conditions spelled slightly differently in each
+    resolver. Both halves matter and for different reasons: with output redirected the
+    picker would draw into a pipe and block forever, and without fzf there is nothing to
+    draw with.
+
+    A refusal here is NOT a cancellation. Nobody was asked, so nobody declined — and
+    reporting it as one would tell a script author their pipeline was cancelled by a user
+    who is not there.
+#>
+function Test-PmxCanPick {
+    if ([Console]::IsOutputRedirected) { return $false }
+    return [bool](Get-Command fzf -ErrorAction SilentlyContinue)
+}
+
+<#
+.SYNOPSIS
+    The envelope a resolver returns when the user escaped the picker.
+#>
+function New-PmxCancelledResult {
+    param([string]$Kind = 'Vm')
+    $result = [pscustomobject]@{ Success = $false; Cancelled = $true; Error = '' }
+    # Callers read .Vm or .Disk by name; the field has to exist and be empty rather than
+    # be absent, so `$resolved.Vm` is $null instead of throwing under StrictMode.
+    Add-Member -InputObject $result -NotePropertyName $Kind -NotePropertyValue $null
+    return $result
+}
+
+<#
+.SYNOPSIS
+    Render a failed resolve — quietly if it was a cancellation, red if it was not.
+#>
+function Write-PmxResolveFailure {
+    param([Parameter(Mandatory)][AllowNull()]$Resolved)
+
+    if ($null -eq $Resolved) { Write-Host '❌ nothing was resolved' -ForegroundColor Red; return }
+    if ($Resolved.Cancelled) {
+        # Dim and unadorned. The user already knows what they did; this only confirms the
+        # command ended on purpose rather than silently dying.
+        Write-Host '↩ Cancelled.' -ForegroundColor DarkGray
+        return
+    }
+    Write-Host "❌ $($Resolved.Error)" -ForegroundColor Red
+}
+
 function Write-PmxQueryFailure {
     param(
         [AllowEmptyString()][string]$Message,

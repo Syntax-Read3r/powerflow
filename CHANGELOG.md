@@ -4,6 +4,40 @@ All notable changes to PowerFlow will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- ↩ **Escaping a PMX picker is no longer an error (PF-UX-002 b2).** Pressing Escape ended
+  the command with a red `❌ cancelled`. The red marker is the one piece of output that has
+  to stay trustworthy — spending it on a user who simply changed their mind teaches them to
+  scan past it, and the next time it means something, they will. It now reads:
+
+  ```
+  ↩ Cancelled.
+  ```
+
+  dim and unadorned. Five outcomes reached the same renderer and **only one of them is
+  neutral**, so they are now told apart rather than flattened:
+
+  | | |
+  |---|---|
+  | Esc pressed | neutral — nothing to fix |
+  | no VMs / no disks | a state worth reporting |
+  | fzf unavailable | an instruction — nobody was *asked*, so nobody declined |
+  | invalid selector | an error |
+  | ambiguous selector | an error |
+
+  Fixed at the shared boundary, not per command: nine call sites rendered the failure by
+  hand, and a convention enforced in nine places is one that drifts in one of them. They now
+  route through `Write-PmxResolveFailure`, and a test fails the build if a tenth appears.
+
+  Two smaller things fell out of it. The **disk** picker had the same bug wearing different
+  clothes — it answered `$null` to both *cancelled* and *no picker available*, and the caller
+  reacted by re-printing the entire disk list, so escaping a picker of those same rows looked
+  like the Escape had not registered. And the *"may we open a picker at all"* rule, which was
+  duplicated inline in two files with slightly different spellings, is now one named
+  predicate (`Test-PmxCanPick`) — which is also what makes the interactive path testable at
+  all, since a test harness always runs with output redirected.
+
 ### Added
 
 - 🖥️ **`pc-name web-prod` — rename the machine without breaking `sudo` (PF-FEAT-005).**
