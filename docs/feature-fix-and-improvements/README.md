@@ -3,8 +3,25 @@
 This folder is where PowerFlow work arrives. Bugs found while using the shell, features wanted,
 and rough edges worth smoothing all get written down here first and picked up from here.
 
-[powerflow_backlog(1).md](<powerflow_backlog(1).md>) is the cumulative log. **Do not reset or
-clear it** until a copy has been made and a reset is explicitly asked for.
+Two cumulative logs now exist. **Do not reset or clear either** until a copy has been made and
+a reset is explicitly asked for — [powerflow_backlog(2).md](<powerflow_backlog(2).md>) carries
+that instruction in its own footer.
+
+| Log | Covers | State |
+|---|---|---|
+| [powerflow_backlog(1).md](<powerflow_backlog(1).md>) | the original 18 items | **all closed** — see the index below |
+| [powerflow_backlog(2).md](<powerflow_backlog(2).md>) | 16 items, reset 2026-08-10 | **open** — see "Round 2" below |
+
+> ### ⚠️ The two logs REUSE THE SAME IDs for different work
+>
+> Backlog (2) restarted numbering at `PF-FEAT-001`, so **six IDs now mean two different
+> things**. `PF-FEAT-001` is `rn --chmod` in round 1 and *guarded VM destroy* in round 2;
+> `PF-UX-001` is `pmx start <vm>` in round 1 and *`pmx list` aliases* in round 2.
+>
+> Everything below is therefore qualified **(b1)** or **(b2)**. An unqualified "PF-FEAT-003"
+> in a commit message or a doc is ambiguous and should be treated as a bug in that text —
+> which is not hypothetical: round 2''s PF-FEAT-003 assumes round 1''s PF-FEAT-003 (clone,
+> shipped in v5.0.0) as its own Phase 1.
 
 <!-- The angle brackets around the link target are required: a filename containing parentheses
      breaks markdown link parsing without them. The "(1)" looks like a browser download suffix —
@@ -70,7 +87,10 @@ renumbered later. Getting the report down beats formatting it.
 
 ---
 
-## Index
+## Round 1 — all closed
+
+IDs in this table are the **(b1)** numbering. Round 2 reuses the same numbers for different
+work, so a bare `PF-FEAT-001` is ambiguous — see the warning at the top.
 
 Ordered by the backlog's own **Suggested implementation order**, not by ID. Status is as of the
 last pass over the tree — items are verified against the current code rather than trusted from
@@ -101,6 +121,61 @@ the report, because the tree moves and a report can go stale.
 
 PF-FEAT-004, PF-FEAT-005 and PF-BUG-006 were added after the implementation order was written
 and are not in it yet.
+
+---
+
+## Round 2 — [powerflow_backlog(2).md](<powerflow_backlog(2).md>)
+
+16 open items, read and assessed against the tree on 2026-08-18. **Sizes and "already exists"
+were verified in code, not taken from the report** — the backlog predates `storage report`,
+`--educate`, the flag convention and the `pdm`→`pman` rename, so several items are further
+along than they claim and two are further behind.
+
+| ID (b2) | Kind | What | Size | Assessment |
+|---|---|---|---|---|
+| PF-UX-002 | UX | picker cancellation reported as an error | **small** | The cheapest real win here. Escape from a picker returns `Error = ''cancelled''`, which callers render as a failure. **Two pickers, not one** — the VM picker (`vm-read.ps1:80`) and a second disk picker; a fix at only the first leaves two of the item''s own listed tests failing |
+| PF-UX-001 | UX | `pmx list` / `pmx status` + typo suggestions | medium | Both targets already exist; the aliases are two `switch` cases in `command.ps1`. Typo suggestions are the new part, and must never auto-execute |
+| PF-FEAT-008 | FEATURE | `pmx net` fleet view with SSH reachability | medium | Most of it exists — `Get-PmxVmNetworkModel` is already the single data path. New: the top-level route, the SSH column, and a primary-address choice |
+| PF-FEAT-005 | FEATURE | `pman`/`dkr` logs refinement + readable `inspect` | medium | The spine is built: the `logs` verb, the log-command adapter, name resolution. New: timestamps by default, tail grammar, and the `inspect` view |
+| PF-UX-003 | INVESTIGATE | word navigation / selection keys | medium | **Probably not PowerFlow''s bug.** It binds only `!` and `$` (`history.ps1:45,63`) and never sets `EditMode`, so `Ctrl+Left/Right` are PSReadLine defaults. Needs reproducing on the real terminal before any code |
+| PF-FEAT-004 | FEATURE | `pman events` human time ranges | large | The wrapper exists (as `pman`). New: the `t@HH:MM`/`yd@` grammar and a backend doctor |
+| PF-FEAT-002 | FEATURE | reboot/stop/reset, snapshot rollback/delete, suspend/resume, migrate, disk move | large | Nine commands. `Invoke-PmxVmLifecycleChange` is the extension point but is fenced by `[ValidateSet(''start'',''shutdown'')]`. Needs adapter operations on both platforms |
+| PF-FEAT-001 | FEATURE | guarded VM destroy / `--purge` | large | Most of the safety chain exists (`Invoke-PmxAmberMutation`, audit, revalidation). **Four blockers below** |
+| PF-FEAT-006 | FEATURE | `journal` — Linux timeline over journalctl | large | Only `Get-StabilityEvents` reads the journal today, and narrowly. Largely net-new |
+| PF-FEAT-007 | FEATURE | `pman service` — Quadlet + rootless persistence | large | Net-new: zero hits for quadlet/linger/subuid anywhere. Mutating, so it needs the guarded-preview treatment |
+| PF-FEAT-011 | FEATURE | `network dns` — status, split-DNS enrol, test, undo | large | Genuinely net-new; `nmcli`/`resolvectl` appear nowhere. The intent-first grammar (`nw dns wg-home use 192.168.8.30 for .test`) is the interesting part |
+| PF-FEAT-012 | FEATURE | `network`/`nw`, `svc`, `sys` namespaces | large | ~35 subcommands. Net-new, and the single biggest surface in the file |
+| PF-FEAT-013 | FEATURE | fill those namespaces (storage, procs, ports, packages, firewall, hardware, timers, users) | large | **Roughly a quarter already shipped** under other names — `sys storage` is `storage report`; `sys proc`/packages/users are partial. Depends on PF-FEAT-012 |
+| PF-FEAT-003 | FEATURE | `server setup` — guided clone → identity → srv → role | large | **Its Phase 1 already shipped** as round 1''s PF-FEAT-003 (clone-and-configure, v5.0.0), and two fzf pickers it lists as missing already exist in `components/proxmox/` |
+| PF-FEAT-010 | FEATURE | DNS server role inside `server setup` | large | Depends on PF-FEAT-003 and PF-FEAT-011 both existing first |
+| PF-FEAT-009 | FEATURE | PMX SSH connection/session telemetry | large | Lowest value for the size. Needs a guest-exec path that does not exist, and guest-exec is a materially wider blast radius than the current read-only allow-list |
+
+### Four things that need a decision before PF-FEAT-001 (destroy) can be built
+
+Destroy is the most dangerous command in the file, so these are listed rather than guessed at:
+
+1. **The grammar does not exist.** `Invoke-PmxVmCommand` reads `$Arguments[0]` as the *action*,
+   so `pmx vm 103 destroy` answers *"Unknown VM action ''103''"*. The backlog''s object-first
+   form is a router-wide change affecting ~20 subcommands. Action-first (`pmx vm destroy 103`)
+   needs no change at all.
+2. **"No picker" contradicts a written house rule.** `Resolve-PmxManagedVm` opens an fzf picker
+   on any empty selector *by design*, and its own comment calls refusing-where-a-picker-would-do
+   "the house anti-pattern". Destroy wants the opposite. That is a deliberate exception, and the
+   owner''s call.
+3. **There is no RED confirmation primitive.** `Confirm-PmxAmberPlan` is hardwired to
+   `[y/N]`. Typing the VM name back needs either a new primitive or a `-Confirm` scriptblock on
+   the amber harness.
+4. **The disk preview would UNDER-REPORT.** `Get-PmxVirtualDisksFromConfig` matches only
+   `^(ide|sata|scsi|virtio)\d+$`, so `efidisk0`, `tpmstate0` and `unused0..N` are invisible —
+   and the backlog''s own example preview lists `efidisk0`. A destroy preview that under-states
+   what it deletes is wrong in the one direction such a preview must never be wrong.
+
+### Stale wording to fix in the file itself
+
+- **`pdm` is now `pman`** (PF-FEAT-004, 005, 007 and the command matrix). `pdm` is a widely used
+  Python package manager; the rename shipped in v5.0.0.
+- The matrix''s flag principle — *"Long PowerFlow word flags use `--word`"* — already matches
+  the adopted convention ([ETHOS.md](../plan/ethos/ETHOS.md)), so nothing there needs changing.
 
 ---
 
