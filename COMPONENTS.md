@@ -162,7 +162,7 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | `components/navigation/roots.ps1` | Navigation | `Get-NavSearchRoots`, `Get-NavDefaultRoots`, `Add-NavSearchRoot`, `Remove-NavSearchRoot`, `Reset-NavSearchRoots`, `Show-NavSearchRoots`, `Format-NavPath` — **where `nav` looks**, persisted to `~/.nav_roots.json`² · plus the **named-starting-point layer shared by `nav` and `ls`**: `Get-PFNamedRoots`, `Get-PFRootAliases`, `Resolve-PFRootAlias`, `Get-PFRootChoices`, `Resolve-PFRootedDirectory`, and user **anchors** `Get-PFUserAnchors`/`Save-PFUserAnchors`/`Add-PFAnchor`/`Remove-PFAnchor`/`Show-PFAnchors`, plus the OneDrive-vs-local folder preference `Get-PFFolderPreference`/`Set-PFFolderPreference`/`Repair-PFUserFolders`⁹ |
 | `components/navigation/bookmarks.ps1` | Navigation | `Initialize-DefaultBookmarks`, `Get-Bookmarks`, `Save-Bookmarks`, `Add-Bookmark`, `Remove-Bookmark`, `Rename-Bookmark`, `Show-BookmarkList` |
 | `components/navigation/projects.ps1` | Navigation | `Search-Projects` |
-| `components/navigation/nav.ps1` | Navigation | `nav`, `nav roots`, `nav anchors`, `nav b .`, `Test-NavFunction`, `z` (alias) — **hand-parses ``, no `param()` block**: a param block binds `-srv`/`-pics` as parameter NAMES, so `nav -srv complete` never reached the body (it just printed help). Same trap as `rm -rf`, footnote ⁵ |
+| `components/navigation/nav.ps1` | Navigation | `nav`, `nav roots`, `nav anchors`, `nav b .`, `z` (alias) — **hand-parses ``, no `param()` block**: a param block binds `-srv`/`-pics` as parameter NAMES, so `nav -srv complete` never reached the body (it just printed help). Same trap as `rm -rf`, footnote ⁵ |
 | `components/navigation/directory.ps1` | Navigation | `here`, `..`, `...`, `....`, `.....`, `~`, `back`, `cd-` (alias), `copy-pwd` |
 | `components/files/listing.ps1` | Files | `ls`, `la`, `ll`, `clr` (alias) — `ls -<anchor> <name>` lists a directory without typing its path (same resolver as `nav`); `-recurse`/`-depth N` accepted as the spellings PowerShell users already type. **`-r` is NOT aliased** — that is GNU reverse-sort |
 | `components/files/operations.ps1` | Both | `del`¹, `mvf`¹ ⁶, `Invoke-GnuMove`, `mv-t`, `mv-c`, `Split-GnuArgs`⁵ — both report themselves as the name they were **invoked** as (`$MyInvocation.InvocationName`), so `rm -rf x` on Windows says `rm:` while `del -rf x` says `del:`. Neither is named after a coreutil, so neither needs unbinding anywhere |
@@ -239,7 +239,7 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 | File | Platform | Functions |
 |------|----------|-----------|
 | `windows-only/coreutils.ps1` | Windows | `mkdir` (`-p`), `touch`, `rmdir` — GNU clones for the one platform that ships none of them: Windows has no `touch` at all, its `mkdir` is a New-Item wrapper with no GNU flags, and its `rmdir` will not ask before taking a directory's contents with it. Never loads on Linux, where the real tools are better. |
-| `windows-only/wsl.ps1` | Windows | `open-ubuntu`, `Get-WindowsTerminalProfiles`, `open-wsl-simple` — launch a WSL tab **from** Windows Terminal. WSL is a Windows concept; this never loads on Linux. |
+| `windows-only/wsl.ps1` | Windows | `open-ubuntu`, `open-wsl-simple` — launch a WSL tab **from** Windows Terminal. WSL is a Windows concept; this never loads on Linux. |
 
 ---
 

@@ -4,7 +4,7 @@
 # Domain   : Navigation
 # File     : components/navigation/nav.ps1
 # Purpose  : Smart project navigation with bookmark support and fzf fuzzy search
-# Functions: nav, Test-NavFunction
+# Functions: nav
 # Depends  : components/navigation/bookmarks.ps1, components/navigation/projects.ps1
 # ==============================================================================
 
@@ -330,31 +330,6 @@ function nav {
         Write-Host "   Searched 4 levels deep in: $(($searchRoots | ForEach-Object { Format-NavPath $_ }) -join ', ')" -ForegroundColor DarkGray
         Write-Host "💡 Try a starting point:  nav -<start> $query      (nav roots lists them)" -ForegroundColor DarkGray
         Write-Host "💡 Install fzf for fuzzy search: $(Get-DependencyInstallHint 'fzf')" -ForegroundColor DarkGray
-    }
-}
-
-function Test-NavFunction {
-    param([string]$path = $null)
-
-    Write-Host "=== NAV DEBUG ===" -ForegroundColor Cyan
-    Write-Host "Platform: $script:PowerFlowOS   Separator: '$([IO.Path]::DirectorySeparatorChar)'   Home: $(Get-HomePath)" -ForegroundColor DarkGray
-
-    Show-NavSearchRoots
-
-    $bookmarks = Get-Bookmarks
-    Write-Host "Bookmarks:" -ForegroundColor Yellow
-    $bookmarks.GetEnumerator() | Sort-Object Key | ForEach-Object {
-        $ok = Test-Path $_.Value
-        Write-Host "  $(if ($ok) { '✅' } else { '❌' }) $($_.Key) → $($_.Value)" `
-            -ForegroundColor $(if ($ok) { 'Green' } else { 'Red' })
-    }
-
-    Write-Host ""
-    Write-Host "fzf available: $(if (Get-Command fzf -ErrorAction SilentlyContinue) { '✅' } else { '❌' })" -ForegroundColor Yellow
-
-    if ($path) {
-        Write-Host ""
-        nav $path -verbose
     }
 }
 

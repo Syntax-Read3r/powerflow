@@ -4,7 +4,7 @@
 # Domain   : Terminal
 # File     : components/terminal/wsl.ps1
 # Purpose  : Open Ubuntu/WSL tabs with path bridging from Windows to WSL filesystem
-# Functions: open-ubuntu, Get-WindowsTerminalProfiles, open-wsl-simple
+# Functions: open-ubuntu, open-wsl-simple
 # Depends  : none
 # ==============================================================================
 
@@ -38,44 +38,6 @@ function open-ubuntu {
 }
 
 # Test what profile GUIDs are actually available
-function Get-WindowsTerminalProfiles {
-    Write-Host "🔍 Windows Terminal Profiles" -ForegroundColor Cyan
-    Write-Host "============================" -ForegroundColor Cyan
-
-    $wtProfilesPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
-
-    if (Test-Path $wtProfilesPath) {
-        try {
-            $wtSettings = Get-Content $wtProfilesPath | ConvertFrom-Json
-            $profiles = $wtSettings.profiles.list
-
-            Write-Host "`n📋 Available profiles:" -ForegroundColor Yellow
-            foreach ($profile in $profiles) {
-                $name = $profile.name
-                $guid = $profile.guid
-                $source = if ($profile.source) { " (source: $($profile.source))" } else { "" }
-
-                Write-Host "   🔹 $name" -ForegroundColor White
-                Write-Host "      GUID: $guid$source" -ForegroundColor DarkGray
-
-                # Highlight Ubuntu/WSL profiles
-                if ($name -like "*Ubuntu*" -or $name -like "*WSL*") {
-                    Write-Host "      ⭐ This is a Linux/WSL profile" -ForegroundColor Green
-                }
-            }
-
-            Write-Host "`n💡 To open a specific profile programmatically:" -ForegroundColor Cyan
-            Write-Host "   wt -w 0 nt -p `"{GUID}`"" -ForegroundColor DarkGray
-            Write-Host "   or" -ForegroundColor DarkGray
-            Write-Host "   wt -w 0 nt -p `"Profile Name`"" -ForegroundColor DarkGray
-
-        } catch {
-            Write-Host "❌ Error parsing Windows Terminal settings: $($_.Exception.Message)" -ForegroundColor Red
-        }
-    } else {
-        Write-Host "❌ Windows Terminal settings file not found" -ForegroundColor Red
-    }
-}
 
 # Ultra-simple launcher that just uses the profile name
 function open-wsl-simple {

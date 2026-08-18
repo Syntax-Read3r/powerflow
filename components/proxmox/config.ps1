@@ -32,7 +32,6 @@ function Get-PmxConfigDefaults {
         # was a choice between one option that did nothing. A saved pmx.json carrying them is
         # still fine: Get-PmxConfig only reads keys present in these defaults, so they are
         # ignored rather than rejected.
-        Confirmation   = 'risk-based'
         AuditLog       = $true
         TimeoutSeconds = 60
     }
@@ -46,7 +45,7 @@ function Get-PmxConfigSettingMap {
         'output'          = 'Output'
         'show-native'     = 'ShowNative'
         'explain'         = 'Explain'
-        'confirmation'    = 'Confirmation'
+
         'audit-log'       = 'AuditLog'
         'timeout-seconds' = 'TimeoutSeconds'
     }
@@ -114,12 +113,6 @@ function ConvertTo-PmxConfigValue {
         }
         { $_ -in @('ShowNative', 'Explain', 'AuditLog') } {
             return (ConvertTo-PmxBooleanSetting -Value $Value)
-        }
-        'Confirmation' {
-            if ($text -ne 'risk-based') {
-                return [pscustomobject]@{ Success = $false; Value = $null; Error = 'confirmation currently supports only risk-based' }
-            }
-            return [pscustomobject]@{ Success = $true; Value = $text; Error = '' }
         }
         'TimeoutSeconds' {
             $seconds = 0
