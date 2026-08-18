@@ -126,6 +126,13 @@ and are not in it yet.
 
 ## Round 2 — [powerflow_backlog(2).md](<powerflow_backlog(2).md>)
 
+**5 of 16 closed — every small and medium item.** What remains is the eleven **large** ones,
+and several are gated on decisions rather than effort: PF-FEAT-001 (destroy) has four listed
+blockers that are the owner's call, and PF-FEAT-012/013 (the `network`/`svc`/`sys` namespaces,
+~35 subcommands) is the single biggest surface in the file. The highest-leverage one left is
+**PF-FEAT-004**, whose human time-range grammar is the shared parser PF-FEAT-005's deferred
+half is waiting on.
+
 16 open items, read and assessed against the tree on 2026-08-18. **Sizes and "already exists"
 were verified in code, not taken from the report** — the backlog predates `storage report`,
 `--educate`, the flag convention and the `pdm`→`pman` rename, so several items are further
