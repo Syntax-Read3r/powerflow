@@ -18,3 +18,4 @@ Write-Host 'PMX regression suite passed.'
 & (Join-Path $PSScriptRoot 'convenience-routes.ps1')
 & (Join-Path $PSScriptRoot 'picker-cancellation.ps1')
 & (Join-Path $PSScriptRoot 'route-suggestions.ps1')
+& (Join-Path $PSScriptRoot 'fleet-network-status.ps1')

@@ -336,6 +336,19 @@ function Get-PmxHelpTopics {
     # into. They are real routes the router answers, so leaving them out of the catalogue
     # made `pmx list --help` unhelpful AND kept them out of the typo suggestions, which read
     # this table as their source of truth.
+    $topics['vm network status'] = [pscustomobject]@{
+        Purpose = 'Show which VMs are running, what addresses their agents report, and which have SSH answering.'
+        Syntax = @('pmx net status [--json|--table] [--no-probe]', 'pmx net <vm> status', 'pmx network --all status')
+        Example = @('pmx net status', 'pmx net 103 status', 'pmx net status --no-probe')
+        Native = @('pvesh get /cluster/resources --type vm', 'qm guest cmd <vmid> network-get-interfaces', 'TCP connect to the reported address')
+        Safety = 'Green. Read only. SSH is a TCP connect to one known address; no scanning of any kind.'
+        Story = 'One table for "which of these can I actually get into right now".'
+    }
+    $topics['net status'] = $topics['vm network status']
+    $topics['network status'] = $topics['vm network status']
+    $topics['net'] = $topics['vm network status']
+    $topics['network'] = $topics['vm network status']
+
     $topics['list'] = $topics['vm list']
     $topics['status'] = $topics['node status']
     $topics['start'] = $topics['vm start']

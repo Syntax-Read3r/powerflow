@@ -245,6 +245,11 @@ function pmx {
         # their canonical spelling — another route into one view, not a second view.
         'list'     { Show-PmxManagedVmList -Arguments $tail }
         'status'   { Show-PmxManagedNodeStatus -Arguments $tail }
+        # PF-FEAT-008. The fleet network view is asked for from the top, not from inside
+        # `pmx vm` — "which VMs can I reach" is a question about the node, not about one VM.
+        # Both spellings forward into the same function `pmx vm net` uses.
+        'net'      { Invoke-PmxVmNetworkCommand -Arguments $tail }
+        'network'  { Invoke-PmxVmNetworkCommand -Arguments $tail }
         # Top-level lifecycle shortcuts. `pmx vm start` remains canonical; these forward into
         # the identical guarded mutation path, so a shortcut never means a weaker safety chain.
         # Deliberately only start/shutdown: those are the two that get typed reflexively, and

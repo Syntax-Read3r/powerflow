@@ -72,35 +72,66 @@ function Test-ServerOnline {
     return 'offline'
 }
 
-# Status for every server AT ONCE — one offline server must not add its timeout to
-# the next. ForEach-Object -Parallel cannot see local functions, so the probe is
-# inlined; keep it in sync with Test-ServerOnline above.
-function Get-PFServerStatuses {
-    param([hashtable]$Servers)
+<#
+.SYNOPSIS
+    online / no-ssh / offline for MANY hosts at once, in about one host's worth of time.
+.DESCRIPTION
+    One offline host must not add its timeout to the next, so the probes run in parallel.
+    `ForEach-Object -Parallel` runs each iteration in a fresh runspace that cannot see local
+    functions, which is why the probe below is inlined rather than calling
+    Test-ServerOnline — the duplication is forced by the runspace boundary, not chosen.
 
-    $jobs = $Servers.GetEnumerator() | ForEach-Object {
-        [pscustomobject]@{ Name = $_.Key; TargetHost = $_.Value.host; Port = [int]$_.Value.port }
-    }
+    It lives here, once, because two callers now want it: `srv` and the PMX fleet view. A
+    third copy of a socket timeout is a third place for the timeout to be wrong.
 
-    $results = $jobs | ForEach-Object -ThrottleLimit 8 -Parallel {
+    -Targets is a list of objects with Key, TargetHost and Port. Returns a hashtable keyed
+    by Key. Nothing here interprets what the state MEANS — 'online' is only "the TCP
+    connection succeeded", never "you can log in".
+#>
+function Get-PFHostReachability {
+    param(
+        [object[]]$Targets = @(),
+        [int]$TimeoutMs = 1200,
+        [int]$PingTimeoutMs = 800,
+        [int]$ThrottleLimit = 8
+    )
+
+    if (-not @($Targets).Count) { return @{} }
+
+    $results = @($Targets) | ForEach-Object -ThrottleLimit $ThrottleLimit -Parallel {
+        $connectTimeout = $using:TimeoutMs
+        $pingTimeout    = $using:PingTimeoutMs
         $state  = 'offline'
         $client = [System.Net.Sockets.TcpClient]::new()
         try {
             $task = $client.ConnectAsync($_.TargetHost, $_.Port)
-            if ($task.Wait(1200) -and $client.Connected) { $state = 'online' }
+            if ($task.Wait($connectTimeout) -and $client.Connected) { $state = 'online' }
         } catch {} finally { $client.Dispose() }
         if ($state -ne 'online') {
+            # Port dead — does the MACHINE answer? That distinction is the difference
+            # between "sshd is not listening" and "nothing is there", and collapsing them
+            # sends someone to debug the wrong layer.
             try {
                 $ping = [System.Net.NetworkInformation.Ping]::new()
-                if ($ping.Send($_.TargetHost, 800).Status -eq 'Success') { $state = 'no-ssh' }
+                if ($ping.Send($_.TargetHost, $pingTimeout).Status -eq 'Success') { $state = 'no-ssh' }
             } catch {}
         }
-        [pscustomobject]@{ Name = $_.Name; State = $state }
+        [pscustomobject]@{ Key = $_.Key; State = $state }
     }
 
     $map = @{}
-    foreach ($r in $results) { $map[$r.Name] = $r.State }
+    foreach ($r in $results) { $map[$r.Key] = $r.State }
     return $map
+}
+
+# Status for every saved server AT ONCE.
+function Get-PFServerStatuses {
+    param([hashtable]$Servers)
+
+    $targets = @($Servers.GetEnumerator() | ForEach-Object {
+        [pscustomobject]@{ Key = $_.Key; TargetHost = $_.Value.host; Port = [int]$_.Value.port }
+    })
+    return (Get-PFHostReachability -Targets $targets)
 }
 
 function Format-PFServerStatus {

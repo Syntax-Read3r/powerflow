@@ -6,6 +6,48 @@ All notable changes to PowerFlow will be documented in this file.
 
 ### Added
 
+- 🌐 **`pmx net status` — which VMs can I actually get into, in one table (PF-FEAT-008 b2).**
+  The question is asked constantly on a Proxmox box and answering it by hand is `qm list`,
+  then `qm guest cmd <vmid> network-get-interfaces` once per VM, then an ssh attempt per
+  address.
+
+  ```
+    VMID   NAME                   VM        AGENT              ADDRESS              SSH
+    100    debian13-base          stopped   stopped            —                    stopped
+    101    debian13-lab           running   available          192.168.1.111        ready
+    102    docker-host            running   available          192.168.1.112  +2    ready
+    104    no-agent-vm            running   not-responding     —                    agent-unavailable
+    105    silent-vm              running   available          —                    no-address
+    900    debian13-base-v2       running   available          192.168.1.120        closed
+  ```
+
+  `pmx net <vm> status` drills into one VM and lists every interface, with the primary
+  candidate marked. `pmx network` is the same command; `-a`/`--all` is accepted, though bare
+  `pmx net status` already means the fleet — nobody should need a flag for the obvious answer.
+
+  **Three things it deliberately does not do:**
+
+  - **It never flattens a failure.** `stopped`, `agent-unavailable`, `no-address` and
+    `closed` are four different answers with four different fixes — start the VM, start the
+    agent, look inside the guest, look at sshd. Collapsing them into "failed" sends someone
+    to debug the wrong layer, and the item called that out by name.
+  - **It never scans.** No ARP, no DNS guessing, no DHCP leases, no ping sweep, no port scan
+    across the subnet. It probes exactly the addresses the guest agent reported and nothing
+    else; if PMX does not know an address the answer is `no-address` and that is the end of
+    it. A test stands in for the prober and asserts *what was probed*, so this is verified
+    rather than promised.
+  - **`ready` does not overclaim.** It means the TCP connection to the port succeeded — not
+    that the host key was trusted, credentials were accepted, or a login would work. The
+    human view says so under the table and the `--json` payload carries it as a field, so a
+    consumer cannot read `ssh: ready` as "authentication would succeed".
+
+  It reuses what already existed rather than growing a parallel copy: guest-interface parsing
+  and the primary-address choice come from the existing PMX network layer, and the TCP probe
+  is `srv`'s. That last one meant extracting `Get-PFHostReachability` — `srv` had the parallel
+  probe inlined (a `ForEach-Object -Parallel` runspace cannot see local functions), and a
+  third copy of a socket timeout is a third place for the timeout to be wrong. `--no-probe`
+  renders the whole table with no connections at all.
+
 - 🔎 **`pmx list`, `pmx status`, and a typo that tells you what you meant (PF-UX-001 b2).**
   `qm list` muscle memory reaches for `pmx list`, which answered *"Unknown pmx command
   'list'"*. Both new spellings call the **same function** as their canonical form —
