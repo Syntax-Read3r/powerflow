@@ -28,7 +28,7 @@ that instruction in its own footer.
      renaming the file to powerflow_backlog.md would remove the need, but it is the owner's file
      and the link works as-is. -->
 
-> **Where things stand:** 19 of 20 closed. One remains open: PF-FEAT-005 (safe Linux hostname change). Round 1 is otherwise finished. (Was: PF-FEAT-001 and PF-FEAT-002, both
+> **Where things stand:** **20 of 20 closed — round 1 is finished.** (Was: PF-FEAT-001 and PF-FEAT-002, both
 > unblocked by the flag convention, now done.) Each status below is verified against the
 > current tree, not trusted from the report.
 >
@@ -112,7 +112,7 @@ the report, because the tree moves and a report can go stale.
 | 12 | PF-FEAT-001 | FEATURE | `rn --chmod <mode>` | **done** — applied to the NEW path and verified by reading it back (chmod can exit 0 and change nothing on a fixed-permission mount). A failed chmod does not roll the rename back. `tests/linux/perms-features.ps1` |
 | 13 | PF-FEAT-002 | FEATURE | `ls --perms` | **done** — compact mode view, both notations, ⚠ only where earned (world-writable/setuid/setgid). Windows refuses rather than faking ACLs. `tests/linux/perms-features.ps1` |
 | — | PF-FEAT-004 | FEATURE | Linux/VM identity + storage view in `pc-whoami` | **done** — `pc-whoami --system` adds hostname/OS/kernel/arch/virtualization (container reported distinct from VM); `--storage` DELEGATES to `storage report` rather than building a second storage view. `--educate` became universal in the process |
-| — | PF-FEAT-005 | FEATURE | safe Linux hostname change with `/etc/hosts` sync | open |
+| — | PF-FEAT-005 | FEATURE | safe Linux hostname change with `/etc/hosts` sync | **done** — `pc-name` (alias `pc-hostname`). Previews both edits, backs `/etc/hosts` up, rewrites only the 127.x line naming this host, and verifies the new name resolves. Falls back to `hostname` + `/etc/hostname` where there is no systemd. `tests/linux/hostname-rename.ps1` |
 | — | PF-BUG-006 | BUG | `srv <name>` echoes the typed password in cleartext | **fixed** — the Windows askpass helper never cleared `ENABLE_ECHO_INPUT`/`ENABLE_LINE_INPUT`; both are now cleared before the prompt and the original mode restored in `finally`. `tests/network/askpass-echo.ps1` |
 | — | PF-BUG-007 | BUG | `swapon` "not recognized" under pwsh on Linux | **fixed** — `/usr/local/sbin`, `/usr/sbin`, `/sbin` appended when present. Found a second, worse bug on the way: `"$env:PATH:$dir"` was REPLACING PATH, not appending. `tests/linux/sbin-path.ps1` |
 | — | PF-FEAT-006 | FEATURE | one grouped storage/memory diagnostic instead of five commands | **done** — `storage report`: volumes, memory, swap and disk layout, read-only and no sudo. Composed from adapters, so it needs neither procps nor lsblk to render the rest. `tests/linux/storage-report.ps1` |

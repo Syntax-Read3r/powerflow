@@ -140,3 +140,295 @@ function Set-SysConfig {
         default    { return $false }
     }
 }
+
+# ── PF-FEAT-005: renaming the host, without breaking name resolution ──────────
+#
+# `hostnamectl set-hostname web-prod` on its own leaves /etc/hosts pointing at the OLD
+# name, and the very next sudo prints:
+#
+#     sudo: unable to resolve host web-prod: Name or service not known
+#
+# It still works — sudo falls back after a timeout — but it is alarming, it slows every
+# elevated command, and on Debian it persists until somebody edits /etc/hosts by hand.
+# Changing the two together is the whole point of this pair.
+
+<#
+.SYNOPSIS
+    RFC 1123 validation for a hostname label.
+.DESCRIPTION
+    hostnamectl accepts more than DNS does, so validating here rather than letting it
+    through means the refusal arrives BEFORE anything is changed. Underscores are the
+    common trap: legal in a Windows NetBIOS name, illegal in DNS, and the resulting host
+    is unreachable by name from anything that resolves properly.
+#>
+function Test-HostNameValid {
+    # AllowEmptyString, deliberately. Mandatory alone rejects '' with a binder error, which
+    # would make the empty-name branch below unreachable and replace a sentence the caller
+    # can print with an exception it has to catch.
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Name)
+
+    if ($Name.Length -eq 0)  { return [pscustomobject]@{ Valid = $false; Error = 'the name is empty' } }
+    if ($Name.Length -gt 63) { return [pscustomobject]@{ Valid = $false; Error = "'$Name' is $($Name.Length) characters; a label may not exceed 63" } }
+    if ($Name -notmatch '^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$') {
+        $hint = if ($Name -match '_') { ' (underscores are legal on Windows but not in DNS)' } else { '' }
+        return [pscustomobject]@{ Valid = $false
+            Error = "'$Name' is not a valid hostname — use letters, digits and hyphens, not starting or ending with a hyphen$hint" }
+    }
+    if ($Name -match '^[0-9]+$') {
+        return [pscustomobject]@{ Valid = $false; Error = "'$Name' is all digits, which resolvers read as an address" }
+    }
+    return [pscustomobject]@{ Valid = $true; Error = '' }
+}
+
+<#
+.SYNOPSIS
+    The current hostname, from whichever source this distro actually has.
+.DESCRIPTION
+    hostnamectl is systemd-only. Alpine and a plain container have neither it nor systemd,
+    and `2>/dev/null` does NOT silence a missing native command — PowerShell throws
+    CommandNotFoundException before the redirect is ever reached. So every source is
+    probed with Get-Command first.
+#>
+function Get-CurrentHostName {
+    if (Get-Command hostnamectl -ErrorAction SilentlyContinue) {
+        $name = "$(hostnamectl --static 2>$null)".Trim()
+        if ($name) { return $name }
+    }
+    if (Get-Command hostname -CommandType Application -ErrorAction SilentlyContinue) {
+        $name = "$(& hostname 2>$null)".Trim()
+        if ($name) { return $name }
+    }
+    if (Test-Path '/etc/hostname') {
+        $name = "$(Get-Content '/etc/hostname' -ErrorAction SilentlyContinue | Select-Object -First 1)".Trim()
+        if ($name) { return $name }
+    }
+    return [Environment]::MachineName
+}
+
+<#
+.SYNOPSIS
+    What renaming this host would change — read-only.
+.DESCRIPTION
+    Returns the current name, the /etc/hosts line that would be rewritten, and the exact
+    replacement, so the caller can PREVIEW the whole change before anything happens.
+
+    Only the LOCAL-HOST entry is touched: the 127.x line that already carries the current
+    hostname. Every other line is left alone — /etc/hosts commonly holds an operator's own
+    static entries for other machines, and a rename has no business rewriting those.
+#>
+function Get-HostRenamePlan {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$NewName)
+
+    $current = Get-CurrentHostName
+
+    $validation = Test-HostNameValid -Name $NewName
+    if (-not $validation.Valid) {
+        return [pscustomobject]@{
+            Supported = $true; Valid = $false; Current = $current; New = $NewName
+            HostsPath = '/etc/hosts'; LineNumber = 0; Before = ''; After = ''
+            Fqdn = ''; Error = $validation.Error
+        }
+    }
+
+    if ($current -eq $NewName) {
+        return [pscustomobject]@{
+            Supported = $true; Valid = $false; Current = $current; New = $NewName
+            HostsPath = '/etc/hosts'; LineNumber = 0; Before = ''; After = ''
+            Fqdn = ''; Error = "this host is already called '$NewName'"
+        }
+    }
+
+    $before = ''; $after = ''; $lineNo = 0; $fqdn = ''
+    if (Test-Path '/etc/hosts') {
+        $lines = @(Get-Content '/etc/hosts' -ErrorAction SilentlyContinue)
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            if ($line -match '^\s*#') { continue }
+            # The local-host entry: a loopback address whose names include the current one.
+            if ($line -notmatch '^\s*127\.') { continue }
+            $fields = @($line -split '\s+' | Where-Object { $_ })
+            if ($fields.Count -lt 2) { continue }
+            $names = @($fields | Select-Object -Skip 1)
+            # Match the SHORT name against each label, so "old.domain old" is caught by both
+            # its FQDN and its bare form.
+            $hit = @($names | Where-Object { $_ -eq $current -or $_ -like "$current.*" })
+            if (-not $hit.Count) { continue }
+
+            $before = $line
+            $lineNo = $i + 1
+            # Replace only the hostname portion of each name, preserving any domain suffix.
+            $rewritten = @($names | ForEach-Object {
+                if ($_ -eq $current) { $NewName }
+                elseif ($_ -like "$current.*") { $NewName + $_.Substring($current.Length) }
+                else { $_ }
+            })
+            $after = ($fields[0] + "`t" + ($rewritten -join ' '))
+            $fqdn = @($rewritten | Where-Object { $_ -like '*.*' } | Select-Object -First 1)
+            break
+        }
+    }
+
+    return [pscustomobject]@{
+        Supported  = $true
+        Valid      = $true
+        Current    = $current
+        New        = $NewName
+        HostsPath  = '/etc/hosts'
+        LineNumber = $lineNo
+        Before     = $before
+        After      = $after
+        Fqdn       = "$fqdn"
+        # No matching line is NOT an error: plenty of systems have no 127.0.1.1 entry at
+        # all. It means there is nothing to sync, and the caller should say so rather than
+        # inventing an entry the distro never had.
+        Error      = ''
+    }
+}
+
+<#
+.SYNOPSIS
+    Set the hostname itself, on systemd and on distros without it.
+.DESCRIPTION
+    Alpine and Arch-without-systemd are both in PowerFlow's Linux CI matrix, and neither
+    has hostnamectl. There the two halves are separate: `hostname` sets the RUNNING name
+    and /etc/hostname sets the one that survives a reboot. Doing only the first is the same
+    class of half-change this whole feature exists to avoid.
+#>
+function Set-MachineHostName {
+    param([Parameter(Mandatory)][string]$NewName)
+
+    if (Get-Command hostnamectl -ErrorAction SilentlyContinue) {
+        if (Invoke-SysSet @('hostnamectl', 'set-hostname', '--', $NewName)) {
+            return [pscustomobject]@{ Success = $true; Error = '' }
+        }
+        return [pscustomobject]@{ Success = $false
+            Error = 'hostnamectl refused the change (is this a container, or was sudo declined?)' }
+    }
+
+    if (-not (Get-Command hostname -CommandType Application -ErrorAction SilentlyContinue)) {
+        return [pscustomobject]@{ Success = $false
+            Error = 'neither hostnamectl nor hostname is available to set the name with' }
+    }
+
+    if (-not (Invoke-SysSet @('hostname', '--', $NewName))) {
+        return [pscustomobject]@{ Success = $false
+            Error = 'hostname refused the change (is this an unprivileged container, or was sudo declined?)' }
+    }
+
+    # Running name changed; now make it survive a reboot. If this half fails, say so
+    # exactly — "it is renamed until you reboot" is a very different situation from "it is
+    # renamed", and a caller told the wrong one will be surprised much later.
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) 'powerflow-hostname'
+    try { Set-Content -Path $tmp -Value $NewName -Encoding utf8 -ErrorAction Stop }
+    catch {
+        return [pscustomobject]@{ Success = $false
+            Error = "the running hostname is now '$NewName', but /etc/hostname could not be written — it will revert on reboot" }
+    }
+    $persisted = Invoke-SysSet @('cp', '--', $tmp, '/etc/hostname')
+    Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+    if (-not $persisted) {
+        return [pscustomobject]@{ Success = $false
+            Error = "the running hostname is now '$NewName', but /etc/hostname could not be written — it will revert on reboot" }
+    }
+
+    return [pscustomobject]@{ Success = $true; Error = '' }
+}
+
+<#
+.SYNOPSIS
+    Apply the rename: hostname first, then the matching /etc/hosts line.
+.DESCRIPTION
+    /etc/hosts is BACKED UP before it is touched, next to the original with a timestamp,
+    and the backup path is returned — a file this important should never be edited without
+    leaving the previous version somewhere obvious.
+
+    Order matters. The hostname is set first because it is the recoverable half: if the
+    hosts edit then fails, the host has a new name and a stale resolver entry, which is
+    noisy but harmless and is exactly the state the caller is told how to finish. Editing
+    hosts first and failing the rename would leave a resolver entry for a name the machine
+    does not have.
+#>
+function Set-HostRename {
+    param(
+        [Parameter(Mandatory)][string]$NewName,
+        [string]$HostsBefore = '',
+        [string]$HostsAfter = ''
+    )
+
+    $validation = Test-HostNameValid -Name $NewName
+    if (-not $validation.Valid) {
+        return [pscustomobject]@{ Supported = $true; Success = $false; HostnameSet = $false
+            HostsUpdated = $false; BackupPath = ''; Error = $validation.Error }
+    }
+
+    $set = Set-MachineHostName -NewName $NewName
+    if (-not $set.Success) {
+        return [pscustomobject]@{ Supported = $true; Success = $false; HostnameSet = $false
+            HostsUpdated = $false; BackupPath = ''; Error = $set.Error }
+    }
+
+    if (-not $HostsBefore) {
+        # Nothing to sync — the machine had no local-host entry naming it.
+        return [pscustomobject]@{ Supported = $true; Success = $true; HostnameSet = $true
+            HostsUpdated = $false; BackupPath = ''; Error = '' }
+    }
+
+    $stamp = (Get-Date -Format 'yyyyMMdd-HHmmss')
+    $backup = "/etc/hosts.powerflow-$stamp"
+    if (-not (Invoke-SysSet @('cp', '-p', '--', '/etc/hosts', $backup))) {
+        return [pscustomobject]@{ Supported = $true; Success = $false; HostnameSet = $true
+            HostsUpdated = $false; BackupPath = ''
+            Error = 'the hostname was changed, but /etc/hosts could not be backed up — it was left untouched' }
+    }
+
+    # Rewritten here rather than with `sed -i`, deliberately. Escaping a hosts line into a
+    # sed script means POSIX BRE, and [regex]::Escape emits .NET escaping — in which \+,
+    # \( and \{ are the LITERAL forms, while BRE reads exactly those as the SPECIAL ones.
+    # On busybox sed (Alpine) the mismatch is not theoretical. Building the file in
+    # PowerShell and copying it into place has no escaping layer at all.
+    $failed = [pscustomobject]@{ Supported = $true; Success = $false; HostnameSet = $true
+        HostsUpdated = $false; BackupPath = $backup
+        Error = "the hostname was changed, but /etc/hosts could not be updated. Restore with: sudo cp -p $backup /etc/hosts" }
+
+    try {
+        $lines   = @(Get-Content '/etc/hosts' -ErrorAction Stop)
+        $matched = $false
+        $rewritten = @($lines | ForEach-Object {
+            if (-not $matched -and $_ -eq $HostsBefore) { $matched = $true; $HostsAfter } else { $_ }
+        })
+        # The line moved or changed since the preview was taken. Writing anyway would apply
+        # an edit the user never saw.
+        if (-not $matched) { return $failed }
+
+        $tmp = Join-Path ([IO.Path]::GetTempPath()) "powerflow-hosts-$stamp"
+        Set-Content -Path $tmp -Value $rewritten -Encoding utf8 -ErrorAction Stop
+    }
+    catch { return $failed }
+
+    # `cp` onto the existing file, not `mv` — cp writes through the original inode, so the
+    # owner, mode and any ACL on /etc/hosts survive. mv would replace it with a file owned
+    # by whoever ran the command.
+    $copied = Invoke-SysSet @('cp', '--', $tmp, '/etc/hosts')
+    Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+    if (-not $copied) { return $failed }
+
+    return [pscustomobject]@{ Supported = $true; Success = $true; HostnameSet = $true
+        HostsUpdated = $true; BackupPath = $backup; Error = '' }
+}
+
+<#
+.SYNOPSIS
+    Does the new name resolve locally? The point of the whole exercise.
+#>
+function Test-HostResolution {
+    param([Parameter(Mandatory)][string]$Name)
+    if (-not (Get-Command getent -ErrorAction SilentlyContinue)) {
+        return [pscustomobject]@{ Checked = $false; Resolves = $false; Detail = 'getent is not available to check with' }
+    }
+    $out = & getent hosts $Name 2>$null
+    return [pscustomobject]@{
+        Checked  = $true
+        Resolves = ($LASTEXITCODE -eq 0 -and [bool]$out)
+        Detail   = "$(@($out)[0])".Trim()
+    }
+}

@@ -149,3 +149,93 @@ function Set-SysConfig {
         default    { return $false }
     }
 }
+
+# ── PF-FEAT-005: renaming the host ────────────────────────────────────────────
+# The Linux sibling exists because `hostnamectl set-hostname` leaves /etc/hosts stale and
+# every later sudo prints "unable to resolve host". Windows has no equivalent failure:
+# there is no 127.0.1.1 convention and the resolver does not consult hosts for the local
+# machine name. So the hosts half is genuinely absent here rather than unimplemented, and
+# saying so is more useful than a no-op that implies parity.
+
+function Test-HostNameValid {
+    # AllowEmptyString, deliberately. Mandatory alone rejects '' with a binder error, which
+    # would make the empty-name branch below unreachable and replace a sentence the caller
+    # can print with an exception it has to catch.
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Name)
+
+    if ($Name.Length -eq 0)  { return [pscustomobject]@{ Valid = $false; Error = 'the name is empty' } }
+    # NetBIOS caps at 15, and a longer name silently gets a DIFFERENT truncated NetBIOS
+    # name — two identities for one machine, which is worse than a refusal.
+    if ($Name.Length -gt 15) {
+        return [pscustomobject]@{ Valid = $false
+            Error = "'$Name' is $($Name.Length) characters; Windows truncates the NetBIOS name at 15, leaving the machine with two different names" }
+    }
+    if ($Name -notmatch '^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$') {
+        return [pscustomobject]@{ Valid = $false
+            Error = "'$Name' is not a valid computer name — use letters, digits and hyphens, not starting or ending with a hyphen" }
+    }
+    if ($Name -match '^[0-9]+$') {
+        return [pscustomobject]@{ Valid = $false; Error = "'$Name' is all digits, which resolvers read as an address" }
+    }
+    return [pscustomobject]@{ Valid = $true; Error = '' }
+}
+
+function Get-HostRenamePlan {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$NewName)
+
+    $current = [Environment]::MachineName
+    $validation = Test-HostNameValid -Name $NewName
+    # NOT $error — that is the automatic error collection, and assigning to it discards the
+    # session's error history for a local variable.
+    $why = $validation.Error
+    if ($validation.Valid -and $current -eq $NewName) { $why = "this host is already called '$NewName'" }
+
+    return [pscustomobject]@{
+        Supported  = $true
+        Valid      = ($validation.Valid -and $current -ne $NewName)
+        Current    = $current
+        New        = $NewName
+        HostsPath  = ''      # no hosts sync on Windows — see the note above
+        LineNumber = 0
+        Before     = ''
+        After      = ''
+        Fqdn       = ''
+        Error      = $why
+    }
+}
+
+function Set-HostRename {
+    param(
+        [Parameter(Mandatory)][string]$NewName,
+        [string]$HostsBefore = '',
+        [string]$HostsAfter = ''
+    )
+
+    $validation = Test-HostNameValid -Name $NewName
+    if (-not $validation.Valid) {
+        return [pscustomobject]@{ Supported = $true; Success = $false; HostnameSet = $false
+            HostsUpdated = $false; BackupPath = ''; Error = $validation.Error }
+    }
+
+    try {
+        Rename-Computer -NewName $NewName -Force -ErrorAction Stop
+    }
+    catch {
+        return [pscustomobject]@{ Supported = $true; Success = $false; HostnameSet = $false
+            HostsUpdated = $false; BackupPath = ''; Error = "the rename failed: $($_.Exception.Message)" }
+    }
+
+    return [pscustomobject]@{ Supported = $true; Success = $true; HostnameSet = $true
+        HostsUpdated = $false; BackupPath = ''
+        # Stated, not hidden: on Windows the new name is not live until a restart, and a
+        # caller reporting plain success would be wrong until then.
+        Error = 'RESTART-REQUIRED' }
+}
+
+function Test-HostResolution {
+    param([Parameter(Mandatory)][string]$Name)
+    # Windows resolves its own name without a hosts entry, so there is nothing here that
+    # could be broken by a rename — and a fabricated check would only ever say "fine".
+    return [pscustomobject]@{ Checked = $false; Resolves = $false
+        Detail = 'Windows resolves its own name without a hosts entry; nothing to verify' }
+}

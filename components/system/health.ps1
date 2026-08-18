@@ -971,3 +971,164 @@ function pc-cap {
 Register-PFCommand -Name 'pc-whoami' -Section '🖥️ MACHINE HEALTH' -Synopsis 'vitals: CPU, GPU, RAM, drives, BIOS age, power, errors' -Example 'pc-whoami --ram · --power · --crashes · --bios · --system'
 Register-PFCommand -Name 'pc-whoami --system' -Section '🖥️ MACHINE HEALTH' -Synopsis 'who and what this machine is: OS, kernel, arch, virtualization' -Example 'pc-whoami --system --educate'
 Register-PFCommand -Name 'pc-cap'    -Section '🖥️ MACHINE HEALTH' -Synopsis 'cap CPU speed; prior state recorded for safe undo' -Example 'pc-cap 85 · pc-cap restore'
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  pc-name — PF-FEAT-005
+# ══════════════════════════════════════════════════════════════════════════════
+# `pc-whoami` reads; `pc-name` is its one mutating sibling. Replaces:
+#
+#     sudo hostnamectl set-hostname web-prod
+#     sudo nano /etc/hosts
+#
+# The second line is the point. Setting the hostname alone leaves /etc/hosts naming the
+# OLD host, and the next sudo prints "unable to resolve host web-prod". It still works —
+# sudo falls back after a timeout — but every elevated command is slower and noisier until
+# somebody edits the file by hand.
+#
+# GUARDED, because this is a mutation: validate, preview BOTH changes, confirm, back up,
+# apply, verify resolution, report. The same shape as the PMX amber path, for the same
+# reason — a change nobody previewed is a change nobody agreed to.
+function Invoke-PFHostRename {
+    param(
+        [Parameter(Position = 0)][string]$name,
+        [switch]$force
+    )
+
+    if (-not $name) {
+        $current = (Get-SystemIdentity).HostName
+        Write-Host ''
+        Write-Host "  This machine is called: $current" -ForegroundColor Cyan
+        Write-Host '  To rename it:  pc-name <new-name>' -ForegroundColor DarkGray
+        Write-Host ''
+        return
+    }
+
+    $plan = Get-HostRenamePlan -NewName $name
+    if (-not $plan.Valid) {
+        Write-Host ''
+        Write-Host "❌ $($plan.Error)" -ForegroundColor Red
+        Write-Host ''
+        return
+    }
+
+    # ── preview ──────────────────────────────────────────────────────────────
+    Write-Host ''
+    Write-Host '  🖥️  RENAME HOST' -ForegroundColor Cyan
+    Write-Host '  ────────────────────────────────────────────' -ForegroundColor DarkGray
+    Write-Host ("  {0,-13} {1}" -f 'Current', $plan.Current) -ForegroundColor White
+    Write-Host ("  {0,-13} {1}" -f 'New', $plan.New) -ForegroundColor Green
+
+    if ($plan.Before) {
+        Write-Host ''
+        Write-Host "  $($plan.HostsPath)  (line $($plan.LineNumber))" -ForegroundColor DarkGray
+        Write-Host "    $($plan.Before)" -ForegroundColor DarkGray
+        Write-Host '          ↓' -ForegroundColor DarkGray
+        Write-Host "    $($plan.After)" -ForegroundColor Green
+    }
+    elseif ($plan.HostsPath) {
+        # Say so rather than inventing an entry the distro never had.
+        Write-Host ''
+        Write-Host "  $($plan.HostsPath) has no entry naming this host — nothing to sync." -ForegroundColor DarkGray
+    }
+
+    Write-Host ''
+    Write-Host '  This changes the machine hostname' -NoNewline -ForegroundColor Yellow
+    if ($plan.Before) { Write-Host ' and the local resolver entry.' -ForegroundColor Yellow }
+    else { Write-Host '.' -ForegroundColor Yellow }
+
+    if (-not $force) {
+        # Never prompt into a redirected stdin: in a script or a pipe Read-Host reads EOF
+        # and would be taken as a decision nobody made.
+        if ([Console]::IsInputRedirected) {
+            Write-Host '  Refusing to rename without an interactive confirmation. Use --force if you mean it.' -ForegroundColor Red
+            Write-Host ''
+            return
+        }
+        $answer = Read-Host '  Continue? [y/N]'
+        if ($answer -notin @('y', 'Y')) {
+            Write-Host '  Cancelled — nothing was changed.' -ForegroundColor Yellow
+            Write-Host ''
+            return
+        }
+    }
+
+    # ── apply ────────────────────────────────────────────────────────────────
+    $result = Set-HostRename -NewName $plan.New -HostsBefore $plan.Before -HostsAfter $plan.After
+
+    if (-not $result.Success) {
+        Write-Host ''
+        Write-Host "❌ $($result.Error)" -ForegroundColor Red
+        if ($result.HostnameSet) {
+            # PARTIAL. The hostname changed and the sync did not — say exactly that, and
+            # how to finish, rather than reporting a flat failure that implies nothing
+            # happened.
+            Write-Host ''
+            Write-Host "   The hostname IS now '$($plan.New)'; only the resolver entry is unsynced." -ForegroundColor Yellow
+            Write-Host "   Finish with:  sudo sed -i 's|$($plan.Before)|$($plan.After)|' $($plan.HostsPath)" -ForegroundColor Cyan
+        }
+        Write-Host ''
+        return
+    }
+
+    # Windows renames but does not take effect until a restart; reporting plain success
+    # would be wrong until then.
+    if ($result.Error -eq 'RESTART-REQUIRED') {
+        Write-Host ''
+        Write-Host '✅ Rename scheduled' -ForegroundColor Green
+        Write-Host ("  {0,-13} {1}" -f 'New name', $plan.New) -ForegroundColor White
+        Write-Host '  Windows applies a computer rename on the next restart.' -ForegroundColor Yellow
+        Write-Host ''
+        return
+    }
+
+    $resolution = Test-HostResolution -Name $plan.New
+
+    Write-Host ''
+    Write-Host '✅ Host renamed' -ForegroundColor Green
+    Write-Host ''
+    Write-Host ("  {0,-13} {1}" -f 'Hostname', $plan.New) -ForegroundColor White
+    if ($plan.Fqdn) { Write-Host ("  {0,-13} {1}" -f 'Local FQDN', $plan.Fqdn) -ForegroundColor White }
+    if ($resolution.Checked) {
+        $ok = $resolution.Resolves
+        Write-Host ("  {0,-13} " -f 'Resolution') -NoNewline -ForegroundColor White
+        Write-Host $(if ($ok) { 'OK' } else { 'NOT RESOLVING' }) -ForegroundColor $(if ($ok) { 'Green' } else { 'Red' })
+        if (-not $ok) {
+            Write-Host '    sudo may be slow until this resolves. Check /etc/hosts.' -ForegroundColor DarkGray
+        }
+    }
+    if ($result.BackupPath) {
+        Write-Host ("  {0,-13} {1}" -f 'Backup', $result.BackupPath) -ForegroundColor DarkGray
+    }
+    Write-Host ''
+    Write-Host '  pc-whoami --system' -ForegroundColor DarkGray
+    Write-Host ''
+
+    if (Test-PFEducateRequested) {
+        # Only the terms that were actually on screen — a footer explaining a row the
+        # reader cannot find teaches them to skip the footer.
+        $shown = @('Hostname')
+        if ($plan.HostsPath) { $shown += '/etc/hosts' }
+        if ($plan.Before -match '^\s*127\.0\.1\.1') { $shown += '127.0.1.1' }
+        if ($resolution.Checked) { $shown += 'Resolution' }
+        if ($result.BackupPath) { $shown += 'Backup' }
+        Write-PFEducation -Topic 'host-rename' -Only $shown
+    }
+}
+
+Register-PFEducation -Topic 'host-rename' `
+    -Analogy 'A machine has a name it calls itself, and a note in its own address book saying which address that name lives at. Both have to agree.' `
+    -Lines @(
+        @{ Term = 'Hostname';   Means = 'The name the machine answers to. Changed with hostnamectl.' }
+        @{ Term = '/etc/hosts'; Means = 'The local address book, consulted before any DNS server.' }
+        @{ Term = '127.0.1.1';  Means = 'The loopback address Debian uses for the machine own name.' }
+        @{ Term = 'Resolution'; Means = 'Whether the new name now maps to an address. If not, sudo gets slow.' }
+        @{ Term = 'Backup';     Means = 'The previous /etc/hosts, kept next to the original before any edit.' }
+    ) `
+    -Footer 'Only the line naming this host is touched; your other entries are left alone.'
+
+function pc-name { Invoke-PFParamCommand -Target 'Invoke-PFHostRename' -Command 'pc-name' -Argv $args }
+Set-Alias pc-hostname pc-name
+
+Register-PFCommand -Name 'pc-name' -Section '🖥️ MACHINE HEALTH' -Aliases @('pc-hostname') `
+    -Synopsis 'rename this machine, keeping /etc/hosts in step so sudo stays fast' `
+    -Example 'pc-name web-prod'

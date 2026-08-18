@@ -6,7 +6,64 @@ All notable changes to PowerFlow will be documented in this file.
 
 ### Added
 
-- 🔐 **`ls --perms` — a permission view, not another `ls -l` (PF-FEAT-002).** GNU''s long
+- 🖥️ **`pc-name web-prod` — rename the machine without breaking `sudo` (PF-FEAT-005).**
+  The read-only `pc-whoami` finally gets its one mutating sibling. It replaces:
+
+  ```
+  sudo hostnamectl set-hostname web-prod
+  sudo nano /etc/hosts
+  ```
+
+  **The second line is the whole feature.** Setting the hostname alone leaves `/etc/hosts`
+  naming the *old* host, and the next `sudo` prints `unable to resolve host web-prod: Name or
+  service not known`. It still works — sudo falls back after a timeout — which is exactly why
+  it goes unfixed: the cost shows up as every elevated command being a bit slower, not as an
+  error anyone traces back to a rename they did last week.
+
+  Because it mutates, it is guarded the whole way: validate, preview **both** edits, confirm,
+  back up, apply, then *verify* the new name resolves rather than assuming it.
+
+  ```
+    🖥️  RENAME HOST
+    ────────────────────────────────────────────
+    Current       old-box
+    New           web-prod
+
+    /etc/hosts  (line 2)
+      127.0.1.1	old-box.example.lan old-box
+            ↓
+      127.0.1.1	web-prod.example.lan web-prod
+  ```
+
+  Details that are decisions, not defaults:
+
+  - **Only the line naming this host is rewritten.** `/etc/hosts` routinely holds an
+    operator's own static entries for other machines; a rename has no business touching them.
+    A commented-out line is not an entry, and a host with no `127.0.1.1` line is simply told
+    there is nothing to sync — rather than having one invented for it.
+  - **A domain suffix survives.** `old-box.example.lan` becomes `web-prod.example.lan`, not
+    `web-prod`.
+  - **The file is backed up before it is touched**, and the backup path is printed.
+  - **A partial change is reported as a partial change.** If the rename succeeds and the hosts
+    edit fails, it says the hostname *is* now the new one and hands over the exact command to
+    finish. Reporting a flat failure would send someone hunting for a rename that has already
+    happened.
+  - **Underscores are refused with the reason.** `web_prod` is legal in a Windows NetBIOS name
+    and illegal in DNS, so the message says *underscore*, not *invalid*.
+  - **A redirected stdin is never read as consent** — in a script it refuses and names
+    `--force` instead of taking EOF for a yes.
+  - **No systemd required.** Alpine and Arch-without-systemd are both in the Linux CI matrix
+    and have no `hostnamectl`; there it sets the running name and `/etc/hostname` — doing only
+    the first is the same class of half-change this feature exists to avoid.
+  - **Windows renames and says so honestly:** `Rename-Computer`, reported as taking effect on
+    restart. There is no `/etc/hosts` analogue to sync, so that half is absent rather than
+    faked.
+
+  `pc-name --educate` explains what a hostname, `/etc/hosts` and `127.0.1.1` each are.
+  Covered by `tests/linux/hostname-rename.ps1` — which really renames a container, verifies
+  resolution, and puts the machine back.
+
+- 🔐 **`ls --perms` — a permission view, not another `ls -l` (PF-FEAT-002).** GNU's long
   listing already works; a second copy would earn nothing. This answers a different question —
   *who can do what to these files* — by putting the mode first in both notations and saying
   nothing else:

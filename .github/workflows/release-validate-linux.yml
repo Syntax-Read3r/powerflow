@@ -250,6 +250,13 @@ jobs:
         shell: pwsh
         run: ./tests/linux/perms-features.ps1
 
+      # Last of the installed-profile tests on purpose: it is the only one that MUTATES the
+      # machine (hostname and /etc/hosts). It restores both, but running it after everything
+      # else means a restore that somehow fails cannot take another test down with it.
+      - name: 🖥️ pc-name renames without breaking resolution
+        shell: pwsh
+        run: ./tests/linux/hostname-rename.ps1
+
       - name: 🛡️ THE regression that matters — coreutils are not shadowed
         shell: pwsh
         run: |
