@@ -28,8 +28,8 @@ that instruction in its own footer.
      renaming the file to powerflow_backlog.md would remove the need, but it is the owner's file
      and the link works as-is. -->
 
-> **Where things stand:** 16 of 20 closed. Four remain open: PF-FEAT-001 and PF-FEAT-002 (both
-> unblocked now the flag convention is decided), PF-FEAT-004 and PF-FEAT-005. Each status below
+> **Where things stand:** 17 of 20 closed. Three remain open: PF-FEAT-001 and PF-FEAT-002 (both
+> unblocked now the flag convention is decided) and PF-FEAT-005. Each status below
 > is verified against the current tree, not trusted from the report.
 >
 > **Three of the reported items collapsed into fewer defects than were filed.** PF-BUG-005 and
@@ -111,7 +111,7 @@ the report, because the tree moves and a report can go stale.
 | 11 | PF-FEAT-003 | FEATURE | clone-and-configure a VM in one guarded workflow | **done** — validated before anything is created, one confirmation covers the whole sequence, and a partial failure keeps the VM and prints the remaining commands. `tests/proxmox/clone-configure.ps1` |
 | 12 | PF-FEAT-001 | FEATURE | `rn --chmod <mode>` | open — unblocked now the convention is `--long`; still sequence with the `rn` rename |
 | 13 | PF-FEAT-002 | FEATURE | `ls --perms` | open — unblocked now the convention is `--long` |
-| — | PF-FEAT-004 | FEATURE | Linux/VM identity + storage view in `pc-whoami` | open — overlaps `storage`, see below |
+| — | PF-FEAT-004 | FEATURE | Linux/VM identity + storage view in `pc-whoami` | **done** — `pc-whoami --system` adds hostname/OS/kernel/arch/virtualization (container reported distinct from VM); `--storage` DELEGATES to `storage report` rather than building a second storage view. `--educate` became universal in the process |
 | — | PF-FEAT-005 | FEATURE | safe Linux hostname change with `/etc/hosts` sync | open |
 | — | PF-BUG-006 | BUG | `srv <name>` echoes the typed password in cleartext | **fixed** — the Windows askpass helper never cleared `ENABLE_ECHO_INPUT`/`ENABLE_LINE_INPUT`; both are now cleared before the prompt and the original mode restored in `finally`. `tests/network/askpass-echo.ps1` |
 | — | PF-BUG-007 | BUG | `swapon` "not recognized" under pwsh on Linux | **fixed** — `/usr/local/sbin`, `/usr/sbin`, `/sbin` appended when present. Found a second, worse bug on the way: `"$env:PATH:$dir"` was REPLACING PATH, not appending. `tests/linux/sbin-path.ps1` |

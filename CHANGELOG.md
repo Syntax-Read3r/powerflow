@@ -6,7 +6,46 @@ All notable changes to PowerFlow will be documented in this file.
 
 ### Added
 
-- 🗄️ **`storage report` — one read-only view instead of five commands.** The sequence an admin
+- 🖥️ **`pc-whoami --system` — who and what this machine is (PF-FEAT-004).** Replaces
+  `hostname` + `hostnamectl`, and answers the question a `pc-whoami` on an unfamiliar box is
+  really asking: **where am I, and is this thing real?**
+
+  ```
+  🖥️  DEBIAN13-BASE
+  ──────────────────────────────────────────────────────────────
+     Hostname        debian13-base
+     OS              Debian GNU/Linux 13 (trixie)
+     Kernel          Linux 6.12.94+deb13-amd64
+     Architecture    x86_64
+     Virtualization  kvm
+  ```
+
+  `hostnamectl` is deliberately **not** used: it needs systemd, is absent from container
+  images, and prints a localised label/value block that would have to be scraped. Reading the
+  files it reads (`/etc/os-release`, `/proc/sys/kernel/*`, `/sys/class/dmi/id`) is more
+  portable and needs no root. Virtualization prefers `systemd-detect-virt` where present and
+  falls back to the DMI vendor/product strings, and a **container is reported as distinct from
+  a VM** — which is usually the actual question.
+
+  **`pc-whoami --storage` delegates to `storage report`** rather than reimplementing it. The
+  report asked for a storage half here; `storage report` already renders volumes, memory, swap
+  and layout from the same adapters, and a second implementation would be two things to keep in
+  step — with this one, the less-used route, drifting first.
+
+- 🎓 **`--educate` now works on every command, not just hand-parsed ones.** It is
+  cross-cutting, so no command declares it as a parameter — which meant every `param()`-based
+  command rejected it as an unknown option. `Invoke-PFParamCommand` now strips it centrally,
+  records the request, and lets the **view** choose which topic to print: a command like
+  `pc-whoami` has several views and each wants a different explanation. The flag is cleared in
+  a `finally`, because a leaked one would make the *next* command print a lesson nobody asked
+  for — and that would be blamed on the innocent command.
+
+  The footer also learned to omit what is not on screen. `Write-PFEducation -Only` filters to
+  the rows actually rendered, so a container — which exposes no DMI, and therefore no Firmware
+  row — no longer gets a lesson about firmware. A reader who cannot find the thing being
+  explained learns to distrust the whole footer.
+
+- 🗄️ **`storage report`' — one read-only view instead of five commands.** The sequence an admin
   runs on a fresh box to answer a single question ("how is this laid out, and is anything under
   pressure?") was:
 

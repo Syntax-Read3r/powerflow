@@ -677,3 +677,93 @@ function Export-StabilityReport {
 
     return $written
 }
+
+# ── PF-FEAT-004: machine identity ─────────────────────────────────────────────
+# Replaces the first half of the reported sequence:
+#
+#     hostname
+#     hostnamectl
+#
+# Every source below is world-readable — /etc/os-release, /proc/sys/kernel/*, and
+# /sys/class/dmi/id. No root, no systemd dependency: this has to work inside a minimal
+# container and on a VM where systemd-detect-virt is not installed.
+
+<#
+.SYNOPSIS
+    Who and what is this machine — hostname, OS, kernel, architecture, virtualization.
+.DESCRIPTION
+    `hostnamectl` is the obvious source and is deliberately NOT used: it needs systemd, is
+    absent from container images, and prints a localised label/value block that would have
+    to be scraped. Reading the files it reads is more portable and cheaper.
+
+    Virtualization prefers `systemd-detect-virt` where present because it is authoritative,
+    and falls back to the DMI vendor/product strings — which is what actually identifies
+    KVM, QEMU, VMware and VirtualBox in the field.
+#>
+function Get-SystemIdentity {
+    $read = {
+        param($path)
+        if (Test-Path $path) { return "$(Get-Content $path -ErrorAction SilentlyContinue | Select-Object -First 1)".Trim() }
+        return ''
+    }
+
+    # /etc/os-release is the standard; PRETTY_NAME is the line a human wants.
+    $osName = ''
+    if (Test-Path '/etc/os-release') {
+        foreach ($line in (Get-Content '/etc/os-release' -ErrorAction SilentlyContinue)) {
+            if ($line -match '^PRETTY_NAME="?([^"]+)"?') { $osName = $Matches[1]; break }
+        }
+    }
+
+    $hostName = & $read '/etc/hostname'
+    if (-not $hostName) { $hostName = [Environment]::MachineName }
+
+    $kernel     = & $read '/proc/sys/kernel/osrelease'
+    $kernelName = & $read '/proc/sys/kernel/ostype'
+
+    $arch = ''
+    if (Get-Command uname -ErrorAction SilentlyContinue) { $arch = "$(& uname -m 2>$null | Select-Object -First 1)".Trim() }
+    if (-not $arch) { $arch = "$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)" }
+
+    $dmiVendor  = & $read '/sys/class/dmi/id/sys_vendor'
+    $dmiProduct = & $read '/sys/class/dmi/id/product_name'
+
+    $virt = ''
+    if (Get-Command systemd-detect-virt -ErrorAction SilentlyContinue) {
+        # It exits NON-ZERO and prints "none" on bare metal. That is an answer, not a
+        # failure — treating the exit code as an error would report every physical machine
+        # as "unknown".
+        $detected = "$(& systemd-detect-virt 2>$null | Select-Object -First 1)".Trim()
+        if ($detected -and $detected -ne 'none') { $virt = $detected }
+    }
+    if (-not $virt) {
+        $blob = "$dmiVendor $dmiProduct"
+        if ($blob -match '(?i)qemu|kvm')                       { $virt = 'kvm' }
+        elseif ($blob -match '(?i)vmware')                     { $virt = 'vmware' }
+        elseif ($blob -match '(?i)virtualbox|innotek')          { $virt = 'virtualbox' }
+        elseif ($blob -match '(?i)microsoft.*virtual|hyper-v')  { $virt = 'hyper-v' }
+    }
+
+    # A container is a different answer from a VM, and the distinction is the whole point
+    # when somebody is asking "where am I".
+    $container = ''
+    if (Test-Path '/.dockerenv') { $container = 'docker' }
+    elseif (Test-Path '/run/.containerenv') { $container = 'podman' }
+    elseif (Test-Path '/proc/1/cgroup') {
+        $cg = (Get-Content '/proc/1/cgroup' -ErrorAction SilentlyContinue) -join ' '
+        if ($cg -match 'docker|containerd|libpod') { $container = 'container' }
+    }
+
+    return [pscustomobject]@{
+        Supported      = $true
+        HostName       = $hostName
+        OsName         = $osName
+        KernelName     = if ($kernelName) { $kernelName } else { 'Linux' }
+        KernelVersion  = $kernel
+        Architecture   = $arch
+        Virtualization = $virt
+        Container      = $container
+        Model          = ("$dmiVendor $dmiProduct").Trim()
+        Platform       = 'linux'
+    }
+}

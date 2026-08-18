@@ -67,6 +67,84 @@ function Get-CpuCapRecord {
     -days N              widen the stability window (default 7)
     -min N               -ram threshold in GB (default 0.5)
 #>
+# ══════════════════════════════════════════════════════════════════════════════
+#  PF-FEAT-004 — machine identity
+# ══════════════════════════════════════════════════════════════════════════════
+# Replaces `hostname` + `hostnamectl`, and answers the question a `pc-whoami` on an
+# unfamiliar box is really asking: WHERE AM I, and is this thing real?
+#
+# The report asked for a storage half too. That is deliberately NOT reimplemented here —
+# `storage report` already renders volumes, memory, swap and disk layout from the same
+# adapters, and building a second one would give PowerFlow two storage views to keep in
+# step. `pc-whoami --storage` delegates to it, the way `storage apps` delegates to
+# `installed-apps`.
+function Show-PFSystemIdentity {
+    $identity = Get-SystemIdentity
+    if (-not $identity.Supported) {
+        Write-Host 'Machine identity could not be read on this system.' -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host ''
+    Write-Host ("🖥️  {0}" -f "$($identity.HostName)".ToUpperInvariant()) -ForegroundColor Cyan
+    Write-Host '──────────────────────────────────────────────────────────────' -ForegroundColor DarkGray
+
+    $rows = [ordered]@{}
+    $rows['Hostname'] = $identity.HostName
+    if ($identity.OsName)        { $rows['OS'] = $identity.OsName }
+    if ($identity.KernelVersion) { $rows['Kernel'] = "$($identity.KernelName) $($identity.KernelVersion)" }
+    if ($identity.Architecture)  { $rows['Architecture'] = $identity.Architecture }
+
+    # "Where am I" has three possible answers and they are genuinely different: inside a
+    # container, inside a VM, or on the metal. Saying nothing at all would leave the most
+    # common question on a homelab box unanswered.
+    $rows['Virtualization'] =
+        if ($identity.Container -and $identity.Virtualization) { "$($identity.Container) on $($identity.Virtualization)" }
+        elseif ($identity.Container)      { $identity.Container }
+        elseif ($identity.Virtualization) { $identity.Virtualization }
+        else                              { 'none detected — physical, or a hypervisor that hides itself' }
+
+    if ($identity.Model) { $rows['Model'] = $identity.Model }
+
+    # Firmware is already an adapter contract; reuse rather than re-read.
+    $fw = Get-FirmwareInfo
+    if ($fw.Supported -and $fw.BiosVersion) {
+        $age = ''
+        if ($fw.BiosDate) {
+            $months = [int](((Get-Date) - [datetime]$fw.BiosDate).Days / 30)
+            $age = " · $months months old"
+        }
+        $rows['Firmware'] = "$($fw.BiosVersion)$age"
+    }
+
+    # Measured, not guessed. Every label is known by now, so the column cannot be wrong.
+    $width = 0
+    foreach ($label in $rows.Keys) { if ($label.Length -gt $width) { $width = $label.Length } }
+    foreach ($label in $rows.Keys) {
+        Write-Host ("   {0}  " -f $label.PadRight($width)) -NoNewline -ForegroundColor DarkGray
+        Write-Host $rows[$label] -ForegroundColor White
+    }
+
+    Write-Host ''
+    Write-Host '  storage report   disks, memory and layout      pc-whoami   full vitals' -ForegroundColor DarkGray
+    Write-Host ''
+
+    # Pass the rows actually rendered, so the footer never explains something absent — a
+    # container exposes no DMI, so Firmware is legitimately missing there.
+    if (Test-PFEducateRequested) { Write-PFEducation -Topic 'system-identity' -Only @($rows.Keys) }
+}
+
+Register-PFEducation -Topic 'system-identity' `
+    -Analogy 'This is the machine introducing itself: its name, what operating system it runs, and whether it is a real computer or one pretending to be.' `
+    -Lines @(
+        @{ Term = 'Hostname';       Means = 'The name this machine answers to on the network.' }
+        @{ Term = 'Kernel';         Means = 'The core of the operating system. Its version is what bug reports usually ask for.' }
+        @{ Term = 'Architecture';   Means = 'The processor family the software must be built for, such as x86-64 or arm64.' }
+        @{ Term = 'Virtualization'; Means = 'Whether this is a real machine, a virtual one, or a container inside one.' }
+        @{ Term = 'Firmware';       Means = 'The startup software beneath the OS. Old firmware is a common cause of odd hardware faults.' }
+    ) `
+    -Footer 'Read-only — this command changes nothing.'
+
 function Show-PFMachineHealth {
     param(
         # TWO positional slots, both load-bearing:
@@ -84,6 +162,8 @@ function Show-PFMachineHealth {
         [switch]$crashes,
         [switch]$bios,
         [switch]$ram,
+        [switch]$system,
+        [switch]$storage,
         [switch]$export,
         [int]$days = 7,
         [double]$min = 0.5
@@ -104,7 +184,7 @@ function Show-PFMachineHealth {
 
     # A bare name plainly means "drill into this program" — `pc-whoami java` used to print the
     # whole dashboard and silently ignore the word typed.
-    if ($name -and -not ($power -or $crashes -or $bios -or $ram)) { $ram = $true }
+    if ($name -and -not ($power -or $crashes -or $bios -or $ram -or $system -or $storage)) { $ram = $true }
 
     # Two words means an unquoted program name ("Memory Compression" is a real one). Position 1
     # would otherwise swallow the second word and we would report the first as "not running".
@@ -113,6 +193,19 @@ function Show-PFMachineHealth {
         Write-Host "❓ Program names with a space need quoting:" -ForegroundColor Yellow
         Write-Host "   pc-whoami --ram `"$name $program`"" -ForegroundColor Cyan
         Write-Host ""
+        return
+    }
+
+    # Identity first: on a Linux guest this is the whole reason to run the command.
+    if ($system)  { Show-PFSystemIdentity;                  return }
+
+    # DELEGATES. `storage report` already renders volumes, memory, swap and layout from the
+    # same adapters — a second implementation here would be two things to keep in step, and
+    # the first one to drift would be this one, because it is the less-used route.
+    if ($storage) {
+        Show-StorageReport
+        # The delegate owns the explanation too — one storage lesson, not two that drift.
+        if (Test-PFEducateRequested) { Write-PFEducation -Topic 'storage-report' }
         return
     }
 
@@ -875,5 +968,6 @@ function pc-cap {
 }
 
 # ── pwsh-h registration ───────────────────────────────────────────────────────
-Register-PFCommand -Name 'pc-whoami' -Section '🖥️ MACHINE HEALTH' -Synopsis 'vitals: CPU, GPU, RAM, drives, BIOS age, power, errors' -Example 'pc-whoami --ram · --power · --crashes · --bios'
+Register-PFCommand -Name 'pc-whoami' -Section '🖥️ MACHINE HEALTH' -Synopsis 'vitals: CPU, GPU, RAM, drives, BIOS age, power, errors' -Example 'pc-whoami --ram · --power · --crashes · --bios · --system'
+Register-PFCommand -Name 'pc-whoami --system' -Section '🖥️ MACHINE HEALTH' -Synopsis 'who and what this machine is: OS, kernel, arch, virtualization' -Example 'pc-whoami --system --educate'
 Register-PFCommand -Name 'pc-cap'    -Section '🖥️ MACHINE HEALTH' -Synopsis 'cap CPU speed; prior state recorded for safe undo' -Example 'pc-cap 85 · pc-cap restore'

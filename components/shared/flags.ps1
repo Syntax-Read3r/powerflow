@@ -333,7 +333,23 @@ function Invoke-PFParamCommand {
         $surface[$entry.Key] = $entry.Value
     }
 
-    $parsed = ConvertTo-PFCanonicalFlags -Argv $Argv -Parameters $surface -Command $Command
+    # --educate is CROSS-CUTTING: it belongs to every command, so no command declares it as a
+    # parameter and every command would otherwise reject it as unknown. Strip it here, record
+    # the request, and let the target decide WHICH topic to print — a command like pc-whoami
+    # has several views and each wants a different explanation, so the choice is the view's,
+    # not the dispatcher's.
+    # Guarded so this file still works dot-sourced on its own. If educate.ps1 is absent,
+    # --educate is simply not a feature and falls through to the unknown-option path — which
+    # is the HONEST outcome, and better than silently swallowing a flag the user typed.
+    $educateArgv = $Argv
+    if (Get-Command Split-PFEducateFlag -ErrorAction SilentlyContinue) {
+        $educated = Split-PFEducateFlag -Argv $Argv -Command $Command
+        $educateArgv = $educated.Argv
+        Set-PFEducateRequested $educated.Educate
+    }
+
+    try {
+        $parsed = ConvertTo-PFCanonicalFlags -Argv $educateArgv -Parameters $surface -Command $Command
 
     if ($parsed.Unknown.Count) {
         foreach ($bad in $parsed.Unknown) {
@@ -354,9 +370,18 @@ function Invoke-PFParamCommand {
         return
     }
 
-    # Two splats: the hashtable binds by NAME, the array supplies what is left positionally.
-    $named = $parsed.Named
-    $rest = @($parsed.Positional)
-    if ($rest.Count) { & $targetCmd @named @rest }
-    else { & $targetCmd @named }
+        # Two splats: the hashtable binds by NAME, the array supplies what is left positionally.
+        $named = $parsed.Named
+        $rest = @($parsed.Positional)
+        if ($rest.Count) { & $targetCmd @named @rest }
+        else { & $targetCmd @named }
+    }
+    finally {
+        # ALWAYS cleared. A leaked flag would make the next command print a lesson nobody
+        # asked for, which is a worse failure than never printing one — and it would be
+        # blamed on the innocent command.
+        if (Get-Command Set-PFEducateRequested -ErrorAction SilentlyContinue) {
+            Set-PFEducateRequested $false
+        }
+    }
 }

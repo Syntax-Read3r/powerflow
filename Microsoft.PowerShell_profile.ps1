@@ -99,10 +99,13 @@ $_pf_components = @(
     "components\core\recovery.ps1"
 
     "components\shared\strings.ps1"
+    # educate.ps1 BEFORE flags.ps1, and the order is load-bearing: Invoke-PFParamCommand
+    # strips --educate via Split-PFEducateFlag, so the definitions must already exist when
+    # flags.ps1 is dot-sourced. (Function bodies resolve at CALL time, so this would also
+    # work reversed — but the dependency is real and the order should show it.)
+    "components\shared\educate.ps1"
     # flags.ps1 early — every command may route its flags through it.
     "components\shared\flags.ps1"
-    # educate.ps1 early too — any command may register an --educate topic.
-    "components\shared\educate.ps1"
 
     # Shell: bash builtins PowerShell lacks, plus the Linux teaching layer.
     # lessons.ps1 MUST precede teach.ps1 and brothers.ps1 — both read its data.

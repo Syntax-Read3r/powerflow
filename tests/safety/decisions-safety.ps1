@@ -145,6 +145,7 @@ function Install-NerdFont { $script:installed = $true; return $true }
 function Get-NerdFontInstallHint { 'hint' }
 function Get-NerdFontInstructions { 'instructions' }
 function Register-PFCommand { }
+. (Join-Path $root 'components/shared/educate.ps1')
 . (Join-Path $root 'components/shared/flags.ps1')
 Invoke-Expression $fontBody
 # Rebuild the shim too, so the test drives the real two-part command rather than calling the

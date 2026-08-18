@@ -28,6 +28,9 @@ function Ok([bool]$c, [string]$m) {
 }
 
 function Register-PFCommand { }
+# educate.ps1 first: Invoke-PFParamCommand calls Split-PFEducateFlag to strip the
+# cross-cutting --educate flag, so the real dependency is exercised rather than stubbed.
+. (Join-Path $root 'components/shared/educate.ps1')
 . (Join-Path $root 'components/shared/flags.ps1')
 
 # ── the parser, against a target with one of each kind of parameter ───────────

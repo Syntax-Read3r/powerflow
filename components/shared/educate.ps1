@@ -45,6 +45,33 @@
 
 $script:PF_Education = @{}
 
+# Set by Invoke-PFParamCommand for the duration of ONE invocation, so a param()-based command
+# can honour --educate without declaring it as a parameter of its own.
+#
+# Why a flag rather than a parameter: a command like pc-whoami has several views (--system,
+# --ram, --power) and each wants a DIFFERENT topic. Passing the topic in at the shim would
+# force the shim to know which view will run, which is precisely the decision the command
+# makes. So the dispatcher records only that the user asked; the view chooses the topic.
+$script:PF_EducateRequested = $false
+
+<#
+.SYNOPSIS
+    Did the user ask for an explanation of this invocation?
+#>
+function Test-PFEducateRequested { return $script:PF_EducateRequested }
+
+<#
+.SYNOPSIS
+    Record (or clear) the --educate request for the current invocation.
+.DESCRIPTION
+    Always cleared in a `finally` by whoever set it. A leaked flag would make the NEXT
+    command print a lesson nobody asked for, which is worse than never printing one.
+#>
+function Set-PFEducateRequested {
+    param([bool]$Requested)
+    $script:PF_EducateRequested = $Requested
+}
+
 <#
 .SYNOPSIS
     Register the explanation for one view.
@@ -122,7 +149,17 @@ function Split-PFEducateFlag {
     never break the command whose output the reader actually wanted.
 #>
 function Write-PFEducation {
-    param([Parameter(Mandatory)][string]$Topic)
+    param(
+        [Parameter(Mandatory)][string]$Topic,
+        # The terms actually rendered this time, when the view is CONDITIONAL.
+        #
+        # Without this the footer breaks its own rule. The identity view omits Firmware
+        # inside a container (no DMI is exposed), but the topic is static — so the lesson
+        # explained a row that was not on screen. A reader who cannot find the thing being
+        # explained learns to distrust the whole footer, which costs more than the missing
+        # line was worth.
+        [string[]]$Only = @()
+    )
 
     if (-not $script:PF_Education.ContainsKey($Topic)) { return }
     $entry = $script:PF_Education[$Topic]
@@ -135,14 +172,30 @@ function Write-PFEducation {
         Write-Host ''
     }
 
+    # Keep only what was actually rendered, when the caller says which. A term is kept if it
+    # matches a rendered row, or if the caller named nothing at all (the common case, where
+    # the view is unconditional).
+    $lines = @($entry.Lines)
+    if ($Only.Count) {
+        $lines = @($lines | Where-Object {
+            $term = "$($_.Term)"
+            # Split on '/' so a line covering two platform spellings ("swap / pagefile")
+            # survives when only one of them is on screen.
+            $parts = @($term -split '/' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+            @($parts | Where-Object { $_ -in $Only }).Count -gt 0
+        })
+    }
+    if (-not $lines.Count) { return }
+
     # The term column is measured, not guessed: a hardcoded width silently misaligns the
-    # moment a longer term is added, and a ragged lesson reads as an afterthought.
+    # moment a longer term is added, and a ragged lesson reads as an afterthought. Measured
+    # over the SURVIVING lines, so filtering does not leave a gap where a long term was.
     $width = 0
-    foreach ($line in $entry.Lines) {
+    foreach ($line in $lines) {
         if ($line.Term -and $line.Term.Length -gt $width) { $width = $line.Term.Length }
     }
 
-    foreach ($line in $entry.Lines) {
+    foreach ($line in $lines) {
         $term = if ($line.Term) { $line.Term } else { '' }
         Write-Host ("  {0}  " -f $term.PadRight($width)) -NoNewline -ForegroundColor Cyan
         Write-Host $line.Means -ForegroundColor Gray

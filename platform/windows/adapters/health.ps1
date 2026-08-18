@@ -620,3 +620,61 @@ function Export-StabilityReport {
 
     return $written
 }
+
+# ── PF-FEAT-004: machine identity ─────────────────────────────────────────────
+# The Linux sibling answers "who and what is this machine" from /etc/os-release and
+# /sys/class/dmi/id. Windows has neither, so the same questions are answered through CIM
+# and the environment — and the SHAPE returned is identical, because the renderer in
+# components/ must not know which platform produced it.
+
+<#
+.SYNOPSIS
+    Who and what is this machine — hostname, OS, kernel, architecture, virtualization.
+.DESCRIPTION
+    "Kernel" is reported as the NT build, which is the closest true equivalent and the
+    number a Windows user actually quotes when reporting a problem.
+
+    Virtualization is inferred from the system manufacturer and model, the same strings the
+    Linux side falls back to. There is no Windows equivalent of systemd-detect-virt, so
+    this is the primary source rather than the fallback — and it stays empty rather than
+    guessing when the strings say nothing, since "bare metal" and "unknown" are different
+    answers.
+#>
+function Get-SystemIdentity {
+    $osName = ''; $manufacturer = ''; $model = ''
+    try {
+        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        $osName = "$($os.Caption)".Trim()
+    } catch { }
+    try {
+        $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+        $manufacturer = "$($cs.Manufacturer)".Trim()
+        $model = "$($cs.Model)".Trim()
+    } catch { }
+
+    $virt = ''
+    $blob = "$manufacturer $model"
+    if ($blob -match '(?i)vmware')                        { $virt = 'vmware' }
+    elseif ($blob -match '(?i)virtualbox|innotek')        { $virt = 'virtualbox' }
+    elseif ($blob -match '(?i)qemu|kvm')                  { $virt = 'kvm' }
+    elseif ($blob -match '(?i)microsoft corporation.*virtual|hyper-v') { $virt = 'hyper-v' }
+    elseif ($blob -match '(?i)parallels')                 { $virt = 'parallels' }
+
+    $version = [Environment]::OSVersion.Version
+    $build = "$($version.Major).$($version.Minor).$($version.Build)"
+
+    return [pscustomobject]@{
+        Supported      = ($osName -ne '')
+        HostName       = [Environment]::MachineName
+        OsName         = $osName
+        KernelName     = 'Windows NT'
+        KernelVersion  = $build
+        Architecture   = "$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"
+        Virtualization = $virt
+        # Windows containers exist but are rare and not something PowerFlow targets; empty
+        # is the honest answer rather than a detection that has never been exercised.
+        Container      = ''
+        Model          = $blob.Trim()
+        Platform       = 'windows'
+    }
+}
