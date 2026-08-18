@@ -662,7 +662,9 @@ growth form lists them and stops; it never guesses which disk is the system disk
 | Command             | Description                                                  |
 | ------------------- | ------------------------------------------------------------ |
 | `dkr`               | Every container, grouped by stack; fzf multi-select to act    |
-| `dkr logs [name]`   | Tail a log — `-f` follows, no name opens a picker             |
+| `dkr logs [name]`   | Last 30 lines, timestamped and tidied, with a lifecycle footer — `-f` follows (streamed untouched), no name opens a picker |
+| `dkr logs <name> 100` | That many lines (same as `--tail 100`); `--raw` for exactly what the engine printed; `-a` for all history |
+| `dkr inspect [name]` | State, exit verdict, start/finish, stop signal and ports — no Go templates. `show` is the short spelling, `--json` keeps the structured form |
 | `dkr shell [name]`  | Shell in: `bash` if the image has it, else `sh`               |
 | `dkr up [stack]`    | Bring a compose stack up (works when nothing is running)      |
 | `dkr down [stack]`  | Take it down — confirms, and keeps named volumes              |
