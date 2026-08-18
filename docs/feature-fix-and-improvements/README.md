@@ -143,7 +143,7 @@ along than they claim and two are further behind.
 | PF-FEAT-001 | FEATURE | guarded VM destroy / `--purge` | large | Most of the safety chain exists (`Invoke-PmxAmberMutation`, audit, revalidation). **Four blockers below** |
 | PF-FEAT-006 | FEATURE | `journal` — Linux timeline over journalctl | large | Only `Get-StabilityEvents` reads the journal today, and narrowly. Largely net-new |
 | PF-FEAT-007 | FEATURE | `pman service` — Quadlet + rootless persistence | large | Net-new: zero hits for quadlet/linger/subuid anywhere. Mutating, so it needs the guarded-preview treatment |
-| PF-FEAT-011 | FEATURE | `network dns` — status, split-DNS enrol, test, undo | large | Genuinely net-new; `nmcli`/`resolvectl` appear nowhere. The intent-first grammar (`nw dns wg-home use 192.168.8.30 for .test`) is the interesting part |
+| PF-FEAT-011 | FEATURE | `network dns` — status, split-DNS enrol, test, undo | large | Genuinely net-new; `nmcli`/`resolvectl` appear nowhere. The intent-first grammar (`nw dns wg-home use 192.168.1.30 for .test`) is the interesting part |
 | PF-FEAT-012 | FEATURE | `network`/`nw`, `svc`, `sys` namespaces | large | ~35 subcommands. Net-new, and the single biggest surface in the file |
 | PF-FEAT-013 | FEATURE | fill those namespaces (storage, procs, ports, packages, firewall, hardware, timers, users) | large | **Roughly a quarter already shipped** under other names — `sys storage` is `storage report`; `sys proc`/packages/users are partial. Depends on PF-FEAT-012 |
 | PF-FEAT-003 | FEATURE | `server setup` — guided clone → identity → srv → role | large | **Its Phase 1 already shipped** as round 1''s PF-FEAT-003 (clone-and-configure, v5.0.0), and two fzf pickers it lists as missing already exist in `components/proxmox/` |

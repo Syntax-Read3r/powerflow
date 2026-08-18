@@ -461,7 +461,7 @@ CPU           2 cores
 Memory        4 GiB
 Disk          32 GiB (or requested final size)
 Role          Podman server
-SSH user      munya
+SSH user      you
 ```
 
 The underlying native sequence may correspond to:
@@ -522,7 +522,7 @@ Example handoff:
 ```text
 ✅ VM 103 web-prod is running
 Address       192.168.x.x · DHCP
-SSH user      munya
+SSH user      you
 ```
 
 The raw IP may be shown because the user explicitly requested the handoff, but it should not be copied into unrelated logs/debug output.
@@ -656,7 +656,7 @@ Example:
 ```text
 SSH handoff
 Alias         web-prod
-User          munya
+User          you
 Address       192.168.x.x
 
 Add to srv? [Y/n]
@@ -671,7 +671,7 @@ srv web-prod
 rather than repeatedly copying:
 
 ```text
-ssh munya@<discovered-ip>
+ssh you@<discovered-ip>
 ```
 
 Reuse the existing `srv` validation/privacy rules. Do not create a second SSH credential store inside `server`.
@@ -734,7 +734,7 @@ linger enabled
 Quadlet user path ready
 ```
 
-The username must come from the workflow (`munya` in the current example), never be hard-coded.
+The username must come from the workflow (`you` in the current example), never be hard-coded.
 
 After rootless UID/GID checks, verify the user-manager persistence state:
 
@@ -859,7 +859,7 @@ At minimum:
 - hostname + `/etc/hosts` synchronization
 - identity regeneration + reboot + post-reboot verification
 - automatic srv registration
-- Podman role with username other than `munya`
+- Podman role with username other than `you`
 - missing subuid/subgid mappings
 - role setup failure after successful base-server build
 - `abandon` never mutates/destroys VM state
@@ -1075,7 +1075,7 @@ Preferred output:
 Backend       journald
 Rootless      yes
 History read  available
-Current user  munya
+Current user  you
 ```
 
 The backend can be read from Podman system info (`Host.EventLogger`).
@@ -1474,7 +1474,7 @@ For the supplied incident, a useful PowerFlow result would be approximately:
 🧭 SYSTEM TIMELINE — 12:38:30 → 12:39:30
 ────────────────────────────────────────────────────────
 12:38:56  SSH      remote 10.0.0.3 timed out
-12:38:56  SESSION  munya session closed
+12:38:56  SESSION  you session closed
 12:38:56  LOGIND   session 1 removed
 
 12:39:06  USER     user@1000 manager stopping
@@ -1603,7 +1603,7 @@ INFERENCE
   The container likely stopped because the user's systemd manager was being torn down after logout.
 
 CHECK NEXT
-  loginctl show-user munya -p Linger
+  loginctl show-user you -p Linger
 ```
 
 Never state inferred causality as proven fact.
@@ -1712,7 +1712,7 @@ At minimum:
 A rootless Podman container started interactively can be tied to the user's systemd manager. In the observed server workflow:
 
 ```bash
-loginctl show-user munya -p Linger
+loginctl show-user you -p Linger
 ```
 
 returned:
@@ -1726,7 +1726,7 @@ and the journal showed the user manager stopping immediately before the rootless
 After:
 
 ```bash
-sudo loginctl enable-linger munya
+sudo loginctl enable-linger you
 ```
 
 `Linger=yes` becomes the persistence prerequisite for long-running rootless user services.
@@ -1744,7 +1744,7 @@ Example:
 ```text
 🩺 PODMAN PERSISTENCE
 ────────────────────────────────────────
-User          munya
+User          you
 Rootless      yes
 subuid        ready
 subgid        ready
@@ -2039,10 +2039,10 @@ pmx network web-prod status
 ──────────────────────────────────────────────────────────────────────
 VMID  NAME             VM       AGENT       ADDRESS          SSH
 100   debian13-base    stopped  —           —                stopped
-101   debian13-lab     running  available   192.168.8.111    ready
-102   docker-host      running  available   192.168.8.112    ready
-103   web-prod         running  available   192.168.8.114    ready
-900   debian13-base-v2 running  available   192.168.8.120    closed
+101   debian13-lab     running  available   192.168.1.111    ready
+102   docker-host      running  available   192.168.1.112    ready
+103   web-prod         running  available   192.168.1.114    ready
+900   debian13-base-v2 running  available   192.168.1.120    closed
 ```
 
 Suggested SSH states:
@@ -2129,7 +2129,7 @@ and leave it at that.
 If a VM has multiple usable addresses, default output should show the primary candidate plus a count:
 
 ```text
-192.168.8.114  +2
+192.168.1.114  +2
 ```
 
 Drill-down:
@@ -2147,11 +2147,11 @@ State       running
 Agent       available
 
 INTERFACES
-eth0        192.168.8.114/24
+eth0        192.168.1.114/24
             fe80::....
 
 SSH
-Address     192.168.8.114
+Address     192.168.1.114
 Port        22
 Status      ready
 ```
@@ -2194,7 +2194,7 @@ pmx vm network list
 When a VM can be confidently matched to a saved `srv` alias, display it as optional metadata:
 
 ```text
-103  web-prod  192.168.8.114  SSH ready  srv:web-prod
+103  web-prod  192.168.1.114  SSH ready  srv:web-prod
 ```
 
 Do not auto-create an `srv` entry from this read-only status command.
@@ -2294,10 +2294,10 @@ Keep this deliberately compact and privacy-conscious:
 ──────────────────────────────────────────────────────────────────────
 VMID  NAME             VM       ADDRESS          SSH    CONN  SESS
 100   debian13-base    stopped  —                —         0     0
-101   debian13-lab     running  192.168.8.111    ready     1     1
-102   docker-host      running  192.168.8.112    ready     2     3
-103   web-prod         running  192.168.8.114    ready     1     2
-900   debian13-base-v2 running  192.168.8.120    closed    0     0
+101   debian13-lab     running  192.168.1.111    ready     1     1
+102   docker-host      running  192.168.1.112    ready     2     3
+103   web-prod         running  192.168.1.114    ready     1     2
+900   debian13-base-v2 running  192.168.1.120    closed    0     0
 ```
 
 Recommended meanings:
@@ -2322,7 +2322,7 @@ For an explicit VM selector, show the deeper detail automatically:
 ────────────────────────────────────────────────────────────
 State          running
 Agent          available
-Primary IPv4   192.168.8.114
+Primary IPv4   192.168.1.114
 SSH port       22
 SSH            ready
 Connections    2 established
@@ -2330,12 +2330,12 @@ Sessions       3 observable
 
 INTERFACES
 NAME   MAC                ADDRESS
-ens18  BC:24:11:..        192.168.8.114/24
+ens18  BC:24:11:..        192.168.1.114/24
 lo     —                  127.0.0.1/8
 
 SSH CONNECTIONS
 SOURCE             USER     SESSIONS   AGE      DETAIL
-10.0.0.3:53238     munya           2   18m      shell · exec
+10.0.0.3:53238     you           2   18m      shell · exec
 10.0.0.8:42117     backup          1   3m       sftp
 ```
 
@@ -2646,8 +2646,8 @@ Use short positional commands for common work. Advanced flags are optional escap
 ```powershell
 nw dns
 nw dns wg-home
-nw dns wg-home use 192.168.8.30 for .test
-nw dns temp wg-home 192.168.8.30 test
+nw dns wg-home use 192.168.1.30 for .test
+nw dns temp wg-home 192.168.1.30 test
 nw dns test mywebsite.test
 nw dns test mywebsite.test dns-lab
 nw dns undo wg-home
@@ -2661,8 +2661,8 @@ Canonical long form may remain `network dns ...`, but documentation and interact
 |---|---|
 | `nw dns` | Show the useful DNS state for active connections. |
 | `nw dns wg-home` | Show DNS state for one connection/link. |
-| `nw dns wg-home use 192.168.8.30 for .test` | Persistently route `.test` DNS queries on `wg-home` to `192.168.8.30`. This is the normal setup path. |
-| `nw dns temp wg-home 192.168.8.30 test` | Apply the same split-DNS routing only for the current runtime/session. |
+| `nw dns wg-home use 192.168.1.30 for .test` | Persistently route `.test` DNS queries on `wg-home` to `192.168.1.30`. This is the normal setup path. |
+| `nw dns temp wg-home 192.168.1.30 test` | Apply the same split-DNS routing only for the current runtime/session. |
 | `nw dns test mywebsite.test` | Test the normal system resolver path used by applications. |
 | `nw dns test mywebsite.test dns-lab` | Test the named DNS server directly without changing client configuration. |
 | `nw dns undo wg-home` | Preview and restore the previous PowerFlow-recorded DNS state for that connection. |
@@ -2672,13 +2672,13 @@ Canonical long form may remain `network dns ...`, but documentation and interact
 This simple PowerFlow command:
 
 ```powershell
-nw dns wg-home use 192.168.8.30 for .test
+nw dns wg-home use 192.168.1.30 for .test
 ```
 
 maps on NetworkManager systems to the equivalent of:
 
 ```bash
-sudo nmcli connection modify wg-home ipv4.dns "192.168.8.30" ipv4.dns-search "~test"
+sudo nmcli connection modify wg-home ipv4.dns "192.168.1.30" ipv4.dns-search "~test"
 ```
 
 PowerFlow owns the translation, verification, rollback metadata, and safe connection reactivation. The user should not need to know the native property names.
@@ -2686,13 +2686,13 @@ PowerFlow owns the translation, verification, rollback metadata, and safe connec
 ### Temporary translation
 
 ```powershell
-nw dns temp wg-home 192.168.8.30 test
+nw dns temp wg-home 192.168.1.30 test
 ```
 
 maps on systemd-resolved systems to the equivalent of:
 
 ```bash
-sudo resolvectl dns wg-home 192.168.8.30
+sudo resolvectl dns wg-home 192.168.1.30
 sudo resolvectl domain wg-home '~test'
 ```
 
@@ -2716,7 +2716,7 @@ sudo resolvectl domain wg-home '~test'
 ────────────────────────────────────────────
 LINK      DNS            DOMAIN    DEFAULT   SAVED
 wlo1      10.35.103.61   —         yes       yes
-wg-home   192.168.8.30   ~test     no        yes
+wg-home   192.168.1.30   ~test     no        yes
 ```
 
 `nw dns wg-home` expands details for that link.
@@ -3115,7 +3115,7 @@ Swap          0 / 4.0G
 
 TOP
 PID    USER   CPU   RAM    NAME
-1221   munya  2.1%  220M   podman
+1221   you  2.1%  220M   podman
 625    root   0.4%   31M   systemd-logind
 ```
 
@@ -3128,7 +3128,7 @@ PROTO  ADDRESS        PORT   PROCESS     EXPOSURE
 tcp    0.0.0.0        22     sshd        network
 tcp    0.0.0.0        8080   rootless    network
 tcp    127.0.0.53     53     resolved    localhost
-udp    192.168.8.30   53     unbound     interface
+udp    192.168.1.30   53     unbound     interface
 ```
 
 PowerFlow should distinguish:
@@ -3278,10 +3278,10 @@ This is the preferred user-facing surface for the active post-reset backlog. Rel
 Preferred common form:
 
 ```powershell
-nw dns wg-home use 192.168.8.30 for .test
+nw dns wg-home use 192.168.1.30 for .test
 ```
 
-Interpretation: on `wg-home`, use DNS server `192.168.8.30` for the `.test` namespace.
+Interpretation: on `wg-home`, use DNS server `192.168.1.30` for the `.test` namespace.
 
 PowerFlow should treat persistence as the normal/default behavior for this command. The words `use` and `for` are part of the human-readable grammar and should normalize internally to the existing persistent NetworkManager + systemd-resolved workflow.
 
