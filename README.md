@@ -86,6 +86,14 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
   program (warned harder) — system-critical processes and your own shell are never killed
 - **`pc-cap 85` / `pc-cap restore`**: cap CPU speed with **guaranteed restoration** —
   the prior state is recorded to disk before anything changes
+- **`pc-name web-prod`**: rename the machine **and** sync `/etc/hosts` in the same step.
+  Renaming alone leaves the resolver naming the old host, and every later `sudo` stalls on
+  *"unable to resolve host"* — it still works, which is exactly why nobody traces it back.
+  Previews both edits, backs the file up, and verifies the new name resolves
+- **`storage report`**: `lsblk` + `fdisk -l` + `swapon --show` + `free -h` + `/etc/fstab` in
+  one read-only view, and it never asks for a password
+- **`--educate` on any command**: a plain-English footer explaining what you just looked at,
+  printed *after* the data so an expert ignores it by not reading down
 - **`team-room`**: every AI agent watcher on the machine, and whether it is actually
   **live** — then `team-room stop <name>` ends it. Previously you could only ask the agent
   to stop itself
@@ -102,6 +110,11 @@ _🎥 **Full video demo**: Upload `assets/demo-video.mp4` to a GitHub issue to g
 - **VM networking in human terms**: `pmx vm network`, `pmx vm nic`, and `pmx vm ip` separate
   configured adapters from addresses reported inside the VM; native Proxmox vocabulary stays
   hidden unless you ask for `--show-native`
+- **`pmx net status`**: which VMs are running, what addresses their agents report, and which
+  have SSH answering — one table instead of `qm list` plus one `qm guest cmd` per VM plus an
+  ssh attempt each. It probes **only** addresses the guest agent reported: no ARP, no DNS
+  guessing, no DHCP leases, no subnet sweep. `ready` means the TCP port answered, and says so
+  — not that a login would succeed
 - **Safe mutations**: every change previews, confirms in a real terminal, re-reads state,
   executes an allow-listed `qm` operation, verifies the result, and writes a secret-free audit
   record. `--dry-run` stops before execution
@@ -520,6 +533,8 @@ Whichever name you type is the one the messages use.
 | `mvf <file>`         | ✂️ Cut for moving (1 arg = cut, 2+ = move)          |
 | `mv-t`               | Paste cut file                                     |
 | `rn [file]`          | Interactive file rename                            |
+| `rn <file> --chmod 600` | Rename and set the mode in one step — applied to the **new** path and verified by reading it back. A failed chmod never undoes the rename (Linux) |
+| `ls --perms`         | A permission view: mode first in both notations, ⚠ only where earned (world-writable, setuid, setgid) |
 | `del`                | fzf picker, then confirm before deleting           |
 | `del -rf <dir>`      | Recursive force remove — bash muscle memory works  |
 | `del *.log`          | Wildcard removal — lists every match, one confirm  |
@@ -560,6 +575,11 @@ On Windows only — these three are GNU clones for a platform that ships none of
 | `pc-whoami --ram huge`| One level: `huge` · `large` · `medium` · `small` · `tiny` (`-min N` for a custom cut-off) |
 | `pc-whoami --ram java`| That program's processes with **command lines** — Enter closes one, ctrl-a closes all |
 | `pc-cap 85`          | Cap CPU speed — prior state recorded for safe undo |
+| `pc-whoami --system` | What this machine IS: hostname, OS, kernel, arch, virtualisation, container, model |
+| `pc-whoami --storage`| Volumes, memory, swap and disk layout in one read-only view |
+| `pc-name <new-name>` | Rename this machine **and** keep `/etc/hosts` in step, so `sudo` does not start stalling. Previews both edits, backs the file up, verifies the name resolves |
+| `storage report`     | One read-only view instead of `lsblk` + `fdisk -l` + `swapon` + `free` + `cat /etc/fstab` — and no sudo |
+| `<any command> --educate` | A plain-English footer explaining what you just looked at. Opt-in, printed after the data, so an expert ignores it by not reading down |
 | `pc-cap restore`     | Put back exactly what was recorded                |
 | `team-room`          | Every agent watcher on this machine — which are **live**, and stop them |
 | `team-room stop <name>` | Stop a room: disarm it and end its watcher process |
@@ -577,7 +597,11 @@ Proxmox node. VM management can run there too, or over SSH from Windows/Linux th
 | `pmx`                    | Node dashboard: uptime, load, memory, storage, guests, updates |
 | `pmx config set host <srv-alias>` | Select a saved SSH target; use `pmx config validate` to test it |
 | `pmx discover` / `pmx node status` / `pmx storage list` | Discover nodes, bridges, VM storage, templates and capacity |
-| `pmx vm list` / `pmx vm next-id` | Read VM inventory and authoritative VMIDs |
+| `pmx list` / `pmx vm list` | Read VM inventory (`pmx list` is the `qm list` spelling) |
+| `pmx status`             | The node dashboard, same view as `pmx node status` |
+| `pmx net status`         | **Which VMs can I actually get into:** state, agent, address and SSH per VM. Probes only agent-reported addresses — never scans — and `ready` means the TCP port answered, not that a login would succeed |
+| `pmx net <vm> status`    | The same for one VM, with every interface listed |
+| `pmx vm next-id`         | The authoritative next free VMID |
 | `pmx vm show <vm>` / `pmx vm status <vm>` | Inspect one VM by name or VMID |
 | `pmx vm network <vm>` / `pmx vm net <vm>` | Combine configured adapters, VM-reported addresses, agent state, and an inferred primary candidate |
 | `pmx vm network adapters <vm>` / `pmx vm nic <vm>` | Show virtual adapter model, bridge, MAC, firewall, VLAN, and link configuration |

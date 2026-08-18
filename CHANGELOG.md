@@ -78,41 +78,6 @@ All notable changes to PowerFlow will be documented in this file.
   `pmx list --help`, `pmx status --help`, `pmx start --help` and `pmx shutdown --help` now
   work too: those four were real routes the catalogue had never been told about.
 
-### Fixed
-
-- ↩ **Escaping a PMX picker is no longer an error (PF-UX-002 b2).** Pressing Escape ended
-  the command with a red `❌ cancelled`. The red marker is the one piece of output that has
-  to stay trustworthy — spending it on a user who simply changed their mind teaches them to
-  scan past it, and the next time it means something, they will. It now reads:
-
-  ```
-  ↩ Cancelled.
-  ```
-
-  dim and unadorned. Five outcomes reached the same renderer and **only one of them is
-  neutral**, so they are now told apart rather than flattened:
-
-  | | |
-  |---|---|
-  | Esc pressed | neutral — nothing to fix |
-  | no VMs / no disks | a state worth reporting |
-  | fzf unavailable | an instruction — nobody was *asked*, so nobody declined |
-  | invalid selector | an error |
-  | ambiguous selector | an error |
-
-  Fixed at the shared boundary, not per command: nine call sites rendered the failure by
-  hand, and a convention enforced in nine places is one that drifts in one of them. They now
-  route through `Write-PmxResolveFailure`, and a test fails the build if a tenth appears.
-
-  Two smaller things fell out of it. The **disk** picker had the same bug wearing different
-  clothes — it answered `$null` to both *cancelled* and *no picker available*, and the caller
-  reacted by re-printing the entire disk list, so escaping a picker of those same rows looked
-  like the Escape had not registered. And the *"may we open a picker at all"* rule, which was
-  duplicated inline in two files with slightly different spellings, is now one named
-  predicate (`Test-PmxCanPick`) — which is also what makes the interactive path testable at
-  all, since a test harness always runs with output redirected.
-
-### Added
 
 - 🖥️ **`pc-name web-prod` — rename the machine without breaking `sudo` (PF-FEAT-005).**
   The read-only `pc-whoami` finally gets its one mutating sibling. It replaces:
@@ -217,7 +182,7 @@ All notable changes to PowerFlow will be documented in this file.
   leaves Administrators and SYSTEM with full control, so someone who ran it on a private key
   would believe it was locked down. Both commands say what Windows actually uses instead.
 
-- 🖥️ **`pc-whoami --system`' — who and what this machine is (PF-FEAT-004).** Replaces
+- 🖥️ **`pc-whoami --system` — who and what this machine is (PF-FEAT-004).** Replaces
   `hostname` + `hostnamectl`, and answers the question a `pc-whoami` on an unfamiliar box is
   really asking: **where am I, and is this thing real?**
 
@@ -256,7 +221,7 @@ All notable changes to PowerFlow will be documented in this file.
   row — no longer gets a lesson about firmware. A reader who cannot find the thing being
   explained learns to distrust the whole footer.
 
-- 🗄️ **`storage report`' — one read-only view instead of five commands.** The sequence an admin
+- 🗄️ **`storage report` — one read-only view instead of five commands.** The sequence an admin
   runs on a fresh box to answer a single question ("how is this laid out, and is anything under
   pressure?") was:
 
@@ -305,6 +270,40 @@ All notable changes to PowerFlow will be documented in this file.
   Available on `storage` and `storage report` today; `Register-PFEducation` sits beside the
   view it explains, so a topic moves with its code instead of rotting in a doc nobody edits in
   the same commit.
+
+### Fixed
+
+- ↩ **Escaping a PMX picker is no longer an error (PF-UX-002 b2).** Pressing Escape ended
+  the command with a red `❌ cancelled`. The red marker is the one piece of output that has
+  to stay trustworthy — spending it on a user who simply changed their mind teaches them to
+  scan past it, and the next time it means something, they will. It now reads:
+
+  ```
+  ↩ Cancelled.
+  ```
+
+  dim and unadorned. Five outcomes reached the same renderer and **only one of them is
+  neutral**, so they are now told apart rather than flattened:
+
+  | | |
+  |---|---|
+  | Esc pressed | neutral — nothing to fix |
+  | no VMs / no disks | a state worth reporting |
+  | fzf unavailable | an instruction — nobody was *asked*, so nobody declined |
+  | invalid selector | an error |
+  | ambiguous selector | an error |
+
+  Fixed at the shared boundary, not per command: nine call sites rendered the failure by
+  hand, and a convention enforced in nine places is one that drifts in one of them. They now
+  route through `Write-PmxResolveFailure`, and a test fails the build if a tenth appears.
+
+  Two smaller things fell out of it. The **disk** picker had the same bug wearing different
+  clothes — it answered `$null` to both *cancelled* and *no picker available*, and the caller
+  reacted by re-printing the entire disk list, so escaping a picker of those same rows looked
+  like the Escape had not registered. And the *"may we open a picker at all"* rule, which was
+  duplicated inline in two files with slightly different spellings, is now one named
+  predicate (`Test-PmxCanPick`) — which is also what makes the interactive path testable at
+  all, since a test harness always runs with output redirected.
 
 ## [5.0.2] - 2026-08-14
 
