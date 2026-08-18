@@ -4,6 +4,38 @@ All notable changes to PowerFlow will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- 🔎 **`pmx list`, `pmx status`, and a typo that tells you what you meant (PF-UX-001 b2).**
+  `qm list` muscle memory reaches for `pmx list`, which answered *"Unknown pmx command
+  'list'"*. Both new spellings call the **same function** as their canonical form —
+  `pmx list` ≡ `pmx vm list`, `pmx status` ≡ `pmx node status` — so they are another door
+  into one view rather than a second view that can drift from it.
+
+  And a mistyped command now says what it probably was:
+
+  ```
+  ❌ Unknown pmx command 'lis'.
+     Did you mean:
+       pmx list
+  ```
+
+  **It never runs the suggestion.** There is no *"did you mean … [Y/n]"*, which is exactly
+  what makes a near-miss on a destructive word safe: printing is all it can do.
+
+  The suggestions are read from the help catalogue rather than a second hand-kept list,
+  because a suggestion is a promise that the thing suggested exists — sending someone to
+  type a command that does not run teaches them to distrust the tool instead of the typo.
+  A test cross-checks every suggestible route against the router and fails the build if one
+  is a phantom. It is also deliberately stingy: a prefix ranks first, otherwise the edit
+  distance must be small *relative to the word* (a flat threshold of 2 makes `vm` and `ip`
+  look like near-misses for half the catalogue), at most three are offered, one letter is
+  not treated as a prefix, and `pmx zzzz` gets no guess at all — just `Run: pmx help`, as
+  before. A guess offered with no confidence is noise wearing the costume of help.
+
+  `pmx list --help`, `pmx status --help`, `pmx start --help` and `pmx shutdown --help` now
+  work too: those four were real routes the catalogue had never been told about.
+
 ### Fixed
 
 - ↩ **Escaping a PMX picker is no longer an error (PF-UX-002 b2).** Pressing Escape ended

@@ -331,6 +331,15 @@ function Get-PmxHelpTopics {
     $topics['guest'] = $topics['local']
     $topics['updates'] = $topics['local']
     $topics['node'] = $topics['node status']
+
+    # The top-level convenience routes, pointed at the topic of the command they forward
+    # into. They are real routes the router answers, so leaving them out of the catalogue
+    # made `pmx list --help` unhelpful AND kept them out of the typo suggestions, which read
+    # this table as their source of truth.
+    $topics['list'] = $topics['vm list']
+    $topics['status'] = $topics['node status']
+    $topics['start'] = $topics['vm start']
+    $topics['shutdown'] = $topics['vm shutdown']
     $topics['storage'] = [pscustomobject]@{
         Purpose = 'List configured VM-image storage, or show local host pools through the legacy no-argument alias.'
         Syntax = @('pmx storage list [--json|--table]', 'pmx storage   (local Proxmox: same pool view as pmx pools)')
@@ -340,6 +349,133 @@ function Get-PmxHelpTopics {
         Story = 'Use storage list for VM-image capacity; use pools for the concise local host view.'
     }
     return $topics
+}
+
+# ── PF-UX-002 (b2): "Unknown pmx command" should say what you probably meant ──
+#
+# The routes come from Get-PmxHelpTopics rather than a second hand-kept list. That is the
+# whole reason this can be trusted: a suggestion list maintained separately from the
+# command table drifts, and a wrong suggestion is worse than none — it sends someone to
+# type a command that does not exist and makes them doubt the tool rather than the typo.
+#
+# Nothing here ever RUNS anything. The suggestion is printed and the command stops; there
+# is no "did you mean … [Y/n]" and no auto-correction, so a near-miss on a destructive word
+# can never become an execution of it.
+
+<#
+.SYNOPSIS
+    Every route pmx actually answers, plus the top-level group of each.
+#>
+function Get-PmxKnownRoutes {
+    # Topic keys that document a GROUP of commands rather than name one. 'pmx local' is not
+    # a command — the topic is the umbrella over pmx/disks/pools/guests/updates — so
+    # suggesting it would send someone to type something that does not run, which is the
+    # one failure mode a suggestion engine must not have. tests/proxmox/route-suggestions.ps1
+    # cross-checks this list against the router, so it cannot quietly go stale.
+    $notCommands = @('local')
+
+    $topics = Get-PmxHelpTopics
+    $routes = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($key in $topics.Keys) {
+        if ("$key" -in $notCommands) { continue }
+        [void]$routes.Add("$key")
+        # 'vm list' also makes 'vm' a real thing to suggest.
+        [void]$routes.Add(("$key" -split '\s+', 2)[0])
+    }
+    return @($routes | Sort-Object)
+}
+
+<#
+.SYNOPSIS
+    Levenshtein distance, iterative and allocation-light.
+#>
+function Get-PmxEditDistance {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$A,
+          [Parameter(Mandatory)][AllowEmptyString()][string]$B)
+
+    if ($A -ceq $B) { return 0 }
+    if (-not $A.Length) { return $B.Length }
+    if (-not $B.Length) { return $A.Length }
+
+    $previous = New-Object 'int[]' ($B.Length + 1)
+    $current  = New-Object 'int[]' ($B.Length + 1)
+    for ($j = 0; $j -le $B.Length; $j++) { $previous[$j] = $j }
+
+    for ($i = 1; $i -le $A.Length; $i++) {
+        $current[0] = $i
+        for ($j = 1; $j -le $B.Length; $j++) {
+            $cost = if ($A[$i - 1] -ceq $B[$j - 1]) { 0 } else { 1 }
+            $current[$j] = [Math]::Min([Math]::Min($current[$j - 1] + 1, $previous[$j] + 1), $previous[$j - 1] + $cost)
+        }
+        [Array]::Copy($current, $previous, $B.Length + 1)
+    }
+    return $previous[$B.Length]
+}
+
+<#
+.SYNOPSIS
+    The few routes a mistyped word most plausibly meant. Bounded, and often empty.
+.DESCRIPTION
+    Deliberately stingy. Three rules, in order:
+
+      1. A prefix of a real route ('lis' -> 'list') is the commonest typo and ranks first.
+      2. Otherwise the edit distance must be small RELATIVE to the word — one edit for a
+         short word, two for a longer one. A flat threshold of 2 makes 'vm' and 'ip' look
+         like near-misses for half the catalogue.
+      3. At most three, so the answer stays readable.
+
+    Returning nothing is a normal outcome. `pmx zzzz` gets "Run: pmx help", because a
+    guess offered with no confidence is noise wearing the costume of help.
+#>
+function Get-PmxRouteSuggestions {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Attempted,
+          [string[]]$Routes)
+
+    $word = "$Attempted".Trim().ToLowerInvariant()
+    if (-not $word) { return @() }
+    if (-not $Routes) { $Routes = Get-PmxKnownRoutes }
+
+    # Suggest single-word groups for a single mistyped word; only reach into multi-word
+    # routes when the user typed multiple words themselves.
+    $wordCount = @($word -split '\s+').Count
+    $candidates = @($Routes | Where-Object { @("$_" -split '\s+').Count -eq $wordCount })
+
+    $budget = if ($word.Length -le 4) { 1 } else { 2 }
+
+    $scored = foreach ($route in $candidates) {
+        $r = "$route"
+        if ($r -ceq $word) { continue }
+        $distance = Get-PmxEditDistance -A $word -B $r
+        # A prefix is ranked ahead of everything, but only when it is a real head start:
+        # a single letter is a prefix of far too much to mean anything.
+        $isPrefix = ($word.Length -ge 2 -and $r.StartsWith($word, [StringComparison]::Ordinal))
+        if (-not $isPrefix -and $distance -gt $budget) { continue }
+        [pscustomobject]@{ Route = $r; Rank = $(if ($isPrefix) { 0 } else { 1 }); Distance = $distance }
+    }
+
+    return @($scored | Sort-Object Rank, Distance, Route | Select-Object -First 3 -ExpandProperty Route)
+}
+
+<#
+.SYNOPSIS
+    The unknown-command message, with a suggestion when there is a confident one.
+#>
+function Write-PmxUnknownCommand {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Attempted,
+          [string]$Prefix = 'pmx')
+
+    # The input is echoed EXACTLY as typed. Normalising it here would hide the very
+    # character that caused the miss.
+    Write-Host "❌ Unknown $Prefix command '$Attempted'." -ForegroundColor Red
+
+    $suggestions = @(Get-PmxRouteSuggestions -Attempted $Attempted)
+    if ($suggestions.Count) {
+        Write-Host '   Did you mean:' -ForegroundColor Yellow
+        foreach ($s in $suggestions) { Write-Host "     $Prefix $s" -ForegroundColor Cyan }
+        # Printed, never run. Nothing below this line executes a suggestion.
+        return
+    }
+    Write-Host "   Run: $Prefix help" -ForegroundColor DarkGray
 }
 
 function Get-PmxHelpOverview {

@@ -240,6 +240,11 @@ function pmx {
             Show-PmxManagedStorage -Arguments (Get-PmxCommandTail -Arguments $tail -Start 1)
         }
         'vm'       { Invoke-PmxVmCommand -Arguments $tail }
+        # PF-UX-001 (b2). `qm list` muscle memory reaches for `pmx list`, and `pmx status`
+        # is the obvious short form of the host dashboard. Both call the SAME function as
+        # their canonical spelling — another route into one view, not a second view.
+        'list'     { Show-PmxManagedVmList -Arguments $tail }
+        'status'   { Show-PmxManagedNodeStatus -Arguments $tail }
         # Top-level lifecycle shortcuts. `pmx vm start` remains canonical; these forward into
         # the identical guarded mutation path, so a shortcut never means a weaker safety chain.
         # Deliberately only start/shutdown: those are the two that get typed reflexively, and
@@ -281,7 +286,7 @@ function pmx {
             if ($tail.Count) { Write-Host '❌ pmx updates takes no arguments.' -ForegroundColor Red; return }
             if (Test-PmxReady) { Show-PmxUpdates }
         }
-        default { Write-Host "❌ Unknown pmx command '$group'. Run: pmx help" -ForegroundColor Red }
+        default { Write-PmxUnknownCommand -Attempted $group }
     }
 }
 
