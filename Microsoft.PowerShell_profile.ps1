@@ -111,6 +111,7 @@ $_pf_components = @(
     # lessons.ps1 MUST precede teach.ps1 and brothers.ps1 — both read its data.
     "components\shell\bash-compat.ps1"
     "components\shell\history.ps1"
+    "components\shell\keys.ps1"
     "components\shell\lessons.ps1"
     "components\shell\teach.ps1"
     "components\shell\brothers.ps1"

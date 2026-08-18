@@ -6,6 +6,42 @@ All notable changes to PowerFlow will be documented in this file.
 
 ### Added
 
+- ⌨️ **Word navigation and selection keys work on Linux, and `pwsh-keys` shows what is
+  bound (PF-UX-003 b2).** Reported as `Ctrl+Left`, `Ctrl+Del` and `Ctrl+Shift+Arrow` not
+  behaving like a text editor.
+
+  **The investigation mattered more than the fix.** PowerFlow binds exactly two chords
+  (`!` and `$`) and never sets `EditMode`, so it was not breaking anything — and on Windows
+  every chord in the report was *already bound*. The real gap is **Emacs mode, the default
+  on Linux**, where word navigation, word deletion and word selection are unbound outright:
+
+  ```
+    chord              EditMode Windows     EditMode Emacs (the Linux default)
+    Ctrl+Left          BackwardWord         UNBOUND
+    Ctrl+Right         NextWord             UNBOUND
+    Ctrl+Del           KillWord             UNBOUND
+    Shift+Ctrl+Left    SelectBackwardWord   UNBOUND
+    Shift+Ctrl+Right   SelectNextWord       UNBOUND
+  ```
+
+  PowerFlow now fills those in **additively**: a chord already bound to something else is
+  left exactly as it is, because it may well be deliberate. On Linux that means five chords
+  gained, and `Ctrl+Backspace` — which Emacs binds to delete a *character* — reported rather
+  than quietly replaced. `pwsh-keys --rebind` takes those over, and only because it was
+  typed.
+
+  `pwsh-keys` shows every editing chord, what it does, and **who bound it** (default /
+  PowerFlow / other / unbound). It also names the half PowerFlow cannot fix: if a chord is
+  bound and still does nothing, the terminal never sent it — some terminals and layouts emit
+  no distinct sequence for a modified arrow, and no remap here can change that. That is
+  exactly the "risky global remap" the item warned against installing blind.
+
+  One trap worth recording: **PSReadLine normalises modifier order when it reports a
+  binding.** Write `Ctrl+Shift+LeftArrow` and it comes back as `Shift+Ctrl+LeftArrow`, so a
+  raw-string lookup calls an already-bound chord "unbound" — and then binds it a second time
+  under the other spelling. This produced a wrong "2 chords unbound" claim on Windows before
+  it was caught; every lookup now goes through one normaliser.
+
 - 📜 **`pman logs` you can actually read, and `pman inspect` without Go templates
   (PF-FEAT-005 b2).** The native sequence being replaced is four questions behind several
   flags and three template property paths:
