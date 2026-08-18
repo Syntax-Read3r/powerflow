@@ -98,3 +98,80 @@ function Set-Umask {
         return ([Convert]::ToString($old, 8)).PadLeft(4, '0')
     } catch { return $null }
 }
+
+# ── PF-FEAT-001: set a POSIX mode ─────────────────────────────────────────────
+
+<#
+.SYNOPSIS
+    Apply a numeric POSIX mode to a path, and VERIFY it took.
+.DESCRIPTION
+    chmod's exit code is necessary but not sufficient. It can succeed while the resulting
+    mode differs from the one asked for — most commonly on a filesystem mounted with fixed
+    permissions (vfat, ntfs-3g, many network mounts), where chmod returns 0 and the mode is
+    whatever the mount options dictate. Reporting success there would tell someone their key
+    file is 600 when it is world-readable, which is the one direction a permissions command
+    must never be wrong in.
+
+    So the mode is read back and compared, and a mismatch is a FAILURE carrying both numbers.
+.PARAMETER Mode
+    Numeric only — 600, 0644. Symbolic forms (u+x, go-rwx) are deliberately not accepted:
+    they are relative to the current mode, so "verify it took" has no single expected value
+    to compare against, and a half-supported syntax is worse than a clearly limited one.
+#>
+function Set-FileMode {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Mode
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return [pscustomobject]@{
+            Supported = $true; Success = $false; Numeric = ''; Symbolic = ''
+            Error = "no such path: $Path"
+        }
+    }
+
+    if ($Mode -notmatch '^[0-7]{3,4}$') {
+        return [pscustomobject]@{
+            Supported = $true; Success = $false; Numeric = ''; Symbolic = ''
+            Error = "'$Mode' is not a numeric mode — use three or four octal digits, such as 600 or 0644"
+        }
+    }
+
+    # `--` before the path so a filename beginning with a dash is not read as an option.
+    $stderr = & chmod $Mode -- "$Path" 2>&1
+    $code = $LASTEXITCODE
+
+    $after = Get-FileMode -Path $Path
+    if (-not $after) {
+        return [pscustomobject]@{
+            Supported = $true; Success = $false; Numeric = ''; Symbolic = ''
+            Error = 'the mode could not be read back after chmod'
+        }
+    }
+
+    if ($code -ne 0) {
+        return [pscustomobject]@{
+            Supported = $true; Success = $false
+            Numeric = $after.Numeric; Symbolic = $after.Symbolic
+            Error = "chmod failed: $(("$stderr" -split "`n" | Select-Object -First 1).Trim())"
+        }
+    }
+
+    # Compare as NUMBERS, not strings: `chmod 644` yields "644" and `chmod 0644` also yields
+    # "644", and a string compare would call the second a mismatch.
+    $wanted = [Convert]::ToInt32($Mode, 8)
+    $actual = [Convert]::ToInt32($after.Numeric, 8)
+    if ($wanted -ne $actual) {
+        return [pscustomobject]@{
+            Supported = $true; Success = $false
+            Numeric = $after.Numeric; Symbolic = $after.Symbolic
+            Error = "chmod reported success but the mode is $($after.Numeric), not $Mode — this filesystem may be mounted with fixed permissions"
+        }
+    }
+
+    return [pscustomobject]@{
+        Supported = $true; Success = $true
+        Numeric = $after.Numeric; Symbolic = $after.Symbolic; Error = ''
+    }
+}

@@ -6,7 +6,53 @@ All notable changes to PowerFlow will be documented in this file.
 
 ### Added
 
-- 🖥️ **`pc-whoami --system` — who and what this machine is (PF-FEAT-004).** Replaces
+- 🔐 **`ls --perms` — a permission view, not another `ls -l` (PF-FEAT-002).** GNU''s long
+  listing already works; a second copy would earn nothing. This answers a different question —
+  *who can do what to these files* — by putting the mode first in both notations and saying
+  nothing else:
+
+  ```
+    PERM        MODE  NAME
+    drwxr-xr-x  755   scripts/
+    -rwxrwxrwx  777   deploy.sh   ⚠ world-writable
+    -rw-------  600   wg-home.conf
+  ```
+
+  The ⚠ is marked **only** where it is earned — world-writable, setuid, setgid. Marking
+  everything unusual would train the reader to ignore the column; the point is that a mark
+  here is worth stopping for. Three commands now sit on permissions without overlapping:
+  `ls -l` (GNU long listing), `ls --perms` (just the modes), `perms <path>` (one file,
+  explained in full).
+
+- 🔐 **`rn <file> --chmod 600` — rename and set the mode as one step (PF-FEAT-001).** The mode
+  is applied to the **new** path; using the old one would chmod a file that no longer exists,
+  and silently, since chmod on a missing path is an error nobody reads.
+
+  **A failed chmod does not roll the rename back.** The rename is what was asked for and it
+  worked; undoing a completed action because a second one failed destroys work. It reports the
+  partial success and hands over the exact command:
+
+  ```
+  ❌ Renamed, but could not set permissions to 600
+     chmod reported success but the mode is 755, not 600 — this filesystem may be
+     mounted with fixed permissions
+
+     Run:
+       chmod 600 '/mnt/share/wg-home.conf'
+  ```
+
+  That case is real rather than defensive: on a filesystem mounted with fixed permissions
+  (vfat, ntfs-3g, many network mounts) **chmod exits 0 and changes nothing**. So the new
+  `Set-FileMode` adapter reads the mode back and compares it numerically — telling someone
+  their key file is 600 when it is world-readable is the one direction a permissions command
+  must never be wrong in.
+
+  **Windows refuses rather than translating.** NTFS ACLs are a different model, and the
+  plausible mappings are dangerous in the direction that matters: "600" read as "remove Users"
+  leaves Administrators and SYSTEM with full control, so someone who ran it on a private key
+  would believe it was locked down. Both commands say what Windows actually uses instead.
+
+- 🖥️ **`pc-whoami --system`' — who and what this machine is (PF-FEAT-004).** Replaces
   `hostname` + `hostnamectl`, and answers the question a `pc-whoami` on an unfamiliar box is
   really asking: **where am I, and is this thing real?**
 

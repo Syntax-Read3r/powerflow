@@ -33,6 +33,110 @@
 
 if (Test-Path Alias:\ls) { Remove-Item Alias:\ls -Force }
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  ls --perms — PF-FEAT-002
+# ══════════════════════════════════════════════════════════════════════════════
+# NOT another `ls -l`. GNU's long listing already works and lsd renders it well; a second
+# copy would earn nothing. This answers a different question — "who can do what to these
+# files" — by putting the mode first, in both notations, and saying nothing else.
+#
+# Three commands now sit on permissions and they do not overlap:
+#   ls -l          GNU long listing, everything about every file
+#   ls --perms     just the modes, compact, with the dangerous ones marked
+#   perms <path>   one path, explained in full (components/shell/teach.ps1)
+function Show-PFPermissionListing {
+    param([string]$Path = '.', [switch]$All)
+
+    if (-not (Test-PermsSupported)) {
+        # Deliberately NOT faked from NTFS ACLs. They are a different model — an ordered
+        # list of allow/deny entries per identity, with inheritance — and any numeric
+        # rendering would be a guess the user might act on. Windows already has `ls -l`
+        # and Get-Acl; what it does not have is a POSIX mode, so say that.
+        Write-Host ''
+        Write-Host 'POSIX permissions do not exist on this platform.' -ForegroundColor Yellow
+        Write-Host '  Windows uses NTFS ACLs, which do not reduce to a numeric mode.' -ForegroundColor DarkGray
+        Write-Host '  Try:  Get-Acl <path> | Format-List      or      icacls <path>' -ForegroundColor DarkGray
+        Write-Host ''
+        return
+    }
+
+    $target = if ($Path) { $Path } else { '.' }
+    if (-not (Test-Path -LiteralPath $target)) {
+        Write-Host "No such path: $target" -ForegroundColor Red
+        return
+    }
+
+    $items = @(Get-ChildItem -LiteralPath $target -Force:$All -ErrorAction SilentlyContinue |
+               Sort-Object { -not $_.PSIsContainer }, Name)
+    if (-not $items.Count) {
+        Write-Host '  (empty)' -ForegroundColor DarkGray
+        return
+    }
+
+    $rows = @()
+    foreach ($item in $items) {
+        $mode = Get-FileMode -Path $item.FullName
+        if (-not $mode) { continue }
+
+        # A trailing slash marks a directory without spending a column on it.
+        $name = if ($mode.Type -eq 'd') { "$($item.Name)/" } else { $item.Name }
+
+        # Only the modes that are genuinely dangerous, and only with a reason. Marking
+        # everything unusual would train the reader to ignore the column — the point is
+        # that a mark here is worth stopping for.
+        $numeric = $mode.Numeric
+        $warn = ''
+        if ($mode.Others.Substring(1, 1) -eq 'w') { $warn = 'world-writable' }
+        # setuid/setgid on an executable is how a normal user runs code as someone else.
+        if ($numeric.Length -ge 4) {
+            $special = [int]$numeric.Substring(0, 1)
+            if ($special -band 4) { $warn = if ($warn) { "$warn · setuid" } else { 'setuid' } }
+            if ($special -band 2) { $warn = if ($warn) { "$warn · setgid" } else { 'setgid' } }
+        }
+
+        $rows += [pscustomobject]@{
+            Symbolic = $mode.Symbolic
+            Numeric  = $numeric
+            Name     = $name
+            Warn     = $warn
+            IsDir    = ($mode.Type -eq 'd')
+        }
+    }
+
+    if (-not $rows.Count) {
+        Write-Host '  (no readable entries)' -ForegroundColor DarkGray
+        return
+    }
+
+    # Measured columns: a symbolic mode is 10 characters until an ACL or a security context
+    # adds a '+' or '.', and a numeric one is 3 or 4 depending on the special bits.
+    $symWidth = (@($rows | ForEach-Object { $_.Symbolic.Length }) | Sort-Object -Descending)[0]
+    $numWidth = (@($rows | ForEach-Object { $_.Numeric.Length }) | Sort-Object -Descending)[0]
+
+    Write-Host ''
+    Write-Host ("  {0}  {1}  {2}" -f 'PERM'.PadRight($symWidth), 'MODE'.PadRight($numWidth), 'NAME') -ForegroundColor DarkGray
+    foreach ($row in $rows) {
+        Write-Host ("  {0}  " -f $row.Symbolic.PadRight($symWidth)) -NoNewline -ForegroundColor DarkGray
+        Write-Host ("{0}  " -f $row.Numeric.PadRight($numWidth)) -NoNewline -ForegroundColor Cyan
+        Write-Host $row.Name -NoNewline -ForegroundColor $(if ($row.IsDir) { 'Blue' } else { 'White' })
+        if ($row.Warn) { Write-Host "   ⚠ $($row.Warn)" -NoNewline -ForegroundColor Yellow }
+        Write-Host ''
+    }
+    Write-Host ''
+
+    if (Test-PFEducateRequested) { Write-PFEducation -Topic 'ls-perms' }
+}
+
+Register-PFEducation -Topic 'ls-perms' `
+    -Analogy 'Every file carries three sets of permissions: what its owner may do, what its group may do, and what everyone else may do.' `
+    -Lines @(
+        @{ Term = 'PERM';  Means = 'The three sets in order — owner, group, everyone. r read, w write, x run.' }
+        @{ Term = 'MODE';  Means = 'The same thing as three digits, which is what chmod takes. 600 is owner-only.' }
+        @{ Term = 'd';     Means = 'A leading d means it is a directory; x on a directory means you may enter it.' }
+        @{ Term = '⚠';     Means = 'Marked only when genuinely risky: anyone can write to it, or it runs as another user.' }
+    ) `
+    -Footer 'perms <path> explains one file in full · rn <file> --chmod 600 changes one.'
+
 function ls {
     $pfTree   = $false
     $pfDepth  = 0
@@ -40,23 +144,36 @@ function ls {
 
     $pfRoot   = ''
     $pfTarget = ''
+    $pfPerms  = $false
 
     # Root flags must be intercepted BEFORE the lsd hand-off. lsd bundles unknown shorts, so
     # `ls -srv complete` reached it as -s -r -v and died with "unexpected argument '-s'".
     $namedRoots = @()
     try { $namedRoots = @((Get-PFNamedRoots).Keys) } catch { }
 
-    for ($i = 0; $i -lt $args.Count; $i++) {
-        $a = [string]$args[$i]
+    # --educate is cross-cutting and this command is hand-parsed, so it must be removed
+    # before the loop: anything left in $gnuArgs is handed to lsd, which would reject it.
+    $lsArgs = $args
+    if (Get-Command Split-PFEducateFlag -ErrorAction SilentlyContinue) {
+        $split = Split-PFEducateFlag -Argv $args -Command 'ls'
+        $lsArgs = $split.Argv
+        Set-PFEducateRequested $split.Educate
+    }
+
+    for ($i = 0; $i -lt $lsArgs.Count; $i++) {
+        $a = [string]$lsArgs[$i]
         switch -Regex ($a) {
             '^--tree$'  { $pfTree = $true }
+            # Intercepted before the lsd hand-off, like --tree: lsd would bundle an unknown
+            # long flag into shorts and die on it.
+            '^-{1,2}perms$' { $pfPerms = $true }
             # -recurse / -Recurse: the spelling a PowerShell user already knows. Get-ChildItem
             # habits should not be punished. NOT -r — that is GNU reverse-sort and lsd honours
             # it; -R is GNU recursive and already works.
             '^-{1,2}recurse$' { $pfTree = $true }
-            '^--depth$'       { $i++; $pfDepth = [int]$args[$i] }
+            '^--depth$'       { $i++; $pfDepth = [int]$lsArgs[$i] }
             '^--depth='       { $pfDepth = [int]($a -split '=', 2)[1] }
-            '^-depth$'        { $i++; $pfDepth = [int]$args[$i] }
+            '^-depth$'        { $i++; $pfDepth = [int]$lsArgs[$i] }
             default {
                 $bare = $a -replace '^-{1,2}', ''
                 if ($a.StartsWith('-') -and $namedRoots -contains $bare.ToLowerInvariant()) {
@@ -65,6 +182,33 @@ function ls {
                 else { $gnuArgs += $a }           # everything else is GNU's
             }
         }
+    }
+
+    # --perms is answered here, AFTER the root/target resolution below has had its chance —
+    # so `ls --perms` and `ls --perms /etc` both work. Placed before the lsd hand-off because
+    # this view is PowerFlow's own, not a wrapper over lsd.
+    if ($pfPerms -and -not $pfRoot) {
+        $permTarget = @($gnuArgs | Where-Object { -not $_.StartsWith('-') } | Select-Object -Last 1)
+        $showAll = @($gnuArgs | Where-Object { $_ -match '^-[a-zA-Z]*a' }).Count -gt 0
+        try {
+            Show-PFPermissionListing -Path $(if ($permTarget) { $permTarget } else { '.' }) -All:$showAll
+        }
+        finally {
+            # ls clears its own flag: it never enters Invoke-PFParamCommand, whose finally
+            # does this for every other command.
+            if (Get-Command Set-PFEducateRequested -ErrorAction SilentlyContinue) {
+                Set-PFEducateRequested $false
+            }
+        }
+        return
+    }
+
+    # --educate on a view that has no lesson. Saying nothing would be a silent no-op for a
+    # flag the user deliberately typed, which is the failure the flag convention exists to
+    # prevent — so point at the view that does explain itself.
+    if ((Get-Command Test-PFEducateRequested -ErrorAction SilentlyContinue) -and (Test-PFEducateRequested)) {
+        Write-Host '  note: --educate explains the permission view — try: ls --perms --educate' -ForegroundColor DarkGray
+        if (Get-Command Set-PFEducateRequested -ErrorAction SilentlyContinue) { Set-PFEducateRequested $false }
     }
 
     # `ls -srv complete` — find the directory, then list it. Same resolver nav will use, so the

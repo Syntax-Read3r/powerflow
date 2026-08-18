@@ -20,8 +20,12 @@
     rn                  # Opens file picker, then rename interface
     rn myfile.txt       # Renames myfile.txt directly with interface
 #>
-function rn {
+function Invoke-PFRenameFile {
     param(
+        # -Chmod comes FIRST so that `rn --chmod 600` binds it rather than letting "600"
+        # fall into the remaining-arguments filename. ValueFromRemainingArguments collects
+        # everything not otherwise bound, which is exactly what would swallow it.
+        [string]$Chmod,
         [Parameter(ValueFromRemainingArguments)]
         [string[]]$fileNameParts
     )
@@ -194,6 +198,38 @@ function rn {
         Write-Host "╰─────────────────────────────────────────────────────────────────────╯" -ForegroundColor Green
         Write-Host ""
 
+        # ── PF-FEAT-001: the permission half ─────────────────────────────────
+        # Applied to the NEW path. Using the old one would chmod a file that no longer
+        # exists — silently, since chmod on a missing path is an error nobody reads.
+        if ($Chmod) {
+            $newPath = Join-Path $currentPath $newFileName
+            $result = Set-FileMode -Path $newPath -Mode $Chmod
+
+            if ($result.Success) {
+                Write-Host "✅ Permissions" -ForegroundColor Green
+                Write-Host "   $($result.Numeric)  $($result.Symbolic)" -ForegroundColor White
+                Write-Host ""
+            }
+            elseif (-not $result.Supported) {
+                # The rename SUCCEEDED. Say that first: reporting only the failure would
+                # read as though nothing had happened at all.
+                Write-Host "⚠️  Renamed, but permissions were not changed." -ForegroundColor Yellow
+                Write-Host "   $($result.Error)" -ForegroundColor DarkGray
+                Write-Host ""
+            }
+            else {
+                # DO NOT roll the rename back. It is what the user asked for and it worked;
+                # undoing it to "clean up" would destroy a completed action because a second
+                # one failed. Report the partial success and hand over the exact command.
+                Write-Host "❌ Renamed, but could not set permissions to $Chmod" -ForegroundColor Red
+                Write-Host "   $($result.Error)" -ForegroundColor DarkGray
+                Write-Host ""
+                Write-Host "   Run:" -ForegroundColor Yellow
+                Write-Host "     chmod $Chmod '$newPath'" -ForegroundColor Cyan
+                Write-Host ""
+            }
+        }
+
     } catch {
         Write-Host ""
         Write-Host "╭─ ❌ RENAME FAILED ─────────────────────────────────────────────────╮" -ForegroundColor Red
@@ -206,5 +242,12 @@ function rn {
     }
 }
 
+# `rn` is a shim so `--chmod` binds: a param() block cannot bind a double-dash flag, and
+# worse, misbinds it into the next value parameter — here that is the filename, so
+# `rn --chmod 600` would have tried to rename a file called "--chmod".
+function rn { Invoke-PFParamCommand -Target 'Invoke-PFRenameFile' -Command 'rn' -Argv $args }
+
 # ── pwsh-h registration ───────────────────────────────────────────────────────
-Register-PFCommand -Name 'rn' -Section '📂 ENHANCED FILE OPERATIONS' -Synopsis 'interactive rename with fzf picker' -Example 'rn draft.md'
+Register-PFCommand -Name 'rn' -Section '📂 ENHANCED FILE OPERATIONS' `
+    -Synopsis 'interactive rename with fzf picker; --chmod sets the mode after (Linux)' `
+    -Example 'rn draft.md · rn wg.conf --chmod 600'

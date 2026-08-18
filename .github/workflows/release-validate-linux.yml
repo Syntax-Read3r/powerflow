@@ -246,6 +246,10 @@ jobs:
         shell: pwsh
         run: ./tests/linux/storage-report.ps1
 
+      - name: 🔐 rn --chmod and ls --perms
+        shell: pwsh
+        run: ./tests/linux/perms-features.ps1
+
       - name: 🛡️ THE regression that matters — coreutils are not shadowed
         shell: pwsh
         run: |

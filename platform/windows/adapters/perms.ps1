@@ -36,3 +36,34 @@ function Set-Umask {
     param([Parameter(Mandatory)][string]$Mask)
     return $null
 }
+
+# ── PF-FEAT-001: set a POSIX mode ─────────────────────────────────────────────
+
+<#
+.SYNOPSIS
+    Not supported on Windows, and says so rather than pretending.
+.DESCRIPTION
+    A numeric chmod mode is POSIX semantics: three permission bits for exactly three
+    principals. NTFS ACLs are a different model — an ordered list of allow/deny entries
+    per identity, with inheritance. There is no faithful mapping, and the plausible ones
+    are dangerous in the direction that matters: "600" translated as "remove Users" leaves
+    Administrators and SYSTEM with full control, so a user who ran `--chmod 600` on a
+    private key would believe it was locked down when it is readable by anything elevated.
+
+    So this refuses. The refusal names what Windows would actually use, because "not
+    supported" without a next step is only half an answer.
+#>
+function Set-FileMode {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Mode
+    )
+
+    return [pscustomobject]@{
+        Supported = $false
+        Success   = $false
+        Numeric   = ''
+        Symbolic  = ''
+        Error     = 'POSIX modes do not exist on Windows — NTFS uses ACLs, and translating a numeric mode would misreport who can read the file. Use icacls, or Get-Acl/Set-Acl, if you need to restrict it.'
+    }
+}
