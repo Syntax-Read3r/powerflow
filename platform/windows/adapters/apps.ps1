@@ -72,7 +72,9 @@ function Get-DiskHotspot {
         $env:ProgramFiles
         ${env:ProgramFiles(x86)}
         $env:TEMP
-        (Join-Path $HOME 'scoop')
+        # Resolved, not assumed: a relocated Scoop is usually the single biggest
+        # reclaimable directory on the machine, and hardcoding ~\scoop hid it entirely.
+        (Get-PackageManagerRoot)
         (Join-Path $HOME 'Downloads')
         (Join-Path $HOME 'Videos')
         (Join-Path $HOME 'Documents')
@@ -172,8 +174,9 @@ function Get-InstalledApplication {
     }
 
     # Scoop apps live outside the registry entirely — invisible to Add/Remove Programs.
-    $scoopRoot = if ($env:SCOOP) { $env:SCOOP } else { Join-Path $HOME 'scoop' }
-    $scoopApps = Join-Path $scoopRoot 'apps'
+    # Through the resolver, never $env:SCOOP directly: a Scoop relocated with -ScoopDir
+    # records root_path and sets no variable, and this listing went blank because of it.
+    $scoopApps = Join-Path (Get-PackageManagerRoot) 'apps'
     if (Test-Path $scoopApps) {
         $scoopDirs = @(Get-ChildItem $scoopApps -Directory -ErrorAction SilentlyContinue)
         $j = 0

@@ -5,11 +5,26 @@
 # File     : platform/linux/adapters/packages.ps1
 # Purpose  : Install and query PowerFlow's tool dependencies via the distro's
 #            native package manager (apt / dnf / pacman / zypper / apk)
-# Contract : Get-PackageManagerName, Test-PackageManager, Install-PackageManager,
-#            Test-Dependency, Install-Dependency, Uninstall-Dependency,
-#            Get-DependencyInstallHint
+# Contract : Get-PackageManagerName, Get-PackageManagerRoot, Test-PackageManager,
+#            Install-PackageManager, Test-Dependency, Install-Dependency,
+#            Uninstall-Dependency, Get-DependencyInstallHint
 # Depends  : none
 # ==============================================================================
+
+<#
+.SYNOPSIS
+    Where the package manager keeps its packages. $null on Linux — and that is the answer.
+.DESCRIPTION
+    apt, dnf, pacman, zypper and apk install into the filesystem hierarchy by design.
+    There is no relocatable root to report, so there is nothing to return.
+
+    Naming something anyway — /usr, or /var/cache/apt — would be worse than empty: a
+    caller would read it as somewhere PowerFlow may place or move files, and it is not.
+    Only USER-level tooling can be pointed at another mount on Linux; the distro's own
+    package manager cannot. A stub that lies is worse than a stub that is empty, which is
+    the same rule the Proxmox and team-room adapters follow.
+#>
+function Get-PackageManagerRoot { return $null }
 
 # Detect the distro's package manager once, then cache it.
 function Get-PackageManagerName {

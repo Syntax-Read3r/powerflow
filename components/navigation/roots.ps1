@@ -806,6 +806,28 @@ function Get-PFCodeRootCandidate {
     $volumes = @()
     try { $volumes = @(Get-StorageVolume) } catch { }
 
+    # DRIVE TYPE IS NOT A SAFETY SIGNAL. Windows reports a USB-attached WD My Passport as
+    # DriveType='Fixed' — measured on the machine this was written for, where E: showed as
+    # Fixed with 481 GB free and was an external disk on the USB bus. Filtering on IsSystem
+    # alone therefore offered a drive that can be unplugged as somewhere to keep source code.
+    #
+    # The bus lives on the DISK, not the volume, so it takes a join: Get-DiskInfo reports
+    # External per disk and lists the volumes each one carries in Letters (space-joined —
+    # drive letters on Windows, mount points on Linux, which is why one join serves both).
+    #
+    # Removable drives are MARKED, not hidden. A drive that silently vanished from the list
+    # would be its own puzzle, and someone who genuinely wants an external disk can still
+    # choose it deliberately — but it sorts last and says what it is.
+    $externalRoots = @{}
+    try {
+        foreach ($disk in @(Get-DiskInfo)) {
+            if (-not $disk.External) { continue }
+            foreach ($letter in @("$($disk.Letters)" -split '\s+' | Where-Object { $_ })) {
+                $externalRoots[$letter.ToLowerInvariant()] = $true
+            }
+        }
+    } catch { }
+
     foreach ($vol in @($volumes | Where-Object { -not $_.IsSystem })) {
         # On Linux a "volume" is a MOUNT, and plenty of mounts are machinery: /boot holds a
         # bootloader, /snap holds one squashfs per package, /var/lib/<daemon> holds a
@@ -813,6 +835,10 @@ function Get-PFCodeRootCandidate {
         # would bury the one or two mounts that matter. Windows roots are drive letters and
         # never match this.
         if ("$($vol.Root)" -match '^/(boot|snap|var|run|sys|proc|dev)(/|$)') { continue }
+        # Match on either spelling — Windows Letters carries "D:" and Linux carries the
+        # mount point, and Get-StorageVolume names the volume the same way on each.
+        $removable = [bool]($externalRoots["$($vol.Name)".ToLowerInvariant()] -or
+                            $externalRoots["$($vol.Root)".TrimEnd('\', '/').ToLowerInvariant()])
         foreach ($child in @(Get-ChildItem -LiteralPath $vol.Root -Directory -Force -ErrorAction SilentlyContinue)) {
             # Volume bookkeeping, not anybody's code.
             if ($child.Name -like '$*' -or $child.Name -eq 'System Volume Information') { continue }
@@ -821,8 +847,9 @@ function Get-PFCodeRootCandidate {
             $out += [pscustomobject]@{
                 Path      = $child.FullName
                 Volume    = $vol.Name
-                Likely    = (@($likely) -contains $child.Name.ToLowerInvariant())
+                Likely    = ((@($likely) -contains $child.Name.ToLowerInvariant()) -and -not $removable)
                 OffSystem = $true
+                Removable = $removable
             }
         }
     }
@@ -831,10 +858,13 @@ function Get-PFCodeRootCandidate {
         if (-not $p -or -not (Test-Path -LiteralPath $p)) { continue }
         if ($seen.ContainsKey($p)) { continue }
         $seen[$p] = $true
-        $out += [pscustomobject]@{ Path = $p; Volume = ''; Likely = $false; OffSystem = $false }
+        $out += [pscustomobject]@{ Path = $p; Volume = ''; Likely = $false; OffSystem = $false; Removable = $false }
     }
 
-    return @($out | Sort-Object -Property @{ Expression = 'OffSystem'; Descending = $true },
+    # Internal off-system drives first, then the system drive's own directories, and
+    # anything unpluggable last regardless of how promising its name looked.
+    return @($out | Sort-Object -Property @{ Expression = 'Removable'; Ascending = $true },
+                                          @{ Expression = 'OffSystem'; Descending = $true },
                                           @{ Expression = 'Likely';    Descending = $true },
                                           'Path')
 }
@@ -852,14 +882,21 @@ function Select-PFCodeRoot {
 
     $rows = @($Candidates | ForEach-Object {
         $tag = if ($_.OffSystem) { "[$($_.Volume)]" } else { '[system]' }
-        '{0,-9} {1}' -f $tag, $_.Path
+        # An unpluggable disk says so on its own row. A code root that disappears when a
+        # cable moves is worth one word of warning at the moment of choosing.
+        $note = if ($_.Removable) { '  ⚠ removable' } else { '' }
+        '{0,-9} {1}{2}' -f $tag, $_.Path, $note
     })
 
     if (Get-Command fzf -ErrorAction SilentlyContinue) {
         $picked = $rows | fzf --reverse --border=rounded --height=45% --prompt='code root> ' `
                               --header='Where does your code live?  Enter chooses · Esc to type a path instead' --header-first
         if (-not $picked) { return '' }
-        return ("$picked" -replace '^\S+\s+', '')
+        # Map the row back by INDEX. Parsing the path out of the rendered row would break
+        # the moment a row gained a second column — and one just did.
+        $index = [array]::IndexOf($rows, "$picked")
+        if ($index -ge 0) { return $Candidates[$index].Path }
+        return ''
     }
 
     Write-Host ''

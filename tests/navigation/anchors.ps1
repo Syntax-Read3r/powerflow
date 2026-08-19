@@ -24,6 +24,8 @@ function Get-TempPath           { return (Join-Path $sandbox 'tmp') }
 function Get-UserFolderPath     { param($Name, $Prefer) return '' }
 $script:StorageVolumes = @()
 function Get-StorageVolume      { return @($script:StorageVolumes) }
+$script:Disks = @()
+function Get-DiskInfo           { return @($script:Disks) }
 
 . (Join-Path $repo 'components/navigation/roots.ps1')
 
@@ -34,6 +36,7 @@ $projects = Join-Path $sandbox 'Projects'
 $devtools = Join-Path $sandbox 'DevTools'
 $homeDir  = Join-Path $sandbox 'home'
 $doomed   = Join-Path $sandbox 'Doomed'
+$usb      = ''
 foreach ($d in @($projects, $devtools, $homeDir, $doomed)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
 
 try {
@@ -111,9 +114,44 @@ try {
     $projectsIdx = [array]::IndexOf($names, 'Projects')
     $devtoolsIdx = [array]::IndexOf($names, 'DevTools')
     Assert-True ($projectsIdx -lt $devtoolsIdx) 'a likely code folder sorts above an unlikely sibling'
+
+    # ---- a USB disk is never mistaken for a code drive -----------------------
+    # Windows reports a USB-attached external as DriveType='Fixed', so IsSystem alone is
+    # not enough. The bus lives on the DISK, and Get-DiskInfo.Letters is space-joined.
+    # A SIBLING of the sandbox, not a child: two volumes never nest inside one another, and
+    # a nested fixture makes the outer volume enumerate the inner one as an ordinary folder.
+    $usb = Join-Path ([IO.Path]::GetTempPath()) ('pf-usb-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+    New-Item -ItemType Directory -Path (Join-Path $usb 'Projects') -Force | Out-Null
+    $script:StorageVolumes = @(
+        [pscustomobject]@{ Name = 'C:'; Root = (Join-Path $sandbox 'sys') + [IO.Path]::DirectorySeparatorChar; IsSystem = $true }
+        [pscustomobject]@{ Name = 'D:'; Root = $sandbox; IsSystem = $false }
+        [pscustomobject]@{ Name = 'E:'; Root = $usb;     IsSystem = $false }
+    )
+    $script:Disks = @(
+        [pscustomobject]@{ Id = 0; External = $false; Letters = 'C: D:' }
+        [pscustomobject]@{ Id = 2; External = $true;  Letters = 'E:' }
+    )
+    $candidates = @(Get-PFCodeRootCandidate)
+    $usbRows = @($candidates | Where-Object { $_.Path -like "$usb*" })
+    Assert-True ($usbRows.Count -gt 0) 'a removable drive is still offered, not silently hidden'
+    Assert-True (@($usbRows | Where-Object { -not $_.Removable }).Count -eq 0) 'every row on a USB disk is marked removable'
+    Assert-True (@($candidates | Where-Object { $_.Path -like "$projects*" -and $_.Removable }).Count -eq 0) 'an internal disk is not marked removable'
+
+    # A promising NAME on a removable disk must not outrank an internal drive.
+    $firstRemovable = [array]::IndexOf(@($candidates | ForEach-Object { $_.Removable }), $true)
+    $lastFixed = 0
+    for ($i = 0; $i -lt $candidates.Count; $i++) { if (-not $candidates[$i].Removable) { $lastFixed = $i } }
+    Assert-True ($firstRemovable -gt $lastFixed) 'removable candidates sort after every fixed one'
+    Assert-True (-not $usbRows[0].Likely) 'a code-shaped folder name on a removable disk is not promoted'
+
+    # When the bus cannot be determined at all, nothing is marked — an unknown bus must not
+    # silently disqualify the drive the user actually keeps their work on.
+    $script:Disks = @()
+    Assert-True (@(Get-PFCodeRootCandidate | Where-Object { $_.Removable }).Count -eq 0) 'no disk information means nothing is claimed'
 }
 finally {
     Remove-Item -LiteralPath $sandbox -Recurse -Force -ErrorAction SilentlyContinue
+    if ($usb) { Remove-Item -LiteralPath $usb -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
 Write-Host 'OK - anchors carry several spellings, folders name themselves, built-ins stay protected.'

@@ -36,15 +36,20 @@
 # — Initialize-Dependencies bootstraps Scoop and Add-ScoopShimToCurrentPath activates
 # the shims inside the same session.
 #
-# This resolution is deliberately inline rather than a shared adapter call. config/ is
-# scanned by the adapter-parity gate exactly like components/, so calling a Windows-only
-# adapter function from here would make that name part of the cross-platform contract
-# and fail the release for want of a Linux twin. A shared root contract belongs with the
-# install-time placement work, where Linux has something real to say.
+# The root now comes from the adapter's Get-PackageManagerRoot, which also consults
+# Scoop's own `root_path`. Reading only the variable was not enough: relocating with the
+# installer's -ScoopDir records root_path and sets NO variable, so a machine with a
+# relocated Scoop still resolved to a ~\scoop that does not exist.
+#
+# config/ is scanned by the adapter-parity gate exactly like components/, so this call
+# makes Get-PackageManagerRoot part of the cross-platform contract. That price is paid
+# openly: Linux implements it and returns $null, because a distro package manager has no
+# relocatable root — which is a real answer, not a stub pretending to be one.
 # ------------------------------------------------------------------------------
 function Initialize-PFScoopPath {
-    $scoopRoot = if ($env:SCOOP) { $env:SCOOP } else { Join-Path $HOME 'scoop' }
-    $shims     = Join-Path $scoopRoot 'shims'
+    $scoopRoot = Get-PackageManagerRoot
+    if (-not $scoopRoot) { return }
+    $shims = Join-Path $scoopRoot 'shims'
     if (-not (Test-Path -LiteralPath $shims)) {
         Write-Verbose "🛠 Scoop shims not present yet: $shims"
         return
