@@ -803,30 +803,15 @@ function Get-PFCodeRootCandidate {
     $seen = @{}
     $out  = @()
 
-    $volumes = @()
-    try { $volumes = @(Get-StorageVolume) } catch { }
-
-    # DRIVE TYPE IS NOT A SAFETY SIGNAL. Windows reports a USB-attached WD My Passport as
-    # DriveType='Fixed' — measured on the machine this was written for, where E: showed as
-    # Fixed with 481 GB free and was an external disk on the USB bus. Filtering on IsSystem
-    # alone therefore offered a drive that can be unplugged as somewhere to keep source code.
-    #
-    # The bus lives on the DISK, not the volume, so it takes a join: Get-DiskInfo reports
-    # External per disk and lists the volumes each one carries in Letters (space-joined —
-    # drive letters on Windows, mount points on Linux, which is why one join serves both).
+    # Eligibility comes from the SHARED classifier, never a second copy of the rule here.
+    # It already knows that drive type is not a safety signal — Windows reports a
+    # USB-attached external as DriveType='Fixed' — and decides from the disk's bus instead.
     #
     # Removable drives are MARKED, not hidden. A drive that silently vanished from the list
     # would be its own puzzle, and someone who genuinely wants an external disk can still
     # choose it deliberately — but it sorts last and says what it is.
-    $externalRoots = @{}
-    try {
-        foreach ($disk in @(Get-DiskInfo)) {
-            if (-not $disk.External) { continue }
-            foreach ($letter in @("$($disk.Letters)" -split '\s+' | Where-Object { $_ })) {
-                $externalRoots[$letter.ToLowerInvariant()] = $true
-            }
-        }
-    } catch { }
+    $volumes = @()
+    try { $volumes = @(Get-PFStorageCandidate) } catch { }
 
     foreach ($vol in @($volumes | Where-Object { -not $_.IsSystem })) {
         # On Linux a "volume" is a MOUNT, and plenty of mounts are machinery: /boot holds a
@@ -835,10 +820,10 @@ function Get-PFCodeRootCandidate {
         # would bury the one or two mounts that matter. Windows roots are drive letters and
         # never match this.
         if ("$($vol.Root)" -match '^/(boot|snap|var|run|sys|proc|dev)(/|$)') { continue }
-        # Match on either spelling — Windows Letters carries "D:" and Linux carries the
-        # mount point, and Get-StorageVolume names the volume the same way on each.
-        $removable = [bool]($externalRoots["$($vol.Name)".ToLowerInvariant()] -or
-                            $externalRoots["$($vol.Root)".TrimEnd('\', '/').ToLowerInvariant()])
+        # A volume that cannot be written to is no use as a code root at all, whatever it
+        # holds — the classifier already probed this rather than reading permission bits.
+        if (-not $vol.Writable) { continue }
+        $removable = [bool]$vol.External
         foreach ($child in @(Get-ChildItem -LiteralPath $vol.Root -Directory -Force -ErrorAction SilentlyContinue)) {
             # Volume bookkeeping, not anybody's code.
             if ($child.Name -like '$*' -or $child.Name -eq 'System Volume Information') { continue }

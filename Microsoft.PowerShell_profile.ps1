@@ -106,6 +106,10 @@ $_pf_components = @(
     "components\shared\educate.ps1"
     # flags.ps1 early — every command may route its flags through it.
     "components\shared\flags.ps1"
+    # volumes.ps1 MUST precede BOTH navigation and system: `nav setup` and `storage root`
+    # ask the same "could this volume hold what grows" question, and shared/ is the only
+    # place whose load order makes that dependency run forwards for both.
+    "components\shared\volumes.ps1"
 
     # Shell: bash builtins PowerShell lacks, plus the Linux teaching layer.
     # lessons.ps1 MUST precede teach.ps1 and brothers.ps1 — both read its data.

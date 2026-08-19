@@ -26,6 +26,7 @@ $script:PowerFlowOS = 'windows'
 # let a broken topic (a missing Term, a malformed Lines array) pass a test that the real
 # runtime would reject. Sourcing it also lets the assertions below read the registry back.
 . (Join-Path $root 'components/shared/educate.ps1')
+. (Join-Path $root 'components/shared/volumes.ps1')
 . $componentPath
 
 # ---------------------------------------------------------------------------------

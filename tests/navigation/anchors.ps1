@@ -27,6 +27,8 @@ function Get-StorageVolume      { return @($script:StorageVolumes) }
 $script:Disks = @()
 function Get-DiskInfo           { return @($script:Disks) }
 
+# Get-PFCodeRootCandidate delegates eligibility to the shared classifier.
+. (Join-Path $repo 'components/shared/volumes.ps1')
 . (Join-Path $repo 'components/navigation/roots.ps1')
 
 $anchorsFile = Join-Path $sandbox '.nav_anchors.json'

@@ -41,6 +41,7 @@ function Get-StorageVolume    { return @($script:Volumes) }
 function Get-DiskInfo         { return @($script:Disks) }
 function Get-StorageStraggler { return @($script:Stragglers) }
 
+. (Join-Path $repo 'components/shared/volumes.ps1')
 . (Join-Path $repo 'components/system/storage.ps1')
 
 try {

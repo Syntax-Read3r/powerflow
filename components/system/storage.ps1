@@ -395,92 +395,10 @@ Register-PFEducation -Topic 'storage-report' `
 #
 # Read-only, always. It reports and points; it never moves, declares or deletes anything.
 #
-# WHY THE CLASSIFICATION IS HERE AND NOT IN AN ADAPTER
-#
-# Deciding whether a volume could hold a development tree is composed entirely of adapter
-# answers — Get-StorageVolume for the volumes, Get-DiskInfo for the bus, a write probe for
-# permission. Nothing in it touches an OS API, so by the architecture rule it belongs in a
-# component. Only Get-StorageStraggler is genuinely per-OS, because %APPDATA% and
-# ~/.config have no shared vocabulary.
-#
-# DRIVE TYPE IS NOT A SAFETY SIGNAL. Windows reports a USB-attached external disk as
-# DriveType='Fixed' — measured on a WD My Passport showing 481 GB free and looking, to any
-# check based on IsSystem alone, exactly like an ideal second drive. The bus lives on the
-# DISK, so eligibility needs a join against Get-DiskInfo, whose Letters field is
-# space-joined: drive letters on Windows, mount points on Linux, which is why one join
-# serves both platforms.
+# Eligibility itself lives in components/shared/volumes.ps1, because `nav setup` asks the
+# same question about directories that this asks about volumes, and two copies of a rule
+# about hardware is precisely the drift this repository has been bitten by before.
 # ==============================================================================
-
-<#
-.SYNOPSIS
-    Can PowerFlow actually create files here? Probed, never inferred.
-.DESCRIPTION
-    A create-and-delete probe rather than mode-bit or ACL arithmetic. On Linux a mount can
-    be read-only, or root-owned with no user write access, and on Windows a volume can carry
-    an ACL that no attribute reflects — in both cases the permission bits can look fine while
-    a write fails. The only honest answer is to try it.
-#>
-function Test-PFPathWritable {
-    param([Parameter(Mandatory)][string]$Path)
-
-    if (-not (Test-Path -LiteralPath $Path)) { return $false }
-    $probe = Join-Path $Path (".pf-write-probe-" + [System.IO.Path]::GetRandomFileName())
-    try {
-        New-Item -ItemType File -Path $probe -Force -ErrorAction Stop | Out-Null
-        Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
-        return $true
-    }
-    catch { return $false }
-    finally { if (Test-Path -LiteralPath $probe) { Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue } }
-}
-
-<#
-.SYNOPSIS
-    Every volume, annotated with whether it could hold a development tree and why not.
-.DESCRIPTION
-    Nothing is hidden. A volume that fails carries the REASON it failed, because a drive
-    silently missing from a list is a puzzle, while a drive listed as "removable disk" is
-    an answer.
-#>
-function Get-PFStorageCandidate {
-    # Which volumes sit on a disk you can unplug? Letters is space-joined on both platforms.
-    $external = @{}
-    try {
-        foreach ($disk in @(Get-DiskInfo)) {
-            if (-not $disk.External) { continue }
-            foreach ($letter in @("$($disk.Letters)" -split '\s+' | Where-Object { $_ })) {
-                $external[$letter.ToLowerInvariant()] = $true
-            }
-        }
-    } catch { }
-
-    $out = @()
-    foreach ($volume in @(Get-StorageVolume)) {
-        $isExternal = [bool]($external["$($volume.Name)".ToLowerInvariant()] -or
-                             $external["$($volume.Root)".TrimEnd('\', '/').ToLowerInvariant()])
-        $writable = Test-PFPathWritable -Path $volume.Root
-
-        $why = @()
-        if ($volume.IsSystem) { $why += 'system volume' }
-        if ($isExternal)      { $why += 'removable disk' }
-        if (-not $writable)   { $why += 'not writable' }
-
-        $out += [pscustomobject]@{
-            Name      = $volume.Name
-            Root      = $volume.Root
-            Label     = "$($volume.Label)"
-            SizeBytes = [int64]$volume.SizeBytes
-            FreeBytes = [int64]$volume.FreeBytes
-            IsSystem  = [bool]$volume.IsSystem
-            External  = $isExternal
-            Writable  = $writable
-            Eligible  = (-not $volume.IsSystem -and -not $isExternal -and $writable)
-            Reason    = ($why -join ', ')
-        }
-    }
-    return @($out | Sort-Object -Property @{ Expression = 'Eligible'; Descending = $true },
-                                           @{ Expression = 'FreeBytes'; Descending = $true })
-}
 
 function Show-StorageRoot {
     param([switch]$ShowNative)
