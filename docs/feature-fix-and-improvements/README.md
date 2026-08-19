@@ -3,6 +3,11 @@
 This folder is where PowerFlow work arrives. Bugs found while using the shell, features wanted,
 and rough edges worth smoothing all get written down here first and picked up from here.
 
+> **Where work stands right now: [TODO.md](TODO.md).** That file is the continuity
+> mechanism — a session todo list is local and dies with the session, as one did in the
+> 2026-08-19 machine reset. It carries both backlogs' open items, the storage-allocation
+> initiative, and the standing owner constraints recovered from the team-chat archive.
+
 Two cumulative logs now exist. **Do not reset or clear either** until a copy has been made and
 a reset is explicitly asked for — [powerflow_backlog(2).md](<powerflow_backlog(2).md>) carries
 that instruction in its own footer.
