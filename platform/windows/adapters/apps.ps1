@@ -386,6 +386,76 @@ function Resolve-StorageVolume {
     that is the whole point of the adapter layer. `dkr` solves the same problem by returning a
     .Native field from its adapter; this is the same idea for storage.
 #>
+<#
+.SYNOPSIS
+    Development directories sitting on the SYSTEM drive, and what would move each one.
+.DESCRIPTION
+    The knowledge here is irreducibly per-OS — %APPDATA%, %LOCALAPPDATA% and the dot-folder
+    conventions have no Linux counterpart — which is the whole reason this lives in an
+    adapter rather than in a component.
+
+    A JUNCTIONED PATH IS NOT A STRAGGLER. Relocating an editor's data and leaving a junction
+    behind is a legitimate and often the only workable answer: the flags an application
+    offers usually cover only the launches you control, while a junction is resolved by the
+    filesystem for every launch route. Such a path still EXISTS on the system drive and
+    still measures the same size through the link, so a naive scan reports it as unmoved
+    when it is exactly the opposite. Each row therefore carries Redirected, and the caller
+    is expected to say so rather than nag about work already done.
+
+    Size is measured through Measure-FolderSize rather than a second walk of its own, so a
+    row here and a row in the disk-hotspot view can never disagree about how big something is.
+#>
+function Get-StorageStraggler {
+    $systemRoot = "$env:SystemDrive\"
+
+    $known = @(
+        @{ Name = 'VS Code extensions'; Path = (Join-Path $HOME '.vscode\extensions');              Var = '' }
+        @{ Name = 'VS Code user data';  Path = (Join-Path $env:APPDATA 'Code');                     Var = '' }
+        @{ Name = 'Scoop';              Path = (Join-Path $HOME 'scoop');                           Var = 'SCOOP' }
+        @{ Name = 'npm global prefix';  Path = (Join-Path $env:APPDATA 'npm');                      Var = 'NPM_CONFIG_PREFIX' }
+        @{ Name = 'npm cache';          Path = (Join-Path $HOME '.npm');                            Var = 'NPM_CONFIG_CACHE' }
+        @{ Name = 'pnpm';               Path = (Join-Path $env:LOCALAPPDATA 'pnpm');                Var = 'PNPM_HOME' }
+        @{ Name = 'Yarn cache';         Path = (Join-Path $env:LOCALAPPDATA 'Yarn\Cache');          Var = 'YARN_CACHE_FOLDER' }
+        @{ Name = 'NuGet packages';     Path = (Join-Path $HOME '.nuget');                          Var = 'NUGET_PACKAGES' }
+        @{ Name = 'Gradle';             Path = (Join-Path $HOME '.gradle');                         Var = 'GRADLE_USER_HOME' }
+        @{ Name = 'Maven';              Path = (Join-Path $HOME '.m2');                             Var = '' }
+        @{ Name = 'Cargo';              Path = (Join-Path $HOME '.cargo');                          Var = 'CARGO_HOME' }
+        @{ Name = 'Rustup';             Path = (Join-Path $HOME '.rustup');                         Var = 'RUSTUP_HOME' }
+        @{ Name = 'Go workspace';       Path = (Join-Path $HOME 'go');                              Var = 'GOPATH' }
+        @{ Name = 'pip cache';          Path = (Join-Path $env:LOCALAPPDATA 'pip\Cache');           Var = 'PIP_CACHE_DIR' }
+        @{ Name = 'Android SDK';        Path = (Join-Path $env:LOCALAPPDATA 'Android\Sdk');         Var = 'ANDROID_SDK_ROOT' }
+        @{ Name = 'Android user data';  Path = (Join-Path $HOME '.android');                        Var = 'ANDROID_USER_HOME' }
+        @{ Name = 'container store';    Path = (Join-Path $HOME '.local\share\containers');         Var = '' }
+        @{ Name = 'Docker config';      Path = (Join-Path $HOME '.docker');                         Var = 'DOCKER_CONFIG' }
+        @{ Name = 'temp';               Path = (Join-Path $env:LOCALAPPDATA 'Temp');                Var = 'TEMP' }
+    )
+
+    $out = @()
+    foreach ($entry in $known) {
+        $path = "$($entry.Path)"
+        if (-not $path -or -not (Test-Path -LiteralPath $path)) { continue }
+        # Only report what is actually ON the system drive. A machine whose profile already
+        # lives elsewhere has nothing to answer for.
+        if (-not $path.StartsWith($systemRoot, [StringComparison]::OrdinalIgnoreCase)) { continue }
+
+        $redirected = $false
+        try { $redirected = [bool]((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) } catch { }
+
+        $target = ''
+        if ($entry.Var) { $target = "$([Environment]::GetEnvironmentVariable($entry.Var, 'User'))" }
+
+        $out += [pscustomobject]@{
+            Name       = $entry.Name
+            Path       = $path
+            SizeBytes  = [int64](Measure-FolderSize $path)
+            Variable   = "$($entry.Var)"
+            Redirect   = $target
+            Redirected = $redirected
+        }
+    }
+    return @($out | Sort-Object -Property @{ Expression = 'Redirected' }, @{ Expression = 'SizeBytes'; Descending = $true })
+}
+
 function Get-StorageNativeCommand {
     param(
         [Parameter(Mandatory)][ValidateSet('list', 'measure')][string]$Operation,

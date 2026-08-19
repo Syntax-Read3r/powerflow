@@ -370,6 +370,84 @@ function Resolve-StorageVolume {
     that is the whole point of the adapter layer. `dkr` solves the same problem by returning a
     .Native field from its adapter; this is the same idea for storage.
 #>
+<#
+.SYNOPSIS
+    Development directories sitting on the ROOT filesystem, and what would move each one.
+.DESCRIPTION
+    The Linux half of the same contract, and the differences are real rather than cosmetic:
+
+    - "the system drive" is the filesystem carrying `/`. A separate /home is already off it,
+      so a machine partitioned that way correctly reports far less here than a single-root
+      one — which is the honest answer, not a gap.
+    - XDG covers most of what needs redirecting, so several rows name XDG_* rather than a
+      per-tool variable. A tool that ignores XDG needs its own variable exactly as on Windows.
+    - the dot-folder names differ (~/.config/Code, not %APPDATA%\Code), which is precisely
+      why this cannot be shared with the Windows implementation.
+
+    A SYMLINKED PATH IS NOT A STRAGGLER, for the same reason a junction is not one on
+    Windows: the directory still exists and still measures the same size through the link,
+    while the bytes are elsewhere. Rows carry Redirected so the caller can say so.
+#>
+function Get-StorageStraggler {
+    $homeDir = if ($HOME) { $HOME } else { '/root' }
+
+    # Which device carries /? Anything on that device is "on the system drive".
+    $rootDevice = $null
+    try { $rootDevice = (Get-Item -LiteralPath '/' -Force).PSObject.Properties['Device'].Value } catch { }
+
+    $known = @(
+        @{ Name = 'VS Code extensions'; Path = "$homeDir/.vscode/extensions";        Var = '' }
+        @{ Name = 'VS Code user data';  Path = "$homeDir/.config/Code";              Var = 'XDG_CONFIG_HOME' }
+        @{ Name = 'npm cache';          Path = "$homeDir/.npm";                      Var = 'NPM_CONFIG_CACHE' }
+        @{ Name = 'npm global prefix';  Path = "$homeDir/.npm-global";               Var = 'NPM_CONFIG_PREFIX' }
+        @{ Name = 'pnpm store';         Path = "$homeDir/.local/share/pnpm";         Var = 'PNPM_HOME' }
+        @{ Name = 'Yarn cache';         Path = "$homeDir/.cache/yarn";               Var = 'YARN_CACHE_FOLDER' }
+        @{ Name = 'NuGet packages';     Path = "$homeDir/.nuget";                    Var = 'NUGET_PACKAGES' }
+        @{ Name = 'Gradle';             Path = "$homeDir/.gradle";                   Var = 'GRADLE_USER_HOME' }
+        @{ Name = 'Maven';              Path = "$homeDir/.m2";                       Var = '' }
+        @{ Name = 'Cargo';              Path = "$homeDir/.cargo";                    Var = 'CARGO_HOME' }
+        @{ Name = 'Rustup';             Path = "$homeDir/.rustup";                   Var = 'RUSTUP_HOME' }
+        @{ Name = 'Go workspace';       Path = "$homeDir/go";                        Var = 'GOPATH' }
+        @{ Name = 'pip cache';          Path = "$homeDir/.cache/pip";                Var = 'PIP_CACHE_DIR' }
+        @{ Name = 'Android SDK';        Path = "$homeDir/Android/Sdk";               Var = 'ANDROID_SDK_ROOT' }
+        @{ Name = 'Android user data';  Path = "$homeDir/.android";                  Var = 'ANDROID_USER_HOME' }
+        @{ Name = 'container store';    Path = "$homeDir/.local/share/containers";   Var = '' }
+        @{ Name = 'Docker config';      Path = "$homeDir/.docker";                   Var = 'DOCKER_CONFIG' }
+        @{ Name = 'XDG cache';          Path = "$homeDir/.cache";                    Var = 'XDG_CACHE_HOME' }
+        @{ Name = 'XDG data';           Path = "$homeDir/.local/share";              Var = 'XDG_DATA_HOME' }
+    )
+
+    $out = @()
+    foreach ($entry in $known) {
+        $path = "$($entry.Path)"
+        if (-not $path -or -not (Test-Path -LiteralPath $path)) { continue }
+
+        # Off the root filesystem already? Then it is somebody else's disk and not a finding.
+        if ($rootDevice) {
+            try {
+                $dev = (Get-Item -LiteralPath $path -Force).PSObject.Properties['Device'].Value
+                if ($dev -and $dev -ne $rootDevice) { continue }
+            } catch { }
+        }
+
+        $redirected = $false
+        try { $redirected = [bool]((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) } catch { }
+
+        $target = ''
+        if ($entry.Var) { $target = "$([Environment]::GetEnvironmentVariable($entry.Var))" }
+
+        $out += [pscustomobject]@{
+            Name       = $entry.Name
+            Path       = $path
+            SizeBytes  = [int64](Measure-FolderSize $path)
+            Variable   = "$($entry.Var)"
+            Redirect   = $target
+            Redirected = $redirected
+        }
+    }
+    return @($out | Sort-Object -Property @{ Expression = 'Redirected' }, @{ Expression = 'SizeBytes'; Descending = $true })
+}
+
 function Get-StorageNativeCommand {
     param(
         [Parameter(Mandatory)][ValidateSet('list', 'measure')][string]$Operation,

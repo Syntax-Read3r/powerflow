@@ -389,6 +389,176 @@ Register-PFEducation -Topic 'storage-report' `
     ) `
     -Footer 'Everything here is read-only — this command changes nothing.'
 
+# ==============================================================================
+# storage root — where should what grows live, and what still does not
+# ==============================================================================
+#
+# Read-only, always. It reports and points; it never moves, declares or deletes anything.
+#
+# WHY THE CLASSIFICATION IS HERE AND NOT IN AN ADAPTER
+#
+# Deciding whether a volume could hold a development tree is composed entirely of adapter
+# answers — Get-StorageVolume for the volumes, Get-DiskInfo for the bus, a write probe for
+# permission. Nothing in it touches an OS API, so by the architecture rule it belongs in a
+# component. Only Get-StorageStraggler is genuinely per-OS, because %APPDATA% and
+# ~/.config have no shared vocabulary.
+#
+# DRIVE TYPE IS NOT A SAFETY SIGNAL. Windows reports a USB-attached external disk as
+# DriveType='Fixed' — measured on a WD My Passport showing 481 GB free and looking, to any
+# check based on IsSystem alone, exactly like an ideal second drive. The bus lives on the
+# DISK, so eligibility needs a join against Get-DiskInfo, whose Letters field is
+# space-joined: drive letters on Windows, mount points on Linux, which is why one join
+# serves both platforms.
+# ==============================================================================
+
+<#
+.SYNOPSIS
+    Can PowerFlow actually create files here? Probed, never inferred.
+.DESCRIPTION
+    A create-and-delete probe rather than mode-bit or ACL arithmetic. On Linux a mount can
+    be read-only, or root-owned with no user write access, and on Windows a volume can carry
+    an ACL that no attribute reflects — in both cases the permission bits can look fine while
+    a write fails. The only honest answer is to try it.
+#>
+function Test-PFPathWritable {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
+    $probe = Join-Path $Path (".pf-write-probe-" + [System.IO.Path]::GetRandomFileName())
+    try {
+        New-Item -ItemType File -Path $probe -Force -ErrorAction Stop | Out-Null
+        Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+        return $true
+    }
+    catch { return $false }
+    finally { if (Test-Path -LiteralPath $probe) { Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue } }
+}
+
+<#
+.SYNOPSIS
+    Every volume, annotated with whether it could hold a development tree and why not.
+.DESCRIPTION
+    Nothing is hidden. A volume that fails carries the REASON it failed, because a drive
+    silently missing from a list is a puzzle, while a drive listed as "removable disk" is
+    an answer.
+#>
+function Get-PFStorageCandidate {
+    # Which volumes sit on a disk you can unplug? Letters is space-joined on both platforms.
+    $external = @{}
+    try {
+        foreach ($disk in @(Get-DiskInfo)) {
+            if (-not $disk.External) { continue }
+            foreach ($letter in @("$($disk.Letters)" -split '\s+' | Where-Object { $_ })) {
+                $external[$letter.ToLowerInvariant()] = $true
+            }
+        }
+    } catch { }
+
+    $out = @()
+    foreach ($volume in @(Get-StorageVolume)) {
+        $isExternal = [bool]($external["$($volume.Name)".ToLowerInvariant()] -or
+                             $external["$($volume.Root)".TrimEnd('\', '/').ToLowerInvariant()])
+        $writable = Test-PFPathWritable -Path $volume.Root
+
+        $why = @()
+        if ($volume.IsSystem) { $why += 'system volume' }
+        if ($isExternal)      { $why += 'removable disk' }
+        if (-not $writable)   { $why += 'not writable' }
+
+        $out += [pscustomobject]@{
+            Name      = $volume.Name
+            Root      = $volume.Root
+            Label     = "$($volume.Label)"
+            SizeBytes = [int64]$volume.SizeBytes
+            FreeBytes = [int64]$volume.FreeBytes
+            IsSystem  = [bool]$volume.IsSystem
+            External  = $isExternal
+            Writable  = $writable
+            Eligible  = (-not $volume.IsSystem -and -not $isExternal -and $writable)
+            Reason    = ($why -join ', ')
+        }
+    }
+    return @($out | Sort-Object -Property @{ Expression = 'Eligible'; Descending = $true },
+                                           @{ Expression = 'FreeBytes'; Descending = $true })
+}
+
+function Show-StorageRoot {
+    param([switch]$ShowNative)
+
+    $candidates = @(Get-PFStorageCandidate)
+    $eligible   = @($candidates | Where-Object { $_.Eligible })
+
+    Write-Host ''
+    Write-Host '🗄️  STORAGE ROOT — where what grows could live' -ForegroundColor Cyan
+    Write-Host '────────────────────────────────────────────────────────────────────' -ForegroundColor DarkGray
+    Write-Host ('  {0,-6} {1,-16} {2,10} {3,10}  {4}' -f 'VOLUME', 'LABEL', 'SIZE', 'FREE', 'VERDICT') -ForegroundColor DarkGray
+    foreach ($c in $candidates) {
+        $verdict = if ($c.Eligible) { 'eligible' } else { $c.Reason }
+        $colour  = if ($c.Eligible) { 'Green' } elseif ($c.IsSystem) { 'White' } else { 'DarkGray' }
+        # Assigned, never inlined into the -f argument list: an `if` used directly as an
+        # argument expression is a 5.1 parse hazard, and this profile supports 5.1.
+        $label   = "$($c.Label)"
+        if ($label.Length -gt 16) { $label = $label.Substring(0, 16) }
+        Write-Host ('  {0,-6} {1,-16} {2,10} {3,10}  {4}' -f $c.Name, $label,
+                    (Format-StorageSize $c.SizeBytes), (Format-StorageSize $c.FreeBytes), $verdict) -ForegroundColor $colour
+    }
+
+    Write-Host ''
+    if (-not $eligible.Count) {
+        Write-Host '  No volume besides the system one qualifies — so the system drive is the answer here,' -ForegroundColor DarkGray
+        Write-Host '  and keeping what grows tidy matters more than moving it.' -ForegroundColor DarkGray
+    }
+
+    # ---- what is still on the system drive ------------------------------------
+    $stragglers = @()
+    try { $stragglers = @(Get-StorageStraggler) } catch { }
+
+    $unmoved   = @($stragglers | Where-Object { -not $_.Redirected })
+    $linked    = @($stragglers | Where-Object { $_.Redirected })
+    $totalSize = ($unmoved | Measure-Object SizeBytes -Sum).Sum
+
+    Write-Host '  ON THE SYSTEM DRIVE' -ForegroundColor Cyan
+    if (-not $unmoved.Count) {
+        Write-Host '    Nothing known is still parked there.' -ForegroundColor Green
+    }
+    else {
+        Write-Host ('    {0,-20} {1,10}  {2}' -f 'WHAT', 'SIZE', 'MOVED BY') -ForegroundColor DarkGray
+        foreach ($s in $unmoved) {
+            $how = if ($s.Variable) { $s.Variable } else { 'no variable — needs a link' }
+            Write-Host ('    {0,-20} {1,10}  {2}' -f $s.Name, (Format-StorageSize $s.SizeBytes), $how) `
+                       -ForegroundColor (Get-StorageColour ([double]$s.SizeBytes / 1GB * 10))
+            if ($ShowNative) { Write-Host ('      {0}' -f $s.Path) -ForegroundColor DarkGray }
+        }
+        Write-Host ('    {0,-20} {1,10}' -f 'total', (Format-StorageSize $totalSize)) -ForegroundColor White
+    }
+
+    # Already-redirected paths still EXIST on the system drive and still measure the same
+    # size through the link. Reporting them as unmoved would nag about finished work.
+    if ($linked.Count) {
+        Write-Host ''
+        Write-Host '  ALREADY REDIRECTED (the directory is a link; the bytes are elsewhere)' -ForegroundColor Cyan
+        foreach ($s in $linked) {
+            Write-Host ('    {0,-20} {1,10}' -f $s.Name, (Format-StorageSize $s.SizeBytes)) -ForegroundColor DarkGray
+        }
+    }
+
+    Write-Host ''
+    Write-Host '  Read-only — this command moves nothing.' -ForegroundColor DarkGray
+    Write-Host '  storage root --show-native   the full path of every row' -ForegroundColor DarkGray
+    Write-Host ''
+}
+
+Register-PFEducation -Topic 'storage-root' `
+    -Analogy 'A kitchen with one small worktop and a large empty table: the question is not whether the table is bigger, but whether it is yours to use and still there tomorrow.' `
+    -Lines @(
+        @{ Term = 'eligible';       Means = 'Not the system volume, not on a disk you can unplug, and PowerFlow could actually create a file there — probed, not assumed.' }
+        @{ Term = 'removable disk'; Means = 'Windows reports USB drives as "Fixed", so this is decided by the bus the DISK is on, not by the volume type.' }
+        @{ Term = 'not writable';   Means = 'A mount can be read-only or owned by another user while its permission bits look fine. The only honest test is to try writing.' }
+        @{ Term = 'MOVED BY';       Means = 'The variable that relocates it. "needs a link" means the tool offers none, so a junction or symlink is the only route.' }
+        @{ Term = 'already redirected'; Means = 'The directory is a link: it still exists and measures the same, but the bytes are elsewhere. Finished work, not a finding.' }
+    ) `
+    -Footer 'Nothing here changes anything. It is a report you can run before and after an install.'
+
 function storage {
     # NO param() block. A param() would bind -a and -D as parameter NAMES, and PowerShell's
     # prefix matching would make -D ambiguous with any other D parameter. See the header.
@@ -423,6 +593,11 @@ function storage {
         'report' {
             Show-StorageReport -ShowNative:$showNative
             if ($educate) { Write-PFEducation -Topic 'storage-report' }
+            return
+        }
+        'root' {
+            Show-StorageRoot -ShowNative:$showNative
+            if ($educate) { Write-PFEducation -Topic 'storage-root' }
             return
         }
         'docker' { Show-StorageDocker -ShowNative:$showNative; return }
@@ -461,3 +636,5 @@ Register-PFCommand -Name 'storage big' -Section '🗄️ DISK RECLAIM' `
     -Synopsis 'large folders and files (vhdx, node_modules, caches)' -Example 'storage big 50gb-200gb'
 Register-PFCommand -Name 'storage docker' -Section '🗄️ DISK RECLAIM' `
     -Synopsis 'reclaimable container space, per the daemon' -Example 'storage docker'
+Register-PFCommand -Name 'storage root' -Section '🗄️ DISK RECLAIM' `
+    -Synopsis 'which drive could hold what grows, and what is still on the system one' -Example 'storage root --educate'
