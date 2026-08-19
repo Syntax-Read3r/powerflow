@@ -475,9 +475,11 @@ PowerFlow includes automated release workflows:
 | `nav -pics`             | Go straight there, no argument needed    |
 | `nav b <bookmark>`      | Navigate to bookmark                     |
 | `nav b .`               | Bookmark the directory you are in        |
+| `nav setup`             | **Find the drive your code is on**, name it, and make `nav` search it |
 | `nav --anchor . <name>` | Make **your own** starting point → `nav -<name>` |
+| `nav --anchor D:\Projects pro` | One anchor, several spellings → `nav -projects` **and** `nav -pro` |
 | `nav anchors`           | Every starting point: built-in vs yours  |
-| `nav anchors rm <name>` | Remove one you made (built-ins are protected) |
+| `nav anchors rm <name>` | Remove one you made, by any of its spellings (built-ins are protected) |
 | `nav list`              | Interactive bookmark manager             |
 | `nav roots`             | Where a bare `nav` searches, plus every starting point |
 | `nav roots add /srv`    | Also search `/srv` (or `/opt`, `/mnt/data`, …) |

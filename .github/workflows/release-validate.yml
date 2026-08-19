@@ -482,3 +482,7 @@ jobs:
       - name: 🎯 git-rl points at the setup flow instead of "cancelled", and writes nothing
         shell: pwsh
         run: ./tests/git/run.ps1
+
+      - name: 🧭 One anchor answers to several names, and built-ins stay protected
+        shell: pwsh
+        run: ./tests/navigation/run.ps1

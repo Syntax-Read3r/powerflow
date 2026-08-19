@@ -6,6 +6,48 @@ All notable changes to PowerFlow will be documented in this file.
 
 ### Added
 
+- 🧭 **`nav setup` — find the drive your code is actually on, name it, and search it.**
+  nav's default roots are `~/Code` on Windows and `~` on Linux, and both sit on the
+  **system** drive. Anyone who keeps their work on a second disk therefore got a nav that
+  found none of their projects, with nothing on screen to explain why. Measured on the
+  machine this was written for: the search roots were the home directory and one folder
+  inside it, while every repository lived on another drive entirely.
+
+  `nav setup` picks the directory, names it, and then **separately** offers to make it what
+  a bare `nav` searches. The separation is the point — an anchor only ever buys you
+  `nav -pro <name>`, and the complaint was that plain `nav <name>` found nothing, so doing
+  one without the other is the half-fix that leaves the original problem standing.
+
+  Second-drive detection reuses `Get-StorageVolume`'s existing `IsSystem` flag rather than
+  adding a second way to enumerate disks. On Linux a volume is a mount, so `/boot`,
+  `/snap`, `/var/…` and friends are skipped — they are machinery, and offering them would
+  bury the one mount that matters. On a single-drive machine the command still runs and
+  still names what you have, which was an explicit requirement.
+
+  It never prompts on a redirected stdin: `nav setup <path> [name] [more names]` is the
+  non-interactive route, and the bare form says so rather than reading EOF and answering
+  itself.
+
+- 🏷️ **One anchor can answer to several names.** The built-ins always could — `-pictures`
+  and `-pics` reach the same place — but a user's own anchor held exactly one name, so
+  wanting both `-projects` and `-pro` meant saving the directory twice and then seeing two
+  unrelated rows in `nav anchors` for one folder.
+
+  ```powershell
+  nav --anchor D:\Projects pro          # -projects  and  -pro
+  nav --anchor D:\DevTools devt devtool # -devtools, -devt  and  -devtool
+  nav anchors rm devt                   # removes the anchor by any of its spellings
+  ```
+
+  **The folder names itself.** `nav --anchor D:\Projects` needs no second argument, because
+  the directory's own name is the word anyone would have reached for; anything you supply
+  is an *additional* spelling rather than a replacement. Where the folder's name is already
+  a built-in, your word becomes the canonical one instead.
+
+  The anchors file gained a richer shape and **still reads the old flat one**, so nothing
+  has to be migrated — a migration that runs at profile load is a startup failure mode
+  nobody asked for.
+
 - ⌨️ **Word navigation and selection keys work on Linux, and `pwsh-keys` shows what is
   bound (PF-UX-003 b2).** Reported as `Ctrl+Left`, `Ctrl+Del` and `Ctrl+Shift+Arrow` not
   behaving like a text editor.
@@ -372,6 +414,31 @@ All notable changes to PowerFlow will be documented in this file.
   the same commit.
 
 ### Fixed
+
+- 📦 **PowerFlow no longer overwrites a relocated Scoop root.** Scoop's root is
+  relocatable — its installer takes `-ScoopDir`, and the chosen root is persisted as the
+  `SCOOP` environment variable. Both adapters already honoured that. `config/paths.windows.ps1`
+  did not: it **assigned** `$env:SCOOP = "$env:USERPROFILE\scoop"` behind a guard that tested
+  the whole of `PATH` for the substring `scoop`. Measured in an isolated `pwsh -NoProfile`,
+  three of four cases were wrong:
+
+  ```
+  relocated, PATH already updated      SCOOP survives  -- but only because the folder
+                                                          happened to be named "scoop"
+  relocated to a folder named "Tools"  CLOBBERED to the C: path
+  relocated, PATH not yet propagated   CLOBBERED to the C: path
+  unrelated D:\Projects\scooper\bin    left EMPTY, and no shims added at all
+  ```
+
+  The middle two are ordinary: a persisted variable reaches a new shell before a PATH
+  update does. In both, the shell silently repointed at a C: directory that did not exist,
+  and every Scoop-managed tool — `git`, `fzf`, `starship`, `lsd`, `zoxide` — became
+  unreachable with no error to explain it.
+
+  It now **reads** the variable and never writes it, matches PATH entries exactly instead of
+  scanning for a substring, and skips a shim directory that does not exist yet rather than
+  putting a dead path on PATH. Regression at `tests/windows/scoop-root-resolution.ps1`,
+  which fails on the first assertion against the old code.
 
 - ↩ **Escaping a PMX picker is no longer an error (PF-UX-002 b2).** Pressing Escape ended
   the command with a red `❌ cancelled`. The red marker is the one piece of output that has

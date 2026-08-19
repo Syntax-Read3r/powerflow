@@ -170,7 +170,33 @@ know which OS they are on. CI enforces parity (`release-validate.yml`).
 > **The default is deliberately not `/`** — that walks `/proc`, `/sys`, `/dev` and `/run`,
 > which are kernel-backed pseudo-filesystems, and throws permission errors across most of
 > the rest. Add the real ones you want instead: `nav roots add /srv`.
-| `components/navigation/roots.ps1` | Navigation | `Get-NavSearchRoots`, `Get-NavDefaultRoots`, `Add-NavSearchRoot`, `Remove-NavSearchRoot`, `Reset-NavSearchRoots`, `Show-NavSearchRoots`, `Format-NavPath` — **where `nav` looks**, persisted to `~/.nav_roots.json`² · plus the **named-starting-point layer shared by `nav` and `ls`**: `Get-PFNamedRoots`, `Get-PFRootAliases`, `Resolve-PFRootAlias`, `Get-PFRootChoices`, `Resolve-PFRootedDirectory`, and user **anchors** `Get-PFUserAnchors`/`Save-PFUserAnchors`/`Add-PFAnchor`/`Remove-PFAnchor`/`Show-PFAnchors`, plus the OneDrive-vs-local folder preference `Get-PFFolderPreference`/`Set-PFFolderPreference`/`Repair-PFUserFolders`⁹ |
+
+> ¹³ **One anchor, several spellings — because the built-ins always had them.** `-pictures`
+> and `-pics` have reached the same place since anchors existed; a user's own anchor could
+> hold exactly one name, so wanting both `-projects` and `-pro` meant saving the directory
+> twice and seeing two unrelated rows in `nav anchors` for one folder. The anchor file now
+> stores `{ "projects": { "path": …, "aliases": ["pro"] } }` and **still reads the old flat
+> `{ "name": "path" }` shape**, so nothing has to be migrated at profile load — a startup
+> migration is a startup failure mode. Two properties are load-bearing: **the folder names
+> itself** (`nav --anchor D:\Projects` needs no second word, because the directory's own
+> name is what anyone would have typed), and **spellings accumulate rather than replace** —
+> re-anchoring a directory to move it used to overwrite the alias list with whatever was on
+> that command line, silently destroying names the user had deliberately chosen. A spelling
+> that would shadow a built-in, or that another anchor already owns, is reported and dropped
+> rather than made fatal; the anchor asked for is still worth creating.
+>
+> ¹⁴ **`nav setup` exists because nav's default roots are all on the system drive.**
+> `~/Code` on Windows, `~` on Linux — so someone whose work lives on a second disk gets a
+> nav that finds none of their projects, with nothing on screen to suggest the roots are
+> why. Measured on the machine this was written for: the search roots were the home
+> directory and one folder inside it while every repository sat on another drive. The
+> command picks the directory, names it, and then **separately** offers to make it what a
+> bare `nav` searches — separate because an anchor only buys `nav -pro <name>`, and the
+> original complaint was that plain `nav <name>` found nothing. Second-drive detection is
+> `Get-StorageVolume`'s existing `IsSystem` flag, not new enumeration. On Linux a volume is
+> a mount, so `/boot`, `/snap`, `/var/…` and friends are skipped: they are machinery, and
+> offering them would bury the one mount that matters.
+| `components/navigation/roots.ps1` | Navigation | `Get-NavSearchRoots`, `Get-NavDefaultRoots`, `Add-NavSearchRoot`, `Remove-NavSearchRoot`, `Reset-NavSearchRoots`, `Show-NavSearchRoots`, `Format-NavPath` — **where `nav` looks**, persisted to `~/.nav_roots.json`² · plus the **named-starting-point layer shared by `nav` and `ls`**: `Get-PFNamedRoots`, `Get-PFRootAliases`, `Resolve-PFRootAlias`, `Get-PFRootChoices`, `Resolve-PFRootedDirectory`, and user **anchors** `Get-PFUserAnchorTable`/`Get-PFUserAnchors`/`Get-PFUserAnchorAliases`/`Save-PFUserAnchorTable`/`ConvertTo-PFAnchorKey`/`Get-PFAnchorNameProblem`/`Add-PFAnchor`/`Remove-PFAnchor`/`Show-PFAnchors`¹³, the **code-root setup** `Get-PFCodeRootCandidate`/`Select-PFCodeRoot`/`Invoke-PFDevRootSetup`¹⁴, plus the OneDrive-vs-local folder preference `Get-PFFolderPreference`/`Set-PFFolderPreference`/`Repair-PFUserFolders`⁹ |
 | `components/navigation/bookmarks.ps1` | Navigation | `Initialize-DefaultBookmarks`, `Get-Bookmarks`, `Save-Bookmarks`, `Add-Bookmark`, `Remove-Bookmark`, `Rename-Bookmark`, `Show-BookmarkList` |
 | `components/navigation/projects.ps1` | Navigation | `Search-Projects` |
 | `components/navigation/nav.ps1` | Navigation | `nav`, `nav roots`, `nav anchors`, `nav b .`, `z` (alias) — **hand-parses ``, no `param()` block**: a param block binds `-srv`/`-pics` as parameter NAMES, so `nav -srv complete` never reached the body (it just printed help). Same trap as `rm -rf`, footnote ⁵ |

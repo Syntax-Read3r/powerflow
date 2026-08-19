@@ -49,10 +49,21 @@ function nav {
     $param1  = if ($words.Count -ge 2) { $words[1] } else { $null }
     $param2  = if ($words.Count -ge 3) { $words[2] } else { $null }
 
-    # ---- nav --anchor <path> <name>   ( '.' means here, as in `code .` ) -------
+    # ---- nav --anchor <path> [name] [more names]  ( '.' means here, as in `code .` ) ----
+    # Every word past the second is another spelling for the same anchor, so
+    # `nav --anchor D:\DevTools devt devtool` answers to -devtools, -devt and -devtool.
     if ($anchorVerb) {
-        Add-PFAnchor -Path $(if ($words.Count -ge 1) { $words[0] } else { '' }) `
-                     -Name $(if ($words.Count -ge 2) { $words[1] } else { '' })
+        Add-PFAnchor -Path    $(if ($words.Count -ge 1) { $words[0] } else { '' }) `
+                     -Name    $(if ($words.Count -ge 2) { $words[1] } else { '' }) `
+                     -Aliases @(if ($words.Count -ge 3) { $words[2..($words.Count - 1)] } else { @() })
+        return
+    }
+
+    # ---- nav setup [path] [name] [more names] ---------------------------------
+    if ($words.Count -and $words[0] -eq 'setup') {
+        Invoke-PFDevRootSetup -Path    $(if ($words.Count -ge 2) { $words[1] } else { '' }) `
+                              -Name    $(if ($words.Count -ge 3) { $words[2] } else { '' }) `
+                              -Aliases @(if ($words.Count -ge 4) { $words[3..($words.Count - 1)] } else { @() })
         return
     }
 
@@ -90,6 +101,7 @@ function nav {
         Write-Host ''
         Write-Host '  nav roots               where a bare nav searches, and every starting point' -ForegroundColor White
         Write-Host '  nav roots add <path>    also search <path>' -ForegroundColor DarkGray
+        Write-Host '  nav setup               find your code drive, name it, and search it' -ForegroundColor White
         Write-Host ''
         return
     }
@@ -340,3 +352,4 @@ Register-PFCommand -Name 'nav' -Aliases @('z') -Section '🧭 SMART NAVIGATION &
 Register-PFCommand -Name 'nav b'       -Section '🧭 SMART NAVIGATION & BOOKMARKS' -Synopsis 'jump to a bookmark; nav b . bookmarks where you are' -Example 'nav b docs · nav b . · nav list'
 Register-PFCommand -Name 'nav roots'   -Section '🧭 SMART NAVIGATION & BOOKMARKS' -Synopsis 'where a bare nav searches, plus every named starting point' -Example 'nav roots add /srv'
 Register-PFCommand -Name 'nav anchors' -Section '🧭 SMART NAVIGATION & BOOKMARKS' -Synopsis 'starting points for nav -<name>; add your own, built-ins are protected' -Example 'nav --anchor . mon · nav anchors rm mon'
+Register-PFCommand -Name 'nav setup'   -Section '🧭 SMART NAVIGATION & BOOKMARKS' -Synopsis 'find the drive your code is on, name it, and make nav search it' -Example 'nav setup · nav setup D:\Projects pro'
