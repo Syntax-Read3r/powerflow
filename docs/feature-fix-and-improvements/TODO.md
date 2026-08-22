@@ -137,8 +137,8 @@ Arrived from real use, 2026-08-19: `nav zovoya` (a typo for `zavoya`) answered
       and it printed the message written for the other. Escape now gives the house
       `↩ Cancelled.`; a miss says what missed and names the nearest real directory.
       *Proof:* `tests/navigation/outcomes.ps1`
-- [ ] **Wire `outcomes.ps1` into `tests/navigation/run.ps1`.** One line. Deferred only
-      because that file has uncommitted changes from a concurrent session.
+- [x] ~~**Wire `outcomes.ps1` into `tests/navigation/run.ps1`**~~ — done once the concurrent
+      session's change to that file was committed.
 - [x] ~~**Audit the rest of the command surface**~~ — done, and it found far more than
       messaging: **107 findings confirmed, 2 refuted**, in
       [outcome-messaging-audit.md](outcome-messaging-audit.md).
@@ -165,7 +165,7 @@ asserting about them, so it reports honestly if a future PowerShell changes them
 
 ### The 103 still open, worst first
 
-- [ ] **Unconditional git success, seven sites** — `rollback.ps1:36/48`,
+- [x] ~~**Unconditional git success, seven sites**~~ — fixed — `rollback.ps1:36/48`,
       `interactive.ps1:195/199/267/48`, `branches.ps1:351-379`, `reset.ps1:37`. Capture and
       test `$LASTEXITCODE` between the command and the message; `interactive.ps1:56` already
       does exactly this and is the model.
@@ -178,7 +178,9 @@ asserting about them, so it reports honestly if a future PowerShell changes them
       `InstallLocation` re-check.
 - [ ] **`containers.ps1:624-627`** — a *failed* inspect emits `{}` to `jq` as a successful
       empty read, because the `Select-Object` drops the very fields that carry the failure.
-- [ ] **The `--print-query` pickers** (`commit.ps1:116`, `rollback.ps1:98`,
+- [x] ~~**Every fzf call now reads its exit code — 26 sites**~~ — and no-match requires a
+      positive exit-1 signal, because a stubbed fzf leaves `$LASTEXITCODE` unset. The
+      `--print-query` pickers (`commit.ps1:116`, `rollback.ps1:98`,
       `release.ps1:425`, `roots.ps1:880`) — must key on **`-eq 130`**, not on non-zero:
       measured, fzf 0.74.3 prints nothing on abort and exit 1 is the normal accept path here.
 - [ ] **`team-room.ps1:208-228`** — a failed disarm reports "could not remove the arm stamp"
@@ -186,9 +188,13 @@ asserting about them, so it reports honestly if a future PowerShell changes them
 - [ ] **`ssh-session.ps1:100-104`** — use SSH's reserved 255 to separate "never connected"
       from "remote command exited non-zero", so a completed session ending in exit 1 stops
       reporting "❌ Could not connect".
-- [ ] **~37 sites print `❌` on a non-Red line**, and `core/version.ps1:244` prints
+- [x] ~~**35 red crosses on user decisions became `↩ Cancelled.`**~~, and three refused
+      repository deletions printed in GREEN now say "NOTHING was deleted". Still open: sites
+      that print `❌` on a non-Red line in a status table, and `core/version.ps1:244` prints
       `✅ Profile Loaded: False` — a glyph contradicting the value beside it.
-- [ ] **Adopt the convention and enforce it**: a shared `components/shared/outcome.ps1`
+- [x] ~~**Convention adopted and enforced**~~ — `components/shared/outcome.ps1` plus a CI
+      gate that fails on a `❌` beside cancel language (Red exempts a genuine failure) and on
+      an fzf pipeline whose exit code is never read. Still open: a shared `components/shared/outcome.ps1`
       renderer (modelled on `Write-PmxResolveFailure`), plus `release-validate.yml` scans for
       `❌` on a non-Red line, `❌` beside cancel/kept/unchanged, an `| fzf` pipeline with no
       `$LASTEXITCODE` capture within two lines, and a `✅` after `git push`/`switch` with no
