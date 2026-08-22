@@ -18,6 +18,63 @@
 #
 # Hand-parsing $args is the only way a PowerShell function can accept user-invented flags.
 # ==============================================================================
+<#
+.SYNOPSIS
+    The closest real name to one the user typed, or '' when nothing is close enough.
+.DESCRIPTION
+    A miss that names the near-miss turns a dead end into a next step — the same job
+    Get-PFFlagSuggestion does for flags. It is deliberately NOT reused here: that one strips
+    dashes before comparing, which is right for `--dry-run` and wrong for a directory called
+    `Hutano-360`, where the dash is part of the name and removing it invents a different word.
+
+    Prefix first, because a half-typed name is the commonest miss. Then a bounded edit
+    distance, which catches the ordinary transposition or slip — `zovoya` for `zavoya`.
+
+    The distance ceiling scales with length but never exceeds 2. Suggesting a name three
+    edits away is not a suggestion, it is a guess, and a confident wrong guess costs more
+    than saying nothing: it sends someone to check a directory that was never the one.
+#>
+function Get-PFNearestName {
+    # [AllowEmptyString] because a MANDATORY string parameter REFUSES '' at the binder, before
+    # the body's own guard can return quietly. That is PF-BUG-005 in miniature: a dispatch
+    # boundary rejecting a deliberately-empty value while the function behind it handles the
+    # case correctly. A suggester that throws is worse than one that suggests nothing.
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Attempt, [string[]]$Known = @())
+
+    $needle = "$Attempt".ToLowerInvariant()
+    if (-not $needle -or -not $Known.Count) { return '' }
+
+    foreach ($k in $Known) {
+        $flat = "$k".ToLowerInvariant()
+        if ($flat -eq $needle) { return '' }   # an exact match cannot be a near miss
+        if ($flat.StartsWith($needle) -or $needle.StartsWith($flat)) { return $k }
+    }
+
+    $ceiling = [Math]::Min(2, [Math]::Max(1, [int][Math]::Floor($needle.Length / 4)))
+    $best = ''; $bestScore = [int]::MaxValue
+
+    foreach ($k in $Known) {
+        $flat = "$k".ToLowerInvariant()
+        # Lengths far apart cannot be within the ceiling, and skipping them early keeps this
+        # cheap on a tree with thousands of directories.
+        if ([Math]::Abs($flat.Length - $needle.Length) -gt $ceiling) { continue }
+
+        # Levenshtein, two rows rather than a full matrix.
+        $prev = 0..$flat.Length
+        for ($i = 1; $i -le $needle.Length; $i++) {
+            $curr = @($i) + (1..$flat.Length | ForEach-Object { 0 })
+            for ($j = 1; $j -le $flat.Length; $j++) {
+                $cost = if ($needle[$i - 1] -eq $flat[$j - 1]) { 0 } else { 1 }
+                $curr[$j] = [Math]::Min([Math]::Min($curr[$j - 1] + 1, $prev[$j] + 1), $prev[$j - 1] + $cost)
+            }
+            $prev = $curr
+        }
+        $score = $prev[$flat.Length]
+        if ($score -lt $bestScore -and $score -le $ceiling) { $bestScore = $score; $best = $k }
+    }
+    return $best
+}
+
 function nav {
     Initialize-DefaultBookmarks
 
@@ -313,16 +370,46 @@ function nav {
             --header-first `
             --color="header:bold:cyan,prompt:bold:green,border:cyan,spinner:yellow"
 
+        # THE EXIT CODE IS THE ONLY THING THAT SEPARATES TWO OPPOSITE OUTCOMES.
+        #
+        #   0    something was selected
+        #   1    NOTHING MATCHED — with --exit-0, fzf quits before drawing anything
+        #   130  the user pressed Escape or Ctrl-C
+        #
+        # This used to test `if ($selected)` alone and print "❌ Cancelled" for everything
+        # else, so a mistyped name — `nav zovoya` for zavoya — was reported as a cancellation
+        # the user never made. Two opposite outcomes, one message, and the wrong one: nothing
+        # tells you your directory is missing when the shell insists you changed your mind.
+        #
+        # Captured on the very next line: $LASTEXITCODE is clobbered by any later command,
+        # including the Write-Host calls below.
+        $fzfExit = $LASTEXITCODE
+
         if ($selected) {
             $fullPath = $map[$selected.Trim()]
             Set-Location $fullPath
             Write-Host "🎯 $([System.IO.Path]::GetFileName($fullPath))" -ForegroundColor Green
             Write-Host "📍 $(Format-NavPath $fullPath)" -ForegroundColor DarkGray
-        } else {
-            # User pressed Esc or no fuzzy match survived
-            Write-Host "❌ Cancelled" -ForegroundColor DarkGray
+            return
         }
 
+        # Escape is a DECISION, not a failure. Spending the red marker on someone who simply
+        # changed their mind teaches them to scan past it, and the next time it means
+        # something they will — the same reasoning that settled PF-UX-002 for the PMX pickers.
+        if ($fzfExit -eq 130) {
+            Write-Host '↩ Cancelled.' -ForegroundColor DarkGray
+            return
+        }
+
+        # Anything else is a genuine no-match, and it earns the red marker.
+        Write-Host "❌ Nothing matching '$query' in: $rootLabel" -ForegroundColor Red
+        $near = Get-PFNearestName -Attempt $query -Known @($map.Keys | ForEach-Object { Split-Path -Leaf $_ })
+        if ($near) {
+            Write-Host "💡 Did you mean:  nav $near" -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host "💡 See what is there:  nav -<start>      ·  nav roots" -ForegroundColor DarkGray
+        }
         return
     }
 

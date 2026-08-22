@@ -125,6 +125,25 @@ Design: [../file system upgrade/storage-allocation-design.md](<../file system up
 
 ---
 
+## 2b · Outcome messaging
+
+Arrived from real use, 2026-08-19: `nav zovoya` (a typo for `zavoya`) answered
+**`❌ Cancelled`** — a cancellation the user never made, in a marker reserved for errors.
+
+- [x] ~~**`nav` separates its three outcomes**~~
+      fzf exits 0 on selection, **1 when nothing matched**, **130 on Escape**. `nav` tested
+      only whether the result string was empty, so two opposite outcomes reached one branch
+      and it printed the message written for the other. Escape now gives the house
+      `↩ Cancelled.`; a miss says what missed and names the nearest real directory.
+      *Proof:* `tests/navigation/outcomes.ps1`
+- [ ] **Wire `outcomes.ps1` into `tests/navigation/run.ps1`.** One line. Deferred only
+      because that file has uncommitted changes from a concurrent session.
+- [ ] **Audit the rest of the command surface for the same defect class** — conflation
+      (distinct outcomes sharing a message), misleading text, wrong severity marker. Audit
+      running; findings to land in `outcome-messaging-audit.md`.
+
+---
+
 ## 3 · Repository hygiene
 
 - [ ] **Strip `Co-Authored-By: Claude` trailers from five commits on `storage-allocation`.**
