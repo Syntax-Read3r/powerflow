@@ -69,7 +69,15 @@ Shared domain logic, loaded in dependency order:
 
 1. **core** — `version`, `dependencies`, `recovery`. Loaded early because the startup
    checks at the bottom of the bootloader call them.
-2. **shared** — `strings.ps1`; `git/remote.ps1` calls its case converters.
+2. **shared** — `strings.ps1` (`git/remote.ps1` calls its case converters), then
+   `educate.ps1` before `flags.ps1`, then `volumes.ps1`.
+
+   `volumes.ps1` must precede **both** `navigation` and `system`: `nav setup` asks whether a
+   volume could hold a code root, and `storage root` asks the same of every volume, and each
+   had grown its own copy of the answer. `shared/` is the only place whose load order lets
+   both depend on it forwards — putting it beside `storage` would have worked at runtime,
+   because function bodies resolve at call time, while leaving a dependency running backwards
+   through this list for whoever next reorders it.
 3. **navigation** — `bookmarks` → `projects` → `nav` → `directory`. `nav` depends on the
    first two.
 4. **files** — `listing` first (it replaces `ls`, so later files may safely call `ls`),
@@ -95,19 +103,32 @@ explicitly asserts they are absent.
 
 ## Stage 6 — Platform bindings (`platform/<os>/bindings.ps1`)
 
-**Must load after `components/`,** because it rebinds names the components have just
-defined. This is the mirror image of Stage 2.
+**Optional, Windows only, and it may only ADD names.** It loads after `components/` because
+it binds names alongside the ones components have just defined.
 
-- **Windows** — adds `grep`, `less`, `pwd`, `which`, which Windows lacks. PowerFlow's
-  `rm`/`mv`/`ls` keep their natural names; there are no GNU tools to shadow.
-- **Linux** — **stops PowerFlow from shadowing the GNU coreutils.** PowerShell resolves
-  `Alias → Function → Cmdlet → native binary`, so PowerFlow's `rm` *function* would beat
-  `/usr/bin/rm`, and its `cat`/`cp` *aliases* would beat GNU `cat`/`cp`. The bindings file
-  clears both, preserving the features under new names: `rm` → **`del`**, `mv` → **`mvf`**.
+- **Windows** — adds `rm` → `del`, `mv` → `mvf`, plus `grep`, `less`, `pwd` and `which`,
+  which Windows lacks. Safe here because there is no GNU tool underneath to hide.
+- **Linux — there is no bindings file, deliberately.** `components/` claims no coreutil
+  name, so there is nothing to unbind. Two CI gates keep it that way, one of which fails
+  the release if `platform/linux/bindings.ps1` ever reappears.
 
-  This matters concretely: PowerFlow's `rm somedir` recursively deletes a tree after one
-  prompt, while GNU `rm somedir` *refuses* without `-r`. Shadowing it would silently
-  remove a seatbelt Linux users rely on.
+### This used to work the other way round, and that was the bug
+
+`components/` once claimed `rm`, `mv`, `cp`, `cat`, `mkdir`, `touch`, and
+`platform/linux/bindings.ps1` unpicked them all afterwards. PowerShell resolves
+`Alias → Function → Cmdlet → native binary`, so PowerFlow's `rm` *function* beat
+`/usr/bin/rm` from the moment components loaded, and only the later undo restored it.
+
+**The shadowing was unconditional and the undo was conditional** — fail-dangerous. Anything
+that stopped that file running left a Linux user with a silently substituted `rm`, and the
+difference is not cosmetic: PowerFlow's `rm somedir` recursively deletes a tree after one
+prompt, while GNU `rm somedir` *refuses* without `-r`. That file's own header recorded the
+bug having shipped once already.
+
+The rule is now structural rather than corrective: **never claim the name**. PowerFlow's own
+file commands are `del` and `mvf` on every platform, and the GNU clones Windows lacks live in
+`windows-only/coreutils.ps1`. Adding names is the only operation, and its worst failure is a
+missing convenience on Windows.
 
 ## Stage 7 — Help (`components/help/menu.ps1`)
 
@@ -135,8 +156,24 @@ Toggle these flags in `config/PowerFlow.settings.ps1` to speed up profile load.
 
 `release-validate.yml` greps for `Set-Clipboard`, `scoop`, `wt`, `WindowsPrincipal`,
 `shutdown.exe`, `$env:TEMP`, `winget`, … under `components/` and **fails the release** on
-any hit. It also verifies that every adapter function called by a component exists on
-**both** platforms.
+any hit.
+
+A second gate verifies that every adapter function a component calls exists on **both**
+platforms. It is **derived, not a hand-kept list**: it computes the contract as the set of
+adapter-defined functions that `components/` (and `config/`) actually call, and additionally
+fails on any Verb-Noun call that resolves nowhere.
+
+That distinction matters, and it was learned the expensive way. The gate used to match a
+hardcoded alternation of ~120 contract names, and it drifted — two container functions
+shipped uncovered because a human had to remember to extend it. The release checklist item
+guarding it *said in as many words* that the list was manual, and it was still missed.
+**A rule that depends on remembering is a rule that eventually fails**, which is why the gate
+now derives its own inputs.
+
+One consequence worth knowing before you add an adapter call: **`config/` is scanned exactly
+like `components/`**. Calling a Windows-only adapter function from `config/paths.windows.ps1`
+makes that name part of the cross-platform contract and fails the release for want of a Linux
+twin.
 
 That check is the machine-checkable definition of the architecture. Without it, Windows
 could keep working while Linux silently broke — which is exactly how the previous Ubuntu

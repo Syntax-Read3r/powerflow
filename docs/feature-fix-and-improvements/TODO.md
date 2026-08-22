@@ -118,10 +118,11 @@ Design: [../file system upgrade/storage-allocation-design.md](<../file system up
 - [ ] **Answer the design doc's seven open questions** (§10) before increment 5. The two that
       actually gate work: the command name (`storage root` vs `storage home`/`where`), and
       whether Linux should relocate by default or only detect-and-advise.
-- [ ] **Fix the live upgrade bug found on the way:** `install.ps1` clears `config/`
-      recursively before every copy, which is how `CHECK_PROFILE_UPDATES` and
-      `LINUX_LESSON_MODE` lose their values on every upgrade. Unrelated to this initiative
-      and worth fixing regardless.
+- [x] ~~**Live upgrade bug fixed:** an upgrade no longer undoes settings the user changed.~~
+      `install.ps1` replaces `config/` wholesale, and `pwsh-reminders` persists the user''s
+      answer *into that very file*. Changed values are now carried across, with the names
+      derived from both files rather than hand-listed, and `POWERFLOW_VERSION` explicitly
+      release-owned. *Proof:* `tests/windows/install-settings-preserved.ps1`
 
 ---
 
@@ -146,21 +147,25 @@ Arrived from real use, 2026-08-19: `nav zovoya` (a typo for `zavoya`) answered
 
 ## 3 · Repository hygiene
 
-- [ ] **Strip `Co-Authored-By: Claude` trailers from five commits on `storage-allocation`.**
-      A standing owner directive in the team-chat archive forbids them in this repo; it was
-      lost with the memory reset and five commits were made before it resurfaced. The branch
-      is unpushed, so this is a routine local rewrite. **Awaiting the owner's go-ahead.**
+- [x] ~~**Strip `Co-Authored-By: Claude` trailers**~~ — five commits, rewritten in a throwaway
+      clone (the working tree was dirty with a concurrent session's work, which `filter-branch`
+      refuses and which must not be stashed) then applied with `git reset --soft`, so the
+      branch pointer moved and nothing else did. Trees verified byte-identical before applying.
 - [ ] **Merge `storage-allocation` → `main`** (6 commits) once the above is settled.
-- [ ] **Resolve a documentation contradiction:** the archive records *"`git-rl` is NOT
-      installed — releases are cut manually by bumping `$script:POWERFLOW_VERSION`"*, while
-      `CLAUDE.md` says never to hand-edit that variable because `git-rl` owns it. One is
-      stale. Settle it **before** any release.
-- [ ] **Set a git identity** — `user.email` is unset, so every commit needs it passed by hand.
-- [ ] **Restore `docs/agent-memory/` into the live memory directory**, and add the rules this
-      session proved were missing from it (the trailer ban above, chief among them).
-- [ ] **Correct `IMPORT_ORDER.md`** — its Stage 6 still describes `platform/linux/bindings.ps1`
-      unbinding coreutils, an arrangement CLAUDE.md says was abandoned and CI now forbids.
-      Line 136 also still calls the adapter-parity gate a hardcoded grep list; it is derived.
+- [x] ~~**Documentation contradiction settled: `CLAUDE.md` is right, the archive note is stale.**~~
+      `components/git/release.ps1:446` emits `vr-commit ($newTag) - $description`, and **every
+      release commit in this repository''s history matches that format** (v4.0.0 through
+      v5.0.2). `git-rl` also owns the version write, via `version-files.ps1:38-40`. So it is
+      installed, it is used, and `$script:POWERFLOW_VERSION` must not be hand-edited.
+- [x] ~~**Set a git identity**~~ — set repo-locally to the authorship this repository has always used. Nothing global was touched.
+- [x] ~~**Restore `docs/agent-memory/` into the live memory directory**~~ — 12 notes restored,
+      two corrected where they had gone stale (the flag ethos is decided; the architecture
+      note''s file list is four months out of date), and two added: the trailer ban, and the
+      owner''s D: drive layout.
+- [x] ~~**Correct `IMPORT_ORDER.md`**~~ — Stage 6 rewritten (Linux has no bindings file, and
+      the old arrangement is recorded as the fail-dangerous bug it was), the parity gate
+      described as derived rather than hand-kept, and `shared/volumes.ps1` added to Stage 4
+      with why its position is load-bearing.
 
 ---
 
