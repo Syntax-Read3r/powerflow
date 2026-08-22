@@ -256,7 +256,7 @@ function rmdir {
             Write-Host "⚠️  '$p' is not empty — $($children.Count) item(s) inside." -ForegroundColor Yellow
             $confirm = Read-Host "   Delete it and everything in it? [y/N]"
             if ($confirm -notin @('y','Y')) {
-                Write-Host "❌ Cancelled." -ForegroundColor Yellow
+                Write-Host "↩ Cancelled." -ForegroundColor DarkGray
                 continue
             }
         }
