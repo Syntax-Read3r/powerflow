@@ -5,7 +5,8 @@
 # File     : platform/linux/adapters/locations.ps1
 # Purpose  : Well-known config/data paths, following the XDG base-directory spec
 # Contract : Get-StarshipConfigPath, Get-TerminalSettingsPath,
-#            Get-PowerFlowDataPath, Get-PowerFlowConfigPath
+#            Get-PowerFlowDataPath, Get-PowerFlowConfigPath,
+#            Get-PowerFlowNavigationDataPath
 # Depends  : none
 # ==============================================================================
 
@@ -30,6 +31,15 @@ function Get-TerminalSettingsPath {
 
 function Get-PowerFlowDataPath {
     return (Join-Path (Get-XdgDataHome) 'powerflow')
+}
+
+# Bookmarks and search roots historically lived directly beneath $HOME. Honour an
+# explicit data home without moving existing users who have not configured one.
+function Get-PowerFlowNavigationDataPath {
+    if (-not [string]::IsNullOrWhiteSpace($env:POWERFLOW_DATA_HOME)) {
+        return $env:POWERFLOW_DATA_HOME
+    }
+    return (Get-HomePath)
 }
 
 function Get-PowerFlowConfigPath {

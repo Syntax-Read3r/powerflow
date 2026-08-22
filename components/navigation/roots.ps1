@@ -404,7 +404,13 @@ function Resolve-PFRootedDirectory {
 # removable, and `nav anchors` marks which is which so that is never a surprise.
 # ==============================================================================
 
-$script:NavAnchorsFile = Join-Path (Get-HomePath) '.nav_anchors.json'
+# Get-PowerFlowNavigationDataPath, exactly as .nav_bookmarks.json and .nav_roots.json use.
+# Anchors were left behind when those two moved, which split ONE command's state across two
+# locations: roots under POWERFLOW_DATA_HOME and anchors still under $HOME. Observed on a
+# machine with the variable pointing at another drive — nav lost its roots on the way to the
+# new home while its anchors stayed put, which reads as "my configuration vanished" rather
+# than "it moved". Splitting a command's state is the sprawl this whole layout exists to end.
+$script:NavAnchorsFile = Join-Path (Get-PowerFlowNavigationDataPath) '.nav_anchors.json'
 
 # ── ONE ANCHOR, SEVERAL SPELLINGS ─────────────────────────────────────────────
 #

@@ -197,9 +197,14 @@ if ($manifest.backup -and (Test-Path $manifest.backup)) {
 # ── 4. Optional purge of user data ────────────────────────────────────────────
 # User data = things the USER built up (bookmarks, nav roots, saved SSH servers).
 # Kept by default: reinstalling should not cost anyone their server list.
+$navigationDataPath = if (-not [string]::IsNullOrWhiteSpace($env:POWERFLOW_DATA_HOME)) {
+    $env:POWERFLOW_DATA_HOME
+} else {
+    $HOME
+}
 $userData = @(
-    @{ Label = 'bookmarks';   Path = (Join-Path $HOME '.nav_bookmarks.json') }
-    @{ Label = 'nav roots';   Path = (Join-Path $HOME '.nav_roots.json') }
+    @{ Label = 'bookmarks';   Path = (Join-Path $navigationDataPath '.nav_bookmarks.json') }
+    @{ Label = 'nav roots';   Path = (Join-Path $navigationDataPath '.nav_roots.json') }
     @{ Label = 'SSH servers'; Path = (Join-Path $HOME '.powerflow-servers.json') }
 )
 if ($Purge) {

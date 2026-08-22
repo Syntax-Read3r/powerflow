@@ -331,7 +331,8 @@ pwsh -NoProfile -File "$HOME\Documents\PowerShell\uninstall.ps1"
 ```
 
 Add `-Yes` to skip the confirmation, `-Purge` to also delete your bookmarks
-(`~/.nav_bookmarks.json`), which are kept by default.
+(`$POWERFLOW_DATA_HOME/.nav_bookmarks.json` when configured, otherwise
+`~/.nav_bookmarks.json`), which are kept by default.
 
 On Windows, interactive uninstall asks separately whether Scoop should also be removed.
 PowerFlow keeps Scoop by default, and `-Yes` **always keeps it**. If you answer yes, PowerFlow

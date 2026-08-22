@@ -9,8 +9,8 @@ function Assert-True([bool]$Condition, [string]$Message) {
 #
 # roots.ps1 reaches the OS only through adapters, so the whole file runs anywhere once
 # that contract is defined as stubs -- the technique COMPONENTS.md records for the pmx
-# component. Get-HomePath is stubbed FIRST because $script:NavAnchorsFile is computed
-# from it at dot-source time, which is what keeps this test off the real ~/.nav_anchors.json.
+# component. Both location paths are stubbed FIRST because roots.ps1 computes its state
+# files at dot-source time, which is what keeps this test off the real user data.
 # ==============================================================================
 
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -19,6 +19,7 @@ New-Item -ItemType Directory -Path $sandbox -Force | Out-Null
 
 $script:PowerFlowOS = 'windows'
 function Get-HomePath           { return $sandbox }
+function Get-PowerFlowNavigationDataPath { return $sandbox }
 function Get-PowerFlowConfigPath { return (Join-Path $sandbox 'config') }
 function Get-TempPath           { return (Join-Path $sandbox 'tmp') }
 function Get-UserFolderPath     { param($Name, $Prefer) return '' }
