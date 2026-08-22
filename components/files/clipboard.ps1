@@ -158,10 +158,27 @@ function Invoke-PFPasteFile {
             }
         }
 
-        # Copy the file
-        Copy-Item -Path $sourceFile -Destination $destinationPath -Force
+        # ── Copy the file ─────────────────────────────────────────────────────
+        #
+        # -ErrorAction Stop, because Copy-Item fails NON-TERMINATINGLY: without it a failed
+        # copy walks straight past the catch into the "✅ Pasted" banner below.
+        #
+        # This one was worse than an ordinary false success, because the next two lines
+        # CORROBORATE it. When the destination already existed, `Get-Item $destinationPath`
+        # finds the OLD file and the "📊 Size" line prints its size — a plausible number
+        # beside a green tick, describing a file that was never written. A false success that
+        # shows evidence is far harder to disbelieve than a bare one.
+        #
+        # Verified by comparing length against the source afterwards, rather than trusting a
+        # silent return: this is a data operation, and the house rule is to read state back.
+        Copy-Item -Path $sourceFile -Destination $destinationPath -Force -ErrorAction Stop
 
-        $copiedFile = Get-Item $destinationPath
+        $copiedFile = Get-Item -LiteralPath $destinationPath -ErrorAction Stop
+        $sourceItem = Get-Item -LiteralPath $sourceFile -ErrorAction SilentlyContinue
+        if ($sourceItem -and -not $sourceItem.PSIsContainer -and $copiedFile.Length -ne $sourceItem.Length) {
+            throw "Copy reported no error, but $destinationPath is $($copiedFile.Length) bytes and the source is $($sourceItem.Length)"
+        }
+
         Write-Host "✅ Pasted: $fileName" -ForegroundColor Green
         Write-Host "   📍 Location: $destinationPath" -ForegroundColor Cyan
         Write-Host "   📊 Size: $([math]::Round($copiedFile.Length / 1KB, 2)) KB" -ForegroundColor Cyan

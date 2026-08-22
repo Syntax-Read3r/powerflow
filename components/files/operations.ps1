@@ -708,9 +708,27 @@ function mv-t {
         }
     }
 
-    # Perform the move
+    # ── Perform the move ──────────────────────────────────────────────────────
+    #
+    # -ErrorAction Stop IS THE WHOLE FIX. Move-Item's failures are NON-TERMINATING by
+    # default, so without it a failed move never reaches the catch below — execution walks
+    # straight into the green "MOVE COMPLETED" banner and then clears $script:MoveInHand.
+    # The user is told the file moved, the file has not moved, and the cut they were holding
+    # is gone. Measured: a Move-Item onto an existing path writes an error to the stream and
+    # returns; `try/catch` around it never fires.
+    #
+    # The catch's own advice — "The file is still held" — was therefore true only in the one
+    # case where it could not print.
+    #
+    # The move is then VERIFIED by reading the filesystem back rather than trusting a silent
+    # return, which is the house rule for anything that changes state.
     try {
-        Move-Item -Path $sourceFile -Destination $currentDir -Force
+        Move-Item -Path $sourceFile -Destination $currentDir -Force -ErrorAction Stop
+
+        $landed = Join-Path $currentDir $fileName
+        if (-not (Test-Path -LiteralPath $landed)) {
+            throw "Move reported no error, but nothing arrived at $landed"
+        }
 
         # Success message
         Write-Host ""

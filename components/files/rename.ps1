@@ -174,18 +174,43 @@ function Invoke-PFRenameFile {
 
     # Check if new filename already exists
     $newPath = Join-Path $currentPath $newFileName
+    $overwriting = $false
     if (Test-Path $newPath) {
         Write-Host "⚠️ File already exists: $newFileName" -ForegroundColor Yellow
         $confirm = Read-Host "Overwrite existing file? (y/n)"
         if ($confirm -ne 'y' -and $confirm -ne 'Y') {
-            Write-Host "❌ Rename cancelled" -ForegroundColor Yellow
+            Write-Host "↩ Cancelled." -ForegroundColor DarkGray
             return
         }
+        $overwriting = $true
     }
 
-    # Perform the rename
+    # ── Perform the rename ────────────────────────────────────────────────────
+    #
+    # TWO BUGS LIVED IN THE NEXT LINE, and together they made the approved-overwrite path
+    # fail every single time while reporting success.
+    #
+    # 1. RENAME-ITEM CANNOT OVERWRITE, even with -Force. Measured: it throws an IOException
+    #    ("Cannot create a file when that file already exists"). So the block above asked the
+    #    user to approve an overwrite that the very next line was incapable of performing.
+    #    Move-Item -Force can, and is the primitive this always needed.
+    #
+    # 2. WITHOUT -ErrorAction Stop, THAT FAILURE NEVER REACHED THE CATCH. Also measured: the
+    #    error is non-terminating, so execution simply carried on into the green
+    #    "RENAME COMPLETED" banner below. The user was told the rename worked, the original
+    #    was still there under its old name, and the file they agreed to overwrite was
+    #    untouched — and then, with -Chmod, the permission half applied itself to $newPath,
+    #    which in that state is the VICTIM file rather than the renamed one.
+    #
+    # -ErrorAction Stop is the load-bearing half. Swapping the cmdlet without it would simply
+    # move the silent failure to a different message.
     try {
-        Rename-Item -Path $fileInfo.FullName -NewName $newFileName
+        if ($overwriting) {
+            Move-Item -LiteralPath $fileInfo.FullName -Destination $newPath -Force -ErrorAction Stop
+        }
+        else {
+            Rename-Item -LiteralPath $fileInfo.FullName -NewName $newFileName -ErrorAction Stop
+        }
 
         # Success message
         Write-Host ""
