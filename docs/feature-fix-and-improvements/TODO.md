@@ -139,9 +139,64 @@ Arrived from real use, 2026-08-19: `nav zovoya` (a typo for `zavoya`) answered
       *Proof:* `tests/navigation/outcomes.ps1`
 - [ ] **Wire `outcomes.ps1` into `tests/navigation/run.ps1`.** One line. Deferred only
       because that file has uncommitted changes from a concurrent session.
-- [ ] **Audit the rest of the command surface for the same defect class** — conflation
-      (distinct outcomes sharing a message), misleading text, wrong severity marker. Audit
-      running; findings to land in `outcome-messaging-audit.md`.
+- [x] ~~**Audit the rest of the command surface**~~ — done, and it found far more than
+      messaging: **107 findings confirmed, 2 refuted**, in
+      [outcome-messaging-audit.md](outcome-messaging-audit.md).
+
+### The three that lose data — fixed
+
+All three shared one cause: `Move-Item`, `Copy-Item` and `Rename-Item` fail
+**non-terminatingly**, so without `-ErrorAction Stop` the failure never reaches the
+surrounding catch and execution walks into the green banner beneath it.
+
+- [x] ~~`rename.ps1` — the approved-overwrite path failed **100% of the time**~~
+      It asked "Overwrite existing file?", then called a cmdlet that cannot overwrite even
+      with `-Force` (measured: `IOException`). With `--chmod` it then applied permissions to
+      the file it had failed to replace. Now `Move-Item -Force`, which can.
+- [x] ~~`operations.ps1` — `mv-t` lost the cut as well as the move~~
+      A failed move printed success *and* cleared `$script:MoveInHand`. The catch's own
+      advice — "The file is still held" — was true only when it could not print.
+- [x] ~~`clipboard.ps1` — a false success that corroborated itself~~
+      Printed "Pasted", then stat'd the **pre-existing** destination and printed its size:
+      a plausible number beside a green tick, describing a file never written.
+
+*Proof:* `tests/files/silent-failure.ps1`, which **executes** the platform facts rather than
+asserting about them, so it reports honestly if a future PowerShell changes them.
+
+### The 103 still open, worst first
+
+- [ ] **Unconditional git success, seven sites** — `rollback.ps1:36/48`,
+      `interactive.ps1:195/199/267/48`, `branches.ps1:351-379`, `reset.ps1:37`. Capture and
+      test `$LASTEXITCODE` between the command and the message; `interactive.ps1:56` already
+      does exactly this and is the model.
+- [ ] **Windows `Uninstall-Dependency` returns `$true` unconditionally**
+      (`adapters/packages.ps1:157-164`), so `recovery.ps1:164` claims "✅ Dependencies
+      removed" regardless and its honest branch is unreachable. The Linux adapter already
+      verifies per tool.
+- [ ] **`apps.ps1:236-239`** claims "✅ Uninstalled X — reclaimed ~N GB" for an uninstaller
+      wizard the user cancelled. Needs `-PassThru`, an exit-code test, and an
+      `InstallLocation` re-check.
+- [ ] **`containers.ps1:624-627`** — a *failed* inspect emits `{}` to `jq` as a successful
+      empty read, because the `Select-Object` drops the very fields that carry the failure.
+- [ ] **The `--print-query` pickers** (`commit.ps1:116`, `rollback.ps1:98`,
+      `release.ps1:425`, `roots.ps1:880`) — must key on **`-eq 130`**, not on non-zero:
+      measured, fzf 0.74.3 prints nothing on abort and exit 1 is the normal accept path here.
+- [ ] **`team-room.ps1:208-228`** — a failed disarm reports "could not remove the arm stamp"
+      and then "Nothing to stop — it was already inert" over a room that is still armed.
+- [ ] **`ssh-session.ps1:100-104`** — use SSH's reserved 255 to separate "never connected"
+      from "remote command exited non-zero", so a completed session ending in exit 1 stops
+      reporting "❌ Could not connect".
+- [ ] **~37 sites print `❌` on a non-Red line**, and `core/version.ps1:244` prints
+      `✅ Profile Loaded: False` — a glyph contradicting the value beside it.
+- [ ] **Adopt the convention and enforce it**: a shared `components/shared/outcome.ps1`
+      renderer (modelled on `Write-PmxResolveFailure`), plus `release-validate.yml` scans for
+      `❌` on a non-Red line, `❌` beside cancel/kept/unchanged, an `| fzf` pipeline with no
+      `$LASTEXITCODE` capture within two lines, and a `✅` after `git push`/`switch` with no
+      exit-code test between. The audit's §2 has the marker table.
+
+**Coverage is stated honestly in the doc**: `github/browser.ps1`, most of `proxmox/`, all of
+`shell/`, and much of `system/` were carried from the candidate list rather than re-read, so
+those findings are leads rather than confirmations.
 
 ---
 
