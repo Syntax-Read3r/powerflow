@@ -198,6 +198,33 @@ $installedFiles = New-Object System.Collections.Generic.List[string]
 Copy-Item (Join-Path $source 'Microsoft.PowerShell_profile.ps1') $profilePath -Force
 $installedFiles.Add($profilePath)
 
+# ------------------------------------------------------------------------------
+# Capture the user's settings BEFORE the copy wipes config/
+# ------------------------------------------------------------------------------
+# config/ is deleted and replaced wholesale below, which is right for code — a stale
+# component left behind is worse than a missing one. But config/PowerFlow.settings.ps1 is
+# not code: `pwsh-reminders` and the update prompt REWRITE IT IN PLACE to persist what the
+# user chose (components/core/version.ps1). So turning update reminders off, then
+# upgrading, silently turned them back on, with nothing on screen to say why.
+#
+# The names are DERIVED from the two files rather than kept in a list here. A hand-kept
+# list is a rule that depends on remembering, and this repository has already had one drift
+# five names behind reality; a setting added later would simply not be preserved, and
+# nobody would find out until they had lost it.
+#
+# Only values the user actually CHANGED are carried over: if the old file matches the new
+# default, there is nothing to preserve, and a new release is free to change that default.
+$preserved = @{}
+$settingsRelative = Join-Path 'config' 'PowerFlow.settings.ps1'
+$existingSettings = Join-Path $profileDir $settingsRelative
+if (Test-Path $existingSettings) {
+    foreach ($line in (Get-Content $existingSettings)) {
+        if ($line -match '^\s*\$script:([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*$') {
+            $preserved[$Matches[1]] = $Matches[2]
+        }
+    }
+}
+
 foreach ($dir in @('config', 'components', 'platform', 'windows-only')) {
     $src = Join-Path $source $dir
     if (-not (Test-Path $src)) { continue }
@@ -208,6 +235,36 @@ foreach ($dir in @('config', 'components', 'platform', 'windows-only')) {
 
     Get-ChildItem $dst -Recurse -File | ForEach-Object { $installedFiles.Add($_.FullName) }
     Write-Host "   ✅ $dir/" -ForegroundColor Green
+}
+
+# ------------------------------------------------------------------------------
+# Put the user's settings back
+# ------------------------------------------------------------------------------
+# POWERFLOW_VERSION and POWERFLOW_REPO belong to the RELEASE, not the user. Carrying an old
+# version number forward would make the profile announce a version it is not, and would
+# defeat the update check that reads it.
+$releaseOwned = @('POWERFLOW_VERSION', 'POWERFLOW_REPO')
+$newSettings  = Join-Path $profileDir $settingsRelative
+if ($preserved.Count -gt 0 -and (Test-Path $newSettings)) {
+    $lines   = @(Get-Content $newSettings)
+    $carried = @()
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -notmatch '^(\s*\$script:([A-Za-z_][A-Za-z0-9_]*)\s*=\s*)(.+?)\s*$') { continue }
+        $prefix = $Matches[1]
+        $name   = $Matches[2]
+        $shipped = $Matches[3]
+
+        if ($name -in $releaseOwned) { continue }
+        if (-not $preserved.ContainsKey($name)) { continue }   # new setting: keep its default
+        if ($preserved[$name] -eq $shipped)     { continue }   # unchanged: nothing to carry
+
+        $lines[$i] = $prefix + $preserved[$name]
+        $carried += $name
+    }
+    if ($carried.Count -gt 0) {
+        Set-Content -LiteralPath $newSettings -Value $lines -Encoding UTF8
+        Write-Host "   ✅ kept your settings: $($carried -join ', ')" -ForegroundColor Green
+    }
 }
 
 # Runtime docs. `git-rl -h` READS docs/git-rl/ at runtime to print the setup prompt and
