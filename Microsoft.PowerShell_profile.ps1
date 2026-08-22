@@ -110,6 +110,9 @@ $_pf_components = @(
     # ask the same "could this volume hold what grows" question, and shared/ is the only
     # place whose load order makes that dependency run forwards for both.
     "components\shared\volumes.ps1"
+    # timerange.ps1 is the shared human time-range grammar: PF-FEAT-004 wants it on
+    # pman events and PF-FEAT-005 on pman logs, and the backlog asks for one parser.
+    "components\shared\timerange.ps1"
 
     # Shell: bash builtins PowerShell lacks, plus the Linux teaching layer.
     # lessons.ps1 MUST precede teach.ps1 and brothers.ps1 — both read its data.
