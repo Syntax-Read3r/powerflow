@@ -98,12 +98,16 @@ function start-folder {
         --header-first `
         --color="header:bold:cyan,prompt:bold:green,border:cyan"
 
-    if (-not $sel) { Write-Host "❌ Cancelled" -ForegroundColor DarkGray; return }
+    $fzfExit = $LASTEXITCODE
+    if (-not $sel) {
+        if ($fzfExit -eq 1) { Write-PFNothingFound 'No startup entry matched what you typed.' }
+        return
+    }
 
     # fzf's FIRST output line is the pressed key ('' for Enter), the second is the row.
     $keyPressed = @($sel)[0]
     $row        = @($sel)[1]
-    if (-not $row) { Write-Host "❌ Cancelled" -ForegroundColor DarkGray; return }
+    if (-not $row) { Write-Host "↩ Cancelled" -ForegroundColor DarkGray; return }
 
     $entry = $entries[[int](($row -split "`t")[0])]
     Invoke-StartupAction -Entry $entry -Key $keyPressed

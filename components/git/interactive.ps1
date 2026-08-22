@@ -192,12 +192,29 @@ function git-stash {
                 $action = Read-Host "Choose action (1-4)"
                 switch ($action) {
                     "1" {
+                        # Exit code captured immediately, as the cherry-pick branch above
+                        # already does. A stash apply that conflicts leaves the working tree
+                        # mid-merge, which is the moment a green tick is most misleading.
                         git stash apply $stashRef
-                        Write-Host "✅ Applied stash: $stashRef" -ForegroundColor Green
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Host "✅ Applied stash: $stashRef" -ForegroundColor Green
+                        } else {
+                            Write-PFFailure -Message "Could not apply stash $stashRef." `
+                                            -Hint 'Usually a conflict — resolve it, or `git checkout .` to abandon.'
+                        }
                     }
                     "2" {
+                        # `pop` DROPS the stash on success and keeps it on failure. Saying
+                        # "popped" after a failed pop tells the user their work is gone from
+                        # the stash list when it is still there — or the reverse.
                         git stash pop $stashRef
-                        Write-Host "📤 Popped stash: $stashRef" -ForegroundColor Green
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Host "📤 Popped stash: $stashRef" -ForegroundColor Green
+                        } else {
+                            Write-PFFailure -Message "Could not pop stash $stashRef." `
+                                            -Detail 'The stash was NOT dropped — it is still in `git stash list`.' `
+                                            -Hint 'Resolve the conflict, then drop it yourself.'
+                        }
                     }
                     "3" {
                         git stash show -p $stashRef --color=always
@@ -260,12 +277,22 @@ function git-remote {
                 switch ($action) {
                     "1" {
                         git fetch $remoteName
-                        Write-Host "📥 Fetched from: $remoteName" -ForegroundColor Green
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Host "📥 Fetched from: $remoteName" -ForegroundColor Green
+                        } else {
+                            Write-PFFailure -Message "Fetch from $remoteName failed." `
+                                            -Hint 'Your local refs are unchanged.'
+                        }
                     }
                     "2" {
                         $branch = git rev-parse --abbrev-ref HEAD
                         git push $remoteName $branch
-                        Write-Host "📤 Pushed to: $remoteName" -ForegroundColor Green
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Host "📤 Pushed to: $remoteName" -ForegroundColor Green
+                        } else {
+                            Write-PFFailure -Message "Push to $remoteName failed." `
+                                            -Hint 'Nothing was sent. The git output above says why.'
+                        }
                     }
                     "3" {
                         git remote show $remoteName

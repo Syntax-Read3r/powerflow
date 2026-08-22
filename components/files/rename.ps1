@@ -58,6 +58,9 @@ function Invoke-PFRenameFile {
 
         $selected = $fileList | fzf --ansi --reverse --height=60% --border --prompt="🔄 Select file to rename: " `
             --header="📄 File | 📊 Size | 📅 Modified | Enter: Select | Esc: Cancel"
+        # fzf: 0 selected, 1 nothing matched, 130 Escape. Captured immediately, because
+        # anything that runs next replaces it.
+        $fzfExit = $LASTEXITCODE
 
         if (-not $selected) {
             Write-Host "❌ No file selected" -ForegroundColor Yellow
@@ -151,6 +154,9 @@ function Invoke-PFRenameFile {
         --padding=1 `
         --print-query `
         --expect=enter
+    # fzf: 0 selected, 1 nothing matched, 130 Escape. Captured on the next line because
+    # anything else that runs replaces it.
+    $fzfExit = $LASTEXITCODE
 
     # Extract the new filename from fzf output
     $newFileName = ""
@@ -163,7 +169,7 @@ function Invoke-PFRenameFile {
 
     # Validate new filename
     if ([string]::IsNullOrWhiteSpace($newFileName)) {
-        Write-Host "❌ Rename cancelled - no filename provided" -ForegroundColor Yellow
+        Write-Host "↩ Rename cancelled - no filename provided" -ForegroundColor DarkGray
         return
     }
 

@@ -103,6 +103,9 @@ $_pf_components = @(
     # strips --educate via Split-PFEducateFlag, so the definitions must already exist when
     # flags.ps1 is dot-sourced. (Function bodies resolve at CALL time, so this would also
     # work reversed — but the dependency is real and the order should show it.)
+    # outcome.ps1 FIRST among the shared helpers: it decides what a marker means, and
+    # commands across every domain report through it.
+    "components\shared\outcome.ps1"
     "components\shared\educate.ps1"
     # flags.ps1 early — every command may route its flags through it.
     "components\shared\flags.ps1"

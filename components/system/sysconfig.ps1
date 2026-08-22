@@ -115,7 +115,12 @@ function pwsh-config {
             --prompt="⚙️  Configure: " `
             --header="Pick a setting to change · Esc cancels" --header-first `
             --color="header:bold:cyan,prompt:bold:green,border:cyan"
-        if (-not $sel) { Write-Host "❌ Cancelled" -ForegroundColor DarkGray; return }
+        $fzfExit = $LASTEXITCODE
+        if (-not $sel) {
+            # 130 = Escape, a decision. 1 = the query matched no setting, which is a result.
+            if ($fzfExit -eq 1) { Write-PFNothingFound 'No setting matched what you typed.' }
+            return
+        }
         $entry = $opts | Where-Object Key -eq (($sel -split "`t")[0]) | Select-Object -First 1
     }
 
@@ -164,7 +169,11 @@ function pwsh-config {
                     --prompt='User folders: ' `
                     --header='Which location should nav -docs / -pics use? · Esc cancels' --header-first `
                     --color="header:bold:cyan,prompt:bold:green,border:cyan"
-                if (-not $picked) { Write-Host '❌ Cancelled' -ForegroundColor DarkGray; return }
+                $fzfExit = $LASTEXITCODE
+                if (-not $picked) {
+                    if ($fzfExit -eq 1) { Write-PFNothingFound 'No option matched what you typed.' }
+                    return
+                }
                 $val = ("$picked" -split "`t", 2)[0].Trim()
                 if (Set-PFFolderPreference -Preference $val) {
                     Write-Host "✅ User folders: $val" -ForegroundColor Green
@@ -195,7 +204,11 @@ function pwsh-config {
                 --prompt="$($entry.Label): " `
                 --header="$($choices.Count) options · type to filter · Enter to apply · Esc cancels" --header-first `
                 --color="header:bold:cyan,prompt:bold:green,border:cyan"
-            if (-not $val) { Write-Host "❌ Cancelled" -ForegroundColor DarkGray; return }
+            $fzfExit = $LASTEXITCODE
+            if (-not $val) {
+                if ($fzfExit -eq 1) { Write-PFNothingFound 'No option matched what you typed.' }
+                return
+            }
             Complete-SysConfigChange $entry $val.Trim()
         }
     }

@@ -58,6 +58,9 @@ function git-branch {
 
     # Use fzf to select branch
     $selected = $branches.DisplayName | fzf --reverse --height=40% --border --prompt="Select branch: " --header="↑↓ navigate, Enter to select, Esc to cancel"
+    # fzf: 0 selected, 1 nothing matched, 130 Escape. Captured on the next line because
+    # anything else that runs replaces it.
+    $fzfExit = $LASTEXITCODE
 
     if (-not $selected) {
         Write-Host "No branch selected" -ForegroundColor DarkGray
@@ -348,10 +351,20 @@ function git-c.sb {
                 $selected = $selected -replace '^origin/', ''
 
                 if ($selected -and $selected -ne $currentBranch) {
+                    # A FAILED SWITCH IS THE DANGEROUS ONE. git switch refuses on a dirty
+                    # tree, and announcing the new branch anyway leaves the user believing
+                    # they are somewhere they are not — so the next commit lands on the old
+                    # branch, which is exactly the mistake this command exists to avoid.
                     git switch $selected
-                    Write-Host "🔄 Switched to branch: $selected" -ForegroundColor Cyan
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "🔄 Switched to branch: $selected" -ForegroundColor Cyan
+                    } else {
+                        Write-PFFailure -Message "Could not switch to $selected — you are still on $currentBranch." `
+                                        -Hint 'Commit or stash your changes first.'
+                    }
                 } else {
-                    Write-Host "❌ No branch change needed" -ForegroundColor DarkGray
+                    # Choosing the branch you are already on is a decision, not a fault.
+                    Write-Host "↩ Already on $currentBranch." -ForegroundColor DarkGray
                 }
             }
         return
@@ -363,20 +376,41 @@ function git-c.sb {
     # Check if branch already exists
     $exists = git branch --list $branchName
 
+    # Every branch here is VERIFIED by asking git where HEAD actually is, not by assuming the
+    # command worked. `git switch` refuses on a dirty tree and `checkout -b` refuses on a name
+    # that already exists or an unknown commit; in both cases the old code announced the new
+    # branch regardless, and the next commit went somewhere the user did not expect.
+    $wasOn = git rev-parse --abbrev-ref HEAD 2>$null
+
     if ($exists) {
         # Switch to existing branch
         git switch $branchName
-        Write-Host "🔄 Switched to existing branch: $branchName" -ForegroundColor Cyan
+        $ok = ($LASTEXITCODE -eq 0)
+        if ($ok) { Write-Host "🔄 Switched to existing branch: $branchName" -ForegroundColor Cyan }
+        else {
+            Write-PFFailure -Message "Could not switch to $branchName — still on $wasOn." `
+                            -Hint 'Commit or stash your changes first.'
+        }
     } else {
         # Create new branch
         if ($suffixOrCommit -match '^[a-f0-9]{6,40}$') {
             # Create from specific commit
             git checkout -b $branchName $suffixOrCommit
-            Write-Host "🌿 Created from $suffixOrCommit and switched to: $branchName" -ForegroundColor Green
+            $ok = ($LASTEXITCODE -eq 0)
+            if ($ok) { Write-Host "🌿 Created from $suffixOrCommit and switched to: $branchName" -ForegroundColor Green }
+            else {
+                Write-PFFailure -Message "Could not create $branchName from $suffixOrCommit — still on $wasOn." `
+                                -Hint 'Check the commit exists, and that the branch name is free.'
+            }
         } else {
             # Create from current HEAD
             git checkout -b $branchName
-            Write-Host "🌿 Created and switched to new branch: $branchName" -ForegroundColor Green
+            $ok = ($LASTEXITCODE -eq 0)
+            if ($ok) { Write-Host "🌿 Created and switched to new branch: $branchName" -ForegroundColor Green }
+            else {
+                Write-PFFailure -Message "Could not create $branchName — still on $wasOn." `
+                                -Hint 'Commit or stash your changes, or pick a name that is free.'
+            }
         }
     }
 }

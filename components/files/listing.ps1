@@ -237,6 +237,9 @@ function ls {
                     return
                 }
                 $picked = $paths | fzf --height=40% --layout=reverse --border --header="ls -$pfRoot $needle — $($paths.Count) matches"
+                # fzf: 0 selected, 1 nothing matched, 130 Escape. Captured immediately, because
+                # anything that runs next replaces it.
+                $fzfExit = $LASTEXITCODE
                 if (-not $picked) { return }
                 $paths = @("$picked")
             }

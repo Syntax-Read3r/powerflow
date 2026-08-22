@@ -167,6 +167,9 @@ function Select-ContainerTargets {
         --multi --query $Query --exit-0 --reverse --border=rounded --height=60% `
         --prompt=$Prompt `
         --header="PowerFlow  $($map.Count) containers - Tab to mark several, Enter to confirm, Esc to cancel"
+    # fzf: 0 selected, 1 nothing matched, 130 Escape. Captured immediately, because
+    # anything that runs next replaces it.
+    $fzfExit = $LASTEXITCODE
 
     if (-not $picked) { return @() }
     return @($picked | ForEach-Object { $map[$_] })
@@ -179,6 +182,9 @@ function Select-ContainerAction {
     $choice = $script:ContainerActions | fzf `
         --reverse --border=rounded --height=40% --prompt='Action: ' `
         --header="Apply to $noun - Enter to run, Esc to cancel"
+    # fzf: 0 selected, 1 nothing matched, 130 Escape. Captured immediately, because
+    # anything that runs next replaces it.
+    $fzfExit = $LASTEXITCODE
     return "$choice".Trim()
 }
 

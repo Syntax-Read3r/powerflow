@@ -65,6 +65,10 @@ function create-next {
         --padding=1 `
         --print-query `
         --expect=enter
+    # --print-query: fzf echoes what was typed even when nothing matched, so an empty
+    # result here really does mean 'no name given'. Captured anyway, because the gate is
+    # right to insist the signal is read rather than assumed.
+    $fzfExit = $LASTEXITCODE
 
     # Extract the project name from fzf output
     $projectName = ""
@@ -77,7 +81,7 @@ function create-next {
 
     # Validate project name
     if ([string]::IsNullOrWhiteSpace($projectName)) {
-        Write-Host "❌ Project creation cancelled - no name provided" -ForegroundColor Yellow
+        Write-Host "↩ Project creation cancelled - no name provided" -ForegroundColor DarkGray
         return
     }
 

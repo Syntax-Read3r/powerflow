@@ -34,6 +34,17 @@ function git-rba {
         Write-Host "ℹ️  No changes to commit, working tree clean" -ForegroundColor Yellow
         Write-Host "🚀 Pushing existing commits to origin..." -ForegroundColor Blue
         git push origin $currentBranch
+        # Captured on the NEXT line: `git config` below would replace it, and the success
+        # banner at the end of this block used to print regardless — over a rejected
+        # non-fast-forward, a missing upstream or an auth failure, complete with a pull-request
+        # link for commits that never left the machine.
+        $pushed = ($LASTEXITCODE -eq 0)
+
+        if (-not $pushed) {
+            Write-PFFailure -Message 'Push failed — nothing was sent to origin.' `
+                            -Hint 'The git output above says why. Nothing local has changed.'
+            return
+        }
 
         # Show the GitHub PR creation link
         $repoUrl = git config --get remote.origin.url
@@ -109,6 +120,9 @@ function git-rba {
         --print-query `
         --expect=enter
 
+    # --print-query echoes what was typed even with no match, so an empty result here is
+    # genuinely 'nothing entered'. Captured because the signal should be read, not assumed.
+    $fzfExit = $LASTEXITCODE
     # Extract the commit message from fzf output
     $commitMessage = ""
     if ($fzfOutput) {
@@ -120,7 +134,7 @@ function git-rba {
 
     # Validate commit message
     if ([string]::IsNullOrWhiteSpace($commitMessage) -or $commitMessage.Length -lt 3) {
-        Write-Host "❌ Commit message too short or cancelled" -ForegroundColor Yellow
+        Write-Host "↩ Commit message too short or cancelled" -ForegroundColor DarkGray
         return
     }
 
@@ -219,7 +233,7 @@ function Invoke-GitRollbackTo {
 
         $confirm = Read-Host "Continue with rollback? (y/n)"
         if ($confirm -ne 'y' -and $confirm -ne 'Y') {
-            Write-Host "❌ Rollback cancelled" -ForegroundColor Yellow
+            Write-Host "↩ Rollback cancelled" -ForegroundColor DarkGray
             return
         }
     }
@@ -231,7 +245,7 @@ function Invoke-GitRollbackTo {
             Write-Host "⚠️  Branch '$branchName' already exists!" -ForegroundColor Yellow
             $overwrite = Read-Host "Delete existing branch and recreate? (y/n)"
             if ($overwrite -ne 'y' -and $overwrite -ne 'Y') {
-                Write-Host "❌ Rollback cancelled" -ForegroundColor Yellow
+                Write-Host "↩ Rollback cancelled" -ForegroundColor DarkGray
                 return
             }
         }

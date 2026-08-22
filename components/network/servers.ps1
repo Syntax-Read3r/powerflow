@@ -291,7 +291,7 @@ function srv {
                     return
                 }
                 if ((Read-Host "Forget '$name'? [y/N]") -notin @('y', 'Y')) {
-                    Write-Host "❌ Kept." -ForegroundColor Yellow
+                    Write-Host "↩ Kept." -ForegroundColor DarkGray
                     return
                 }
             }
@@ -452,7 +452,12 @@ function Show-PFServerPicker {
             --header-first `
             --color="header:bold:cyan,prompt:bold:green,border:cyan")
 
-        if ($out.Count -lt 2) { return }   # Esc / nothing picked
+        $fzfExit = $LASTEXITCODE
+        if ($out.Count -lt 2) {
+            # The COUNT cannot tell Escape from a query that matched no server; the exit code can.
+            if ($fzfExit -eq 1) { Write-PFNothingFound 'No saved server matched what you typed.' }
+            return
+        }
         $key  = $out[0]
         $name = ($out[1] -split "`t")[0]
 

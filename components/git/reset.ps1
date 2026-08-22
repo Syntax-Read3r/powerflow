@@ -17,7 +17,7 @@ function git-f {
         git fetch --all --prune     # Fetch latest and prune deleted branches
         Write-Host "✅ Repository cleaned and updated" -ForegroundColor Green
     } else {
-        Write-Host "❌ Cancelled." -ForegroundColor DarkGray
+        Write-Host "↩ Cancelled." -ForegroundColor DarkGray
     }
 }
 
@@ -35,9 +35,18 @@ function git-next {
 
         Write-Host "`n📦 Reinstalling dependencies..." -ForegroundColor Cyan
         npm install
-        Write-Host "✅ Reinstall complete." -ForegroundColor Green
+        # This one follows a DELETION. node_modules has already gone by the time npm runs, so
+        # "Reinstall complete" over a failed install leaves the user believing they have a
+        # working tree when they have an empty one — the worst moment to be wrong.
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ Reinstall complete." -ForegroundColor Green
+        } else {
+            Write-PFFailure -Message "npm install failed (exit $LASTEXITCODE)." `
+                            -Detail 'node_modules was already removed, so dependencies are now MISSING.' `
+                            -Hint 'Fix the error above and run  npm install  again before building.'
+        }
     } else {
-        Write-Host "❌ Cancelled." -ForegroundColor DarkGray
+        Write-Host "↩ Cancelled." -ForegroundColor DarkGray
     }
 }
 

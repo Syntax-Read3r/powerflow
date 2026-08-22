@@ -257,6 +257,12 @@ function Show-PFHelpBrowser {
         --header-first `
         --color="header:bold:cyan,prompt:bold:green,border:cyan"
 
+    $fzfExit = $LASTEXITCODE
+    if (-not $sel -and $fzfExit -ne 130) {
+        # Escape closes the browser silently, as it should. A query that matched no command
+        # is a different answer and deserves one.
+        Write-PFNothingFound 'No command matched what you typed.' -Hint 'pwsh-h lists every section.'
+    }
     if ($sel) {
         $name = ($sel -split "`t")[0]
         $cmd  = (Get-PFCommandRegistry) | Where-Object Name -eq $name | Select-Object -First 1

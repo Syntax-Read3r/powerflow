@@ -7,7 +7,7 @@
 # Functions: Get-NavSearchRoots, Add-NavSearchRoot, Remove-NavSearchRoot,
 #            Reset-NavSearchRoots, Show-NavSearchRoots, Get-NavDefaultRoots,
 #            Format-NavPath
-# Depends  : platform adapter Get-HomePath
+# Depends  : platform adapters Get-HomePath, Get-PowerFlowNavigationDataPath
 # ==============================================================================
 #
 # WHY THIS FILE EXISTS
@@ -27,7 +27,7 @@
 # want /srv or /opt in scope, add them — `nav roots add /srv` — and they are scanned too.
 # ==============================================================================
 
-$script:NavRootsFile = Join-Path (Get-HomePath) '.nav_roots.json'
+$script:NavRootsFile = Join-Path (Get-PowerFlowNavigationDataPath) '.nav_roots.json'
 
 <#
 .SYNOPSIS
@@ -66,9 +66,9 @@ function Get-NavDefaultRoots {
     Call as @(Get-NavSearchRoots) — see the note above.
 #>
 function Get-NavSearchRoots {
-    if (Test-Path $script:NavRootsFile) {
+    if (Test-Path -LiteralPath $script:NavRootsFile) {
         try {
-            $saved = @(Get-Content $script:NavRootsFile -Raw | ConvertFrom-Json)
+            $saved = @(Get-Content -LiteralPath $script:NavRootsFile -Raw | ConvertFrom-Json)
             $live  = @($saved | Where-Object { $_ -and (Test-Path $_) })
             if ($live.Count -gt 0) { return $live }
         } catch {
@@ -83,7 +83,11 @@ function Save-NavSearchRoots {
     # -InputObject, not the pipeline. Piping an array to ConvertTo-Json makes its shape
     # depend on how many elements it happens to have; -InputObject with an explicit
     # [string[]] always produces a flat JSON array, one root or ten.
-    ConvertTo-Json -InputObject ([string[]]$Roots) -Depth 2 | Set-Content $script:NavRootsFile
+    $rootsDir = Split-Path -Parent $script:NavRootsFile
+    if (-not (Test-Path -LiteralPath $rootsDir)) {
+        New-Item -ItemType Directory -Path $rootsDir -Force | Out-Null
+    }
+    ConvertTo-Json -InputObject ([string[]]$Roots) -Depth 2 | Set-Content -LiteralPath $script:NavRootsFile
 }
 
 function Add-NavSearchRoot {
@@ -143,14 +147,14 @@ function Remove-NavSearchRoot {
 }
 
 function Reset-NavSearchRoots {
-    if (Test-Path $script:NavRootsFile) { Remove-Item $script:NavRootsFile -Force }
+    if (Test-Path -LiteralPath $script:NavRootsFile) { Remove-Item -LiteralPath $script:NavRootsFile -Force }
     Write-Host "✅ Search roots reset to the platform default" -ForegroundColor Green
     Show-NavSearchRoots
 }
 
 function Show-NavSearchRoots {
     $roots      = @(Get-NavSearchRoots)
-    $isDefault  = -not (Test-Path $script:NavRootsFile)
+    $isDefault  = -not (Test-Path -LiteralPath $script:NavRootsFile)
 
     Write-Host ""
     Write-Host "🧭 nav search roots" -NoNewline -ForegroundColor Cyan
@@ -876,7 +880,13 @@ function Select-PFCodeRoot {
     if (Get-Command fzf -ErrorAction SilentlyContinue) {
         $picked = $rows | fzf --reverse --border=rounded --height=45% --prompt='code root> ' `
                               --header='Where does your code live?  Enter chooses · Esc to type a path instead' --header-first
-        if (-not $picked) { return '' }
+        $fzfExit = $LASTEXITCODE
+        if (-not $picked) {
+            # Escape is a decision and the caller prints "Cancelled"; exit 1 means the query
+            # matched no candidate, which is a different thing and says so here.
+            if ($fzfExit -eq 1) { Write-PFNothingFound 'No candidate matched what you typed.' }
+            return ''
+        }
         # Map the row back by INDEX. Parsing the path out of the rendered row would break
         # the moment a row gained a second column — and one just did.
         $index = [array]::IndexOf($rows, "$picked")

@@ -5,14 +5,19 @@
 # File     : components/navigation/bookmarks.ps1
 # Purpose  : Persistent bookmark management — create, delete, rename, list, and navigate to bookmarks
 # Functions: Initialize-DefaultBookmarks, Get-Bookmarks, Save-Bookmarks, Add-Bookmark, Remove-Bookmark, Rename-Bookmark, Show-BookmarkList
-# Depends  : none
+# Depends  : Get-PowerFlowNavigationDataPath, Get-HomePath
 # ==============================================================================
 
-$script:BookmarkFile = Join-Path (Get-HomePath) '.nav_bookmarks.json'
+$script:BookmarkFile = Join-Path (Get-PowerFlowNavigationDataPath) '.nav_bookmarks.json'
 
 function Initialize-DefaultBookmarks {
     # Only create if file doesn't exist
-    if (Test-Path $script:BookmarkFile) { return }
+    if (Test-Path -LiteralPath $script:BookmarkFile) { return }
+
+    $bookmarkDir = Split-Path -Parent $script:BookmarkFile
+    if (-not (Test-Path -LiteralPath $bookmarkDir)) {
+        New-Item -ItemType Directory -Path $bookmarkDir -Force | Out-Null
+    }
 
     $homeDir = Get-HomePath
 
@@ -36,16 +41,16 @@ function Initialize-DefaultBookmarks {
         if (Test-Path $entry.Value) { $defaultBookmarks[$entry.Key] = $entry.Value }
     }
 
-    $defaultBookmarks | ConvertTo-Json | Set-Content $script:BookmarkFile
+    $defaultBookmarks | ConvertTo-Json | Set-Content -LiteralPath $script:BookmarkFile
     Write-Host "📚 Initialized $($defaultBookmarks.Count) default bookmarks" -ForegroundColor Green
 }
 
 function Get-Bookmarks {
     Initialize-DefaultBookmarks
 
-    if (Test-Path $script:BookmarkFile) {
+    if (Test-Path -LiteralPath $script:BookmarkFile) {
         try {
-            return Get-Content $script:BookmarkFile | ConvertFrom-Json -AsHashtable
+            return Get-Content -LiteralPath $script:BookmarkFile | ConvertFrom-Json -AsHashtable
         } catch {
             Write-Host "❌ Error reading bookmarks: $($_.Exception.Message)" -ForegroundColor Red
             return @{}
@@ -58,7 +63,11 @@ function Save-Bookmarks {
     param([hashtable]$bookmarks)
 
     try {
-        $bookmarks | ConvertTo-Json | Set-Content $script:BookmarkFile
+        $bookmarkDir = Split-Path -Parent $script:BookmarkFile
+        if (-not (Test-Path -LiteralPath $bookmarkDir)) {
+            New-Item -ItemType Directory -Path $bookmarkDir -Force | Out-Null
+        }
+        $bookmarks | ConvertTo-Json | Set-Content -LiteralPath $script:BookmarkFile
         return $true
     } catch {
         Write-Host "❌ Error saving bookmarks: $($_.Exception.Message)" -ForegroundColor Red
@@ -118,7 +127,7 @@ function Remove-Bookmark {
             Write-Host "✅ Bookmark '$name' deleted" -ForegroundColor Green
         }
     } else {
-        Write-Host "❌ Deletion cancelled" -ForegroundColor Yellow
+        Write-Host "↩ Deletion cancelled" -ForegroundColor DarkGray
     }
 }
 

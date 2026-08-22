@@ -190,6 +190,9 @@ function del {
         }
 
         $selection = Get-ChildItem -Force | fzf --ansi --prompt "Select file/dir to delete: " | ForEach-Object {
+        # fzf: 0 selected, 1 nothing matched, 130 Escape. Captured immediately, because
+        # anything that runs next replaces it.
+        $fzfExit = $LASTEXITCODE
             ($_ -split '\s+', 2)[-1]
         }
 
@@ -238,7 +241,7 @@ function del {
         }
 
         if ($confirm -notin @('y','Y')) {
-            Write-Host "❌ Deletion cancelled." -ForegroundColor Yellow
+            Write-Host "↩ Deletion cancelled." -ForegroundColor DarkGray
             return
         }
     }
@@ -334,7 +337,7 @@ function Invoke-GnuMove {
             if (-not $Force) {
                 $confirm = Read-Host "⚠️  Overwrite '$target'? [y/N]"
                 if ($confirm -notin @('y','Y')) {
-                    Write-Host "❌ Skipped: $target" -ForegroundColor Yellow
+                    Write-Host "↩ Skipped: $target" -ForegroundColor DarkGray
                     continue
                 }
             }
@@ -703,7 +706,7 @@ function mv-t {
 
         $choice = Read-Host "Overwrite existing file? (y/n)"
         if ($choice -ne 'y' -and $choice -ne 'Y') {
-            Write-Host "❌ Move operation cancelled" -ForegroundColor Yellow
+            Write-Host "↩ Move operation cancelled" -ForegroundColor DarkGray
             return
         }
     }

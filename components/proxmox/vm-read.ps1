@@ -77,7 +77,11 @@ function Resolve-PmxManagedVm {
         $picked = $lines | fzf --height=60% --layout=reverse --border=rounded --delimiter="$tab" `
             --with-nth=1.. --prompt='\uD83D\uDDA5\uFE0F  VM: ' `
             --header="$($rows.Count) VMs \u00B7 type to filter \u00B7 Enter selects \u00B7 Esc cancels" --header-first
-        if (-not $picked) { return (New-PmxCancelledResult -Kind 'Vm') }
+        $fzfExit = $LASTEXITCODE
+        if (-not $picked) {
+            if ($fzfExit -ne 1) { return (New-PmxCancelledResult -Kind 'Vm') }
+            return [pscustomobject]@{ Success = $false; Cancelled = $false; Vm = $null; Error = 'no VM matched what you typed' }
+        }
         $Selector = ("$picked" -split "$tab", 2)[0]
     }
 

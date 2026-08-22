@@ -486,3 +486,75 @@ jobs:
       - name: 🧭 One anchor answers to several names, and built-ins stay protected
         shell: pwsh
         run: ./tests/navigation/run.ps1
+
+      # The red marker is the one piece of output that has to stay trustworthy. Spend it on
+      # a user who simply changed their mind and they learn to scan past it — and the next
+      # time it means something, they will. An audit of this tree found 107 messages naming
+      # an outcome that had not happened; three printed a green banner over a file operation
+      # that had FAILED and lost data.
+      #
+      # Two rules, both mechanical, both chosen because they cannot produce a false positive
+      # on an honest message:
+      #
+      #   1. ❌ never appears beside cancel/skipped/declined/kept language. That combination
+      #      is always a user DECISION wearing an error's clothes; it takes ↩ in DarkGray.
+      #   2. A `| fzf` pipeline captures $LASTEXITCODE within two lines. fzf exits 0 on a
+      #      selection, 1 when NOTHING MATCHED, and 130 on Escape. Testing only whether the
+      #      result string is empty collapses two opposite outcomes into one branch — which
+      #      is exactly how `nav zovoya` came to answer "Cancelled" for a typo.
+      #
+      # Deliberately NOT enforced: "❌ implies Red". A status table legitimately prints an
+      # ❌ cell in a per-row colour ("$tool : ❌ Missing"), and a gate that cannot tell those
+      # apart would be turned off rather than obeyed.
+      - name: 🚦 A cancellation is not an error, and fzf has three outcomes
+        shell: pwsh
+        run: |
+          $violations = @()
+
+          foreach ($file in (Get-ChildItem components, windows-only -Recurse -Filter *.ps1)) {
+            $lines = Get-Content $file.FullName
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+              $line = $lines[$i]
+              if ($line -match '^\s*#') { continue }   # prose about the rule is not the rule
+
+              # 1. the red cross on a decision
+              # RED EXEMPTS. A genuine failure that CAUSES a cancellation -- "not every version
+              # file could be updated -- release cancelled" -- is correctly an error and correctly
+              # red. What this catches is the decision wearing an error's clothes: a cancel
+              # rendered in Yellow, Green or DarkGray, where the cross means nothing went wrong.
+              if ($line -match '❌' -and $line -notmatch '-ForegroundColor\s+Red' -and $line -match '(?i)cancelled|cancelling|skipped|declined|❌ Kept') {
+                $violations += "$($file.Name):$($i+1)  ❌ used for a user decision — use '↩ Cancelled.' in DarkGray`n      $($line.Trim())"
+              }
+
+              # 2. an fzf pipeline whose exit code is never read
+              if ($line -match '\|\s*fzf\b' -or ($line -match '^\s*\$\w+\s*=.*\|\s*fzf')) {
+                # 16 lines, not a handful: an fzf call with backtick continuations routinely
+                # runs to ten, and a window that stops short flags a site that is already correct.
+                # Skip the fzf statement's OWN continuation lines first: an invocation with
+                # backticks runs to thirteen lines by itself, so a window measured from its
+                # first line fills up before reaching the capture and reports a correct site.
+                $j = $i
+                while ($j -lt $lines.Count -and $lines[$j].TrimEnd().EndsWith('`')) { $j++ }
+                $j++
+                # Then the next 10 CODE lines, so a long explanatory comment cannot hide a
+                # missing capture nor invent one.
+                $window = @()
+                for ($k = $j; $k -lt $lines.Count -and $window.Count -lt 10; $k++) {
+                  $candidate = $lines[$k]
+                  if ($candidate.Trim() -eq '' -or $candidate.Trim().StartsWith('#')) { continue }
+                  $window += $candidate
+                }
+                $window = $window -join [Environment]::NewLine
+                if ($window -notmatch '\$LASTEXITCODE') {
+                  $violations += "$($file.Name):$($i+1)  fzf result used without reading `$LASTEXITCODE — 1 (no match) and 130 (Escape) are different outcomes`n      $($line.Trim())"
+                }
+              }
+            }
+          }
+
+          if ($violations) {
+            Write-Error "❌ Outcome-messaging rules violated:"
+            $violations | ForEach-Object { Write-Host "   $_" }
+            exit 1
+          }
+          Write-Host "✅ Cancellations are not errors, and every fzf result is read by exit code"

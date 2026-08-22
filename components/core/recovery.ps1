@@ -128,7 +128,7 @@ function powerflow-uninstall {
 
     $confirm = Read-Host "  Are you sure you want to uninstall PowerFlow? (yes/n)"
     if ($confirm -ne 'yes') {
-        Write-Host "❌ Uninstall cancelled" -ForegroundColor Yellow
+        Write-Host "↩ Uninstall cancelled" -ForegroundColor DarkGray
         return
     }
 

@@ -34,7 +34,13 @@ function Resolve-PmxDisk {
             "$i$tab$($d.Name)$tab$(Format-PmxBytes $d.SizeBytes)$tab$media$tab$($d.Model)$tab$($d.Serial)"
         }
         $picked = $rows | fzf --height=60% --layout=reverse --border --delimiter="$tab" --with-nth=2.. --header='disk  size  type  model  serial'
-        if (-not $picked) { return (New-PmxCancelledResult -Kind 'Disk') }
+        $fzfExit = $LASTEXITCODE
+        # 130 is Escape (a decision); 1 is a query that matched no disk (a result). The
+        # cancelled envelope is right for the first and misleading for the second.
+        if (-not $picked) {
+            if ($fzfExit -ne 1) { return (New-PmxCancelledResult -Kind 'Disk') }
+            return [pscustomobject]@{ Success = $false; Cancelled = $false; Disk = $null; Error = 'no disk matched what you typed' }
+        }
         $index = [int]("$picked" -split "$tab", 2)[0]
         return [pscustomobject]@{ Success = $true; Cancelled = $false; Disk = $disks[$index]; Error = '' }
     }

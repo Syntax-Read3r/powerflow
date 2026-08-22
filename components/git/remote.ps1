@@ -41,6 +41,8 @@ function Create-RemoteRepository {
         --margin=1 `
         --padding=1
 
+    $fzfExit = $LASTEXITCODE
+    if (-not $createChoice -and $fzfExit -ne 130) { Write-PFNothingFound 'No option matched what you typed.' }
     if (-not $createChoice -or $createChoice -match "No -") {
         Write-Host "📁 Keeping as local repository" -ForegroundColor Cyan
         return $false
@@ -85,8 +87,10 @@ function Create-RemoteRepository {
         --margin=1 `
         --padding=1
 
+    $fzfExit = $LASTEXITCODE
     if (-not $nameChoice) {
-        Write-Host "❌ Repository creation cancelled" -ForegroundColor Yellow
+        if ($fzfExit -eq 1) { Write-PFNothingFound 'No naming style matched what you typed.' }
+        Write-Host "↩ Repository creation cancelled" -ForegroundColor DarkGray
         return $false
     }
 
@@ -115,6 +119,7 @@ function Create-RemoteRepository {
             --print-query `
             --expect=enter
 
+        $fzfExit = $LASTEXITCODE
         if ($customNameOutput) {
             $lines = @($customNameOutput)
             if ($lines.Count -gt 0 -and $lines[0].Trim()) {
@@ -124,7 +129,7 @@ function Create-RemoteRepository {
                 return $false
             }
         } else {
-            Write-Host "❌ Repository creation cancelled" -ForegroundColor Yellow
+            Write-Host "↩ Repository creation cancelled" -ForegroundColor DarkGray
             return $false
         }
     } else {
@@ -160,8 +165,10 @@ function Create-RemoteRepository {
         --padding=1 `
         --bind="enter:accept"
 
+    $fzfExit = $LASTEXITCODE
     if (-not $visibilityChoice) {
-        Write-Host "❌ Repository creation cancelled" -ForegroundColor Yellow
+        if ($fzfExit -eq 1) { Write-PFNothingFound 'No visibility option matched what you typed.' }
+        Write-Host "↩ Repository creation cancelled" -ForegroundColor DarkGray
         return $false
     }
 

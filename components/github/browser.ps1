@@ -248,6 +248,10 @@ function gh-l {
         $selection = $choices | fzf --ansi --reverse --height=$maxHeight --border --no-sort `
             --prompt="📦 Recent Repos ($Count shown): " --header="$header"
 
+        $fzfExit = $LASTEXITCODE
+        if (-not $selection -and $fzfExit -ne 130) {
+            Write-PFNothingFound 'No repository matched what you typed.'
+        }
         if ($selection) {
             Write-Host "🔍 Debug: Selection = '$selection'" -ForegroundColor Yellow
 
@@ -299,14 +303,14 @@ function gh-l {
                             Write-Host "`n🔴 CONFIRMATION 1 of 3:" -ForegroundColor Red
                             $confirm1 = Read-Host "Type the repository name '$selectedRepoName' to continue"
                             if ($confirm1 -ne $selectedRepoName) {
-                                Write-Host "❌ Repository name mismatch. Deletion cancelled." -ForegroundColor Green
+                                Write-Host "❌ Refused: the name you typed does not match. NOTHING was deleted." -ForegroundColor Red
                                 break
                             }
 
                             Write-Host "`n🔴 CONFIRMATION 2 of 3:" -ForegroundColor Red
                             $confirm2 = Read-Host "Type 'DELETE' (in capitals) to confirm you want to delete this repository"
                             if ($confirm2 -ne "DELETE") {
-                                Write-Host "❌ Confirmation failed. Deletion cancelled." -ForegroundColor Green
+                                Write-Host "❌ Refused: confirmation did not match. NOTHING was deleted." -ForegroundColor Red
                                 break
                             }
 
@@ -314,7 +318,7 @@ function gh-l {
                             Write-Host "This is your LAST CHANCE to cancel!" -ForegroundColor Red
                             $confirm3 = Read-Host "Type 'I UNDERSTAND THIS IS PERMANENT' to proceed with deletion"
                             if ($confirm3 -ne "I UNDERSTAND THIS IS PERMANENT") {
-                                Write-Host "❌ Final confirmation failed. Deletion cancelled." -ForegroundColor Green
+                                Write-Host "❌ Refused: final confirmation did not match. NOTHING was deleted." -ForegroundColor Red
                                 break
                             }
 
@@ -457,8 +461,9 @@ function gh-l-org {
             --delimiter="`t" `
             --prompt="🏢 Select organisation: " --header="Enter to select · Esc to cancel"
 
+        $fzfExit = $LASTEXITCODE
         if (-not $orgSelection) {
-            Write-Host "Cancelled." -ForegroundColor DarkGray
+            if ($fzfExit -eq 1) { Write-PFNothingFound 'No organisation matched what you typed.' }
             return
         }
 
@@ -553,8 +558,9 @@ function gh-l-org {
     $repoSelection = $repoChoices | fzf --ansi --reverse --height=$maxHeight --border --no-sort `
         --prompt="📦 $selectedOrg repos: " --header="$repoHeader"
 
+    $fzfExit = $LASTEXITCODE
     if (-not $repoSelection) {
-        Write-Host "Cancelled." -ForegroundColor DarkGray
+        if ($fzfExit -eq 1) { Write-PFNothingFound 'No repository matched what you typed.' }
         return
     }
 

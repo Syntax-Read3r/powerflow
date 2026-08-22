@@ -78,7 +78,7 @@ function Write-GitReleaseGuide {
     if (Test-Path $target) {
         Write-Host "⚠️  docs/git-release-help.md already exists." -ForegroundColor Yellow
         if ((Read-Host "Overwrite it? (y/n)") -ne 'y') {
-            Write-Host "❌ Cancelled — nothing was written." -ForegroundColor Yellow
+            Write-Host "↩ Cancelled — nothing was written." -ForegroundColor DarkGray
             return $false
         }
     }
@@ -159,6 +159,9 @@ function Show-GitReleaseSetupPrompt {
             --delimiter="`t" --with-nth=2.. `
             --prompt="Are you in your project folder? " `
             --header="📁 $cwd"
+        # fzf: 0 selected, 1 nothing matched, 130 Escape. Captured on the next line because
+        # anything else that runs replaces it.
+        $fzfExit = $LASTEXITCODE
         if ($selection) { $answer = ($selection -split "`t", 2)[0].Trim() }
     }
     else {
@@ -187,7 +190,7 @@ function Show-GitReleaseSetupPrompt {
     if (-not (git rev-parse --git-dir 2>$null)) {
         Write-Host "⚠️  This folder is not a git repository — git-rl will need one." -ForegroundColor Yellow
         if ((Read-Host "Write the guide here anyway? (y/n)") -ne 'y') {
-            Write-Host "❌ Cancelled." -ForegroundColor Yellow
+            Write-Host "↩ Cancelled." -ForegroundColor DarkGray
             return
         }
     }
@@ -301,7 +304,7 @@ function Invoke-GitReleaseCommand {
         Write-Host "   computed from '$currentVersion' ($($versionSources[0].Label))." -ForegroundColor DarkGray
         Write-Host ""
         if ((Read-Host "Continue and bring them into sync? (y/n)") -ne 'y') {
-            Write-Host "❌ Cancelled — fix the versions by hand, then re-run." -ForegroundColor Yellow
+            Write-Host "↩ Cancelled — fix the versions by hand, then re-run." -ForegroundColor DarkGray
             return
         }
     }
@@ -345,9 +348,12 @@ function Invoke-GitReleaseCommand {
         --color="header:bold:magenta,prompt:bold:cyan,border:magenta,pointer:yellow,hl:green" `
         --margin=1 `
         --padding=1
+    # fzf: 0 selected, 1 nothing matched, 130 Escape. Captured on the next line because
+    # anything else that runs replaces it.
+    $fzfExit = $LASTEXITCODE
 
     if (-not $selected) {
-        Write-Host "❌ Release cancelled" -ForegroundColor Yellow
+        Write-Host "↩ Release cancelled" -ForegroundColor DarkGray
         return
     }
 
@@ -435,11 +441,14 @@ function Invoke-GitReleaseCommand {
         --padding=1 `
         --print-query `
         --expect=enter
+    # fzf: 0 selected, 1 nothing matched, 130 Escape. Captured on the next line because
+    # anything else that runs replaces it.
+    $fzfExit = $LASTEXITCODE
 
     $description = if ($fzfOut) { @($fzfOut)[0].Trim() } else { "" }
 
     if ([string]::IsNullOrWhiteSpace($description) -or $description.Length -lt 3) {
-        Write-Host "❌ Description too short — release cancelled" -ForegroundColor Yellow
+        Write-Host "↩ Description too short — release cancelled" -ForegroundColor DarkGray
         return
     }
 

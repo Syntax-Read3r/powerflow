@@ -126,6 +126,9 @@ function git-a {
         --padding=1 `
         --print-query `
         --expect=enter
+    # fzf: 0 selected, 1 nothing matched, 130 Escape. Captured on the next line because
+    # anything else that runs replaces it.
+    $fzfExit = $LASTEXITCODE
 
     # Extract the commit message from fzf output
     $userMessage = ""
@@ -138,7 +141,7 @@ function git-a {
 
     # Validate user message
     if ([string]::IsNullOrWhiteSpace($userMessage) -or $userMessage.Length -lt 3) {
-        Write-Host "❌ Commit message too short or cancelled" -ForegroundColor Yellow
+        Write-Host "↩ Commit message too short or cancelled" -ForegroundColor DarkGray
         return
     }
 

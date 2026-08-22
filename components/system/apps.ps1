@@ -180,7 +180,11 @@ function Show-AppPicker {
         --prompt="🗄️  $Label : " `
         --header="      SIZE      AGE   NAME / LOCATION   ·   Enter: choose an action  ·  Esc: cancel"
 
-    if (-not $selection) { Write-Host "ℹ️  Nothing selected." -ForegroundColor DarkGray; return }
+    $fzfExit = $LASTEXITCODE
+    if (-not $selection) {
+        if ($fzfExit -eq 1) { Write-PFNothingFound 'Nothing matched what you typed.' }
+        return
+    }
 
     $index = ($selection -split "`t", 2)[0].Trim() -as [int]
     if ($null -eq $index -or $index -lt 0 -or $index -ge $hits.Count) {
@@ -236,7 +240,12 @@ function Show-BandOverview {
         --prompt="📊 Open a band: " `
         --header="   BAND          APPS          TOTAL   ·   Enter: open  ·  Esc: quit"
 
-    if (-not $selection) { Write-Host "ℹ️  Done." -ForegroundColor DarkGray; return }
+    $fzfExit = $LASTEXITCODE
+    if (-not $selection) {
+        # 130 is Escape; 1 is a query that matched no band. Same empty string, opposite meanings.
+        if ($fzfExit -eq 1) { Write-PFNothingFound 'No band matched what you typed.' }
+        return
+    }
 
     $index = ($selection -split "`t", 2)[0].Trim() -as [int]
     if ($null -eq $index -or $index -lt 0 -or $index -ge $summary.Count) {
@@ -515,7 +524,7 @@ function Invoke-AppAction {
 
             Write-Host ""
             Write-Host "🔧 Uninstalling '$($App.Name)' via its own uninstaller..." -ForegroundColor Yellow
-            if ((Read-Host "Continue? (y/n)") -ne 'y') { Write-Host "❌ Cancelled." -ForegroundColor Yellow; return }
+            if ((Read-Host "Continue? (y/n)") -ne 'y') { Write-Host "↩ Cancelled." -ForegroundColor DarkGray; return }
 
             if (Uninstall-Application -App $App) {
                 Write-Host "✅ Uninstalled '$($App.Name)' — reclaimed ~$(Format-Size $App.SizeBytes)" -ForegroundColor Green
@@ -538,7 +547,7 @@ function Invoke-AppAction {
             Write-Host ""
             Write-Host "🗑️  Send to Recycle Bin / trash:" -ForegroundColor Yellow
             Write-Host "    $loc  ($(Format-Size $App.SizeBytes))" -ForegroundColor White
-            if ((Read-Host "Continue? (y/n)") -ne 'y') { Write-Host "❌ Cancelled." -ForegroundColor Yellow; return }
+            if ((Read-Host "Continue? (y/n)") -ne 'y') { Write-Host "↩ Cancelled." -ForegroundColor DarkGray; return }
 
             if (Move-ToTrash $loc) {
                 Write-Host "✅ Moved to trash — recoverable if this was a mistake." -ForegroundColor Green
@@ -564,7 +573,7 @@ function Invoke-AppAction {
             # fat-finger for something unrecoverable.
             $typed = Read-Host "Type the name exactly to confirm ('$($App.Name)')"
             if ($typed -ne $App.Name) {
-                Write-Host "❌ Name did not match — cancelled. Nothing was deleted." -ForegroundColor Yellow
+                Write-Host "↩ Name did not match — cancelled. Nothing was deleted." -ForegroundColor DarkGray
                 return
             }
 
@@ -575,7 +584,7 @@ function Invoke-AppAction {
             }
         }
 
-        default { Write-Host "❌ Cancelled." -ForegroundColor DarkGray }
+        default { Write-Host "↩ Cancelled." -ForegroundColor DarkGray }
     }
 }
 

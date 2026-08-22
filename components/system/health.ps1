@@ -698,7 +698,11 @@ function Show-RamProcesses {
         --header="Enter closes the selected PROCESS · $groupOffer · Esc leaves everything running" `
         --header-first --color="header:bold:cyan,prompt:bold:green,border:cyan"
 
-    if (-not $sel) { Write-Host "   Nothing closed." -ForegroundColor DarkGray; Write-Host ""; return }
+    $fzfExit = $LASTEXITCODE
+    if (-not $sel) {
+        if ($fzfExit -eq 1) { Write-PFNothingFound 'No process matched what you typed.' -Hint 'Nothing was closed.' }
+        Write-Host ''; return
+    }
     $key = @($sel)[0]           # '' for Enter, 'ctrl-a' for the group
     $row = @($sel)[1]
     if (-not $row) { Write-Host "   Nothing closed." -ForegroundColor DarkGray; Write-Host ""; return }
