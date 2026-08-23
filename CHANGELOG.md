@@ -2,10 +2,45 @@
 
 All notable changes to PowerFlow will be documented in this file.
 
-## [Unreleased]
+## [5.1.0] - 2026-08-19
 
 ### Added
 
+- 🗄️ **`storage root` — which drive could hold what grows, and what is still on the system
+  one.** Read-only: it reports and points, and moves nothing.
+
+  Every volume is annotated with whether it could hold a development tree and **why not**,
+  because a drive silently missing from a list is a puzzle while a drive labelled
+  "removable disk" is an answer.
+
+  **Drive type is not a safety signal.** Windows reports a USB-attached external as
+  `DriveType='Fixed'` — measured on a WD My Passport showing 481 GB free and `IsSystem`
+  false, indistinguishable from an ideal second drive to any check based on `IsSystem`
+  alone. Eligibility joins against the *disk's* bus instead. Writability is **probed** with
+  a create-and-delete, never inferred: a mount can be read-only, or owned by another user,
+  while its permission bits look perfectly fine.
+
+  A second section lists what is still on the system drive and the variable that would move
+  each one — or "needs a link" where the tool offers none, which is the difference between
+  a report and a to-do nobody can action. **A junctioned path is not a straggler:** it still
+  exists and still measures full size through the link, so a naive scan reports finished
+  work as outstanding.
+
+- ⏱️ **A shared human time-range grammar.** `t@00:40 to 00:50` resolved to two exact local
+  instants, or refused with a message you can act on. Shared because PF-FEAT-004 wants it on
+  `pman events` and PF-FEAT-005 on `pman logs`.
+
+  Three rules, each a refusal to guess. It **never rolls past midnight silently** —
+  `yd@00:40 00:30` looks like a forty-minute window and is ten minutes backwards, so it is
+  refused with the two-day spelling printed. It **never guesses between 05/03 and 03/05** —
+  a slash date is read in the culture's order and flagged so the caller echoes the reading.
+  And **the offset belongs to the date, not to now**: resolving yesterday with today's UTC
+  offset is an hour wrong across a DST change, twice a year, in exactly the window someone
+  is reading events to work out what happened.
+
+- 📁 **`POWERFLOW_DATA_HOME` — nav's state follows where you keep data.** Bookmarks, search
+  roots and anchors move together, or stay under `$HOME` if you have configured nothing.
+  Splitting one command's state across two locations is the sprawl this exists to end.
 - 🧭 **`nav setup` — find the drive your code is actually on, name it, and search it.**
   nav's default roots are `~/Code` on Windows and `~` on Linux, and both sit on the
   **system** drive. Anyone who keeps their work on a second disk therefore got a nav that
@@ -415,6 +450,70 @@ All notable changes to PowerFlow will be documented in this file.
 
 ### Fixed
 
+- 🛑 **Three file operations reported success after failing — and one lost data.** All three
+  shared a cause: `Move-Item`, `Copy-Item` and `Rename-Item` fail **non-terminatingly**, so
+  without `-ErrorAction Stop` the failure never reaches the surrounding `catch` and execution
+  walks straight into the green banner beneath it. Every "did it work" check written as
+  `try/catch` around those cmdlets was answering a question it never asked.
+
+  **`rn` — the approved-overwrite path failed every single time.** It asked *"Overwrite
+  existing file? (y/n)"* and then called `Rename-Item`, which **cannot overwrite even with
+  `-Force`** (measured: `IOException`). A user who said yes was told `RENAME COMPLETED`, the
+  original still sat there under its old name, and the file they had agreed to replace was
+  untouched. With `--chmod`, the permission half then applied itself to the file the rename
+  had *failed* to replace. Overwrites now go through `Move-Item -Force`, which can.
+
+  **`mv-t` — a failed move lost the cut as well.** It printed `MOVE COMPLETED` and then
+  cleared the held file, so the user lost what they were holding too. The `catch`'s own
+  advice — *"The file is still held. Try mv-t again"* — was accurate only in the single case
+  where it could not print. The move is now verified by reading the destination back before
+  anything is cleared.
+
+  **`paste-file` — a false success that corroborated itself.** It printed `Pasted`, then
+  stat'd the destination and printed its size; where the destination already existed,
+  `Get-Item` found the **old** file and reported a plausible number beside a green tick,
+  describing a file that was never written. A false success carrying evidence is far harder
+  to disbelieve than a bare one.
+
+- 🔀 **`git` commands stopped claiming success they had not verified — seven sites.**
+  `push`, `stash apply`, `stash pop`, `fetch`, `switch`, `checkout -b` and `npm install` all
+  printed a success line without reading `$LASTEXITCODE`.
+
+  The dangerous one is **`git switch`**: it refuses on a dirty tree, and announcing the new
+  branch anyway leaves you believing you are somewhere you are not — so the next commit lands
+  on the old branch, which is the exact mistake the command exists to prevent. Branch
+  operations now report where `HEAD` actually is. **`git stash pop`** matters for the
+  opposite reason: it *drops* the stash on success and *keeps* it on failure, so "popped"
+  after a failure tells you your work is gone when it is not.
+
+- ↩ **A cancellation stopped being an error — 35 sites.** Pressing Escape, answering `n` or
+  declining an overwrite is a **decision**, not a fault, and it now reads as a dim
+  `↩ Cancelled.` rather than a red cross. Spend the red marker on someone who merely changed
+  their mind and they learn to scan past it — and the next time it means something, they
+  will. Three refused repository deletions in the GitHub browser were printed in **green**;
+  they now say plainly that *nothing was deleted*.
+
+- 🎯 **Every `fzf` call now reads its exit code — 26 sites.** fzf exits **0** on a selection,
+  **1** when nothing matched and **130** on Escape. Testing only whether the result string is
+  empty collapses two opposite outcomes into one branch — which is how `nav zovoya`, a typo
+  for a real directory, came to answer `❌ Cancelled` for a name that simply did not exist.
+  A miss now says what missed, where it looked, and offers the nearest real name.
+
+  No-match requires a **positive** exit-1 signal; anything else falls back to cancelled,
+  which is the conservative reading.
+
+- 📦 **PowerFlow could not see a relocated Scoop.** Scoop resolves its root as `$env:SCOOP`,
+  then `root_path` in its own config, then `~\scoop` — and relocating with the installer's
+  `-ScoopDir` writes `root_path` and sets **no variable at all**. PowerFlow read only the
+  variable, in four places, one of which hardcoded `~\scoop`. On a relocated machine that
+  meant zero Scoop apps reported and no shims added, while Scoop itself worked perfectly.
+  One resolver now answers for all four.
+
+- ⚙️ **An upgrade stopped silently undoing the settings you changed.** `install.ps1` replaces
+  `config/` wholesale, and `pwsh-reminders` persists your answer **into that very file** — so
+  turning update reminders off and then upgrading turned them back on, with nothing on screen
+  to say why. Changed values are now carried across, with the names **derived** from both
+  files rather than hand-listed, and `POWERFLOW_VERSION` explicitly release-owned.
 - 📦 **PowerFlow no longer overwrites a relocated Scoop root.** Scoop's root is
   relocatable — its installer takes `-ScoopDir`, and the chosen root is persisted as the
   `SCOOP` environment variable. Both adapters already honoured that. `config/paths.windows.ps1`

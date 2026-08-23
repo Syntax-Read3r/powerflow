@@ -580,6 +580,7 @@ On Windows only — these three are GNU clones for a platform that ships none of
 | `pc-whoami --system` | What this machine IS: hostname, OS, kernel, arch, virtualisation, container, model |
 | `pc-whoami --storage`| Volumes, memory, swap and disk layout in one read-only view |
 | `pc-name <new-name>` | Rename this machine **and** keep `/etc/hosts` in step, so `sudo` does not start stalling. Previews both edits, backs the file up, verifies the name resolves |
+| `storage root`        | **Which drive could hold what grows**, and what is still on the system one (read-only) |
 | `storage report`     | One read-only view instead of `lsblk` + `fdisk -l` + `swapon` + `free` + `cat /etc/fstab` — and no sudo |
 | `pwsh-keys`          | What Ctrl+Left/Right, Ctrl+Del and Ctrl+Shift+Arrow are bound to, and who bound them. PowerFlow fills in unbound chords (five of them on Linux) and never replaces one that works |
 | `<any command> --educate` | A plain-English footer explaining what you just looked at. Opt-in, printed after the data, so an expert ignores it by not reading down |

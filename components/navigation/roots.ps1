@@ -936,11 +936,24 @@ function Invoke-PFDevRootSetup {
 
         Write-Host ''
         Write-Host '🧭 nav setup — where does your code live?' -ForegroundColor Cyan
-        if ($offSystem.Count) {
-            $drives = @($offSystem | ForEach-Object { $_.Volume } | Sort-Object -Unique) -join ', '
+        # INTERNAL AND REMOVABLE ARE NAMED SEPARATELY. The candidate list already marks a
+        # removable disk and sorts it last, but this headline used to lump both together as
+        # "Found another drive" — which offers a disk you can unplug as somewhere to keep
+        # source code, in the one line most likely to be read instead of the list.
+        $internal  = @($offSystem | Where-Object { -not $_.Removable })
+        $removable = @($offSystem | Where-Object { $_.Removable })
+        if ($internal.Count) {
+            $drives = @($internal | ForEach-Object { $_.Volume } | Sort-Object -Unique) -join ', '
             Write-Host "   Found another drive: $drives" -ForegroundColor Green
         }
-        else {
+        elseif ($removable.Count) {
+            Write-Host '   No internal drive besides the system one.' -ForegroundColor DarkGray
+        }
+        if ($removable.Count) {
+            $rm = @($removable | ForEach-Object { $_.Volume } | Sort-Object -Unique) -join ', '
+            Write-Host "   Ignoring $rm — removable, and a code root that unplugs is a trap." -ForegroundColor DarkGray
+        }
+        if (-not $offSystem.Count) {
             Write-Host '   No drive besides the system one — naming what you have is still worth doing.' -ForegroundColor DarkGray
         }
 
