@@ -43,6 +43,35 @@ function Ok([bool]$c, [string]$m, [string]$d = '') {
 $unexpected = 0
 trap { $script:unexpected++; Write-Host "  FAIL unexpected error: $_"; continue }
 
+# ── This test needs root, and must say so rather than fail ───────────────────────
+#
+# The header above is written for a disposable CONTAINER, where the test is root and can
+# rewrite a real /etc/hosts. The release workflow also runs it directly on the GitHub
+# runner, where the unprivileged `runner` user cannot — and every case below then fails
+# with "Access to the path '/etc/hosts' is denied", six times over, saying nothing whatever
+# about whether `pc-name` works.
+#
+# That is the difference between a test that FAILED and a test that could not RUN, and
+# collapsing the two is the same defect this release spent its time removing from the
+# commands themselves. A skip states the missing precondition; a red failure sends someone
+# to debug a hostname rewrite that was never exercised.
+#
+# It is a SKIP, never a silent pass: the message names what was not checked, so nobody reads
+# a green suite as evidence this code is covered when it is not.
+# `id` is captured ONCE. Calling it again inside the message throws where `id` does not
+# exist at all, and the trap above catches that, counts an unexpected error and resumes —
+# straight past the `exit 0` this guard depends on.
+$uid = ''
+try { $uid = "$(& id -u 2>$null)".Trim() } catch { $uid = '' }
+if ($uid -ne '0') {
+    Write-Host ''
+    Write-Host '  SKIP  pc-name rewrites a real /etc/hosts, which needs root.'
+    Write-Host "        Running as uid '$uid' — nothing below was checked."
+    Write-Host '        Run this inside a container (or as root) to exercise it.'
+    Write-Host ''
+    exit 0
+}
+
 . $profilePath *> $null
 
 $current = "$(hostname)".Trim()
