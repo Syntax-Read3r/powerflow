@@ -45,7 +45,15 @@ function Get-PackageManagerRoot {
     # writing into the real profile.
     # $homeDir, never $home — $HOME is a read-only automatic variable, and assigning it
     # throws. There is a CI gate for exactly this class of mistake.
-    $homeDir = Get-HomePath
+    #
+    # RESOLVED DEFENSIVELY, because this file is dot-sourced ON ITS OWN. install.ps1 loads
+    # packages.ps1 well before locations.ps1, so Get-HomePath does not exist yet when the
+    # installer bootstraps the package manager. That shipped as a failed release: on a
+    # machine that already HAS Scoop, Test-PackageManager returns at its `Get-Command scoop`
+    # check and never reaches this function — so every local run passed, and the CI runner,
+    # which has no Scoop, took the other branch and the installer died. An adapter the
+    # installer sources standalone may not assume a sibling adapter is loaded.
+    $homeDir = if (Get-Command Get-HomePath -ErrorAction SilentlyContinue) { Get-HomePath } else { $HOME }
 
     # Read defensively — a partial or corrupt config must degrade to the default, never
     # throw. This runs during profile load, where an exception is a broken shell.

@@ -24,6 +24,19 @@ $adapter = Join-Path $repo 'platform/windows/adapters/packages.ps1'
 $config  = Join-Path $repo 'config/paths.windows.ps1'
 foreach ($f in @($adapter, $config)) { Assert-True (Test-Path -LiteralPath $f) "$f exists" }
 
+# ---- THE ADAPTER MUST SURVIVE BEING SOURCED ALONE -------------------------------
+# install.ps1 dot-sources packages.ps1 well before locations.ps1, so Get-HomePath does not
+# exist when the installer bootstraps the package manager. This shipped as a FAILED RELEASE:
+# on a machine that already has Scoop, Test-PackageManager returns at its `Get-Command scoop`
+# check and never reaches Get-PackageManagerRoot — so every local run passed, and the CI
+# runner, which has no Scoop, took the other branch and the installer died.
+#
+# Run in a CHILD process with nothing else loaded, because this test file itself stubs
+# Get-HomePath further down and would mask exactly the condition being checked.
+$alone = & pwsh -NoProfile -Command "`$env:SCOOP=''; . '$adapter'; try { Get-PackageManagerRoot } catch { 'THREW' }"
+Assert-True ("$alone" -ne 'THREW') 'Get-PackageManagerRoot survives packages.ps1 being sourced with no sibling adapter'
+Assert-True ([bool]"$alone".Trim()) 'and still returns a usable root'
+
 $tmp       = Join-Path ([IO.Path]::GetTempPath()) ('pf-scoop-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 $relocated = Join-Path $tmp 'DevTools\Scoop'
 $notNamed  = Join-Path $tmp 'DevTools\Tools'
