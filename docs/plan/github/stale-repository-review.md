@@ -1,6 +1,6 @@
 # GitHub Oldest-First Browsing and Stale Repository Review
 
-**Status:** Approved by the owner and implemented. Mocked regression tests and local architecture gates pass; live account verification remains a user-run check.
+**Status:** Approved, implemented, and published in v5.2.0 on 2026-10-14. Mocked regressions, local architecture gates, and release CI pass; a live account repository review remains a user-run check.
 
 ## Goal
 

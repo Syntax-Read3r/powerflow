@@ -1,6 +1,6 @@
 # Release Command Family
 
-**Status:** Implemented and validated. The owner-requested `release setup` run completed in the verified PowerFlow checkout, generating `docs/release-help.md` and copying the setup prompt. No release was published.
+**Status:** Implemented, validated, and published in v5.2.0 on 2026-10-14. The owner-requested `release setup` run completed in the verified PowerFlow checkout, generating `docs/release-help.md` and copying the setup prompt. Release CI and assets were verified after the owner's later publication request.
 
 ## Goal
 
