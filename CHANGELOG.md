@@ -2,7 +2,7 @@
 
 All notable changes to PowerFlow will be documented in this file.
 
-## [5.2.0] - Unreleased
+## [5.2.0] - 2026-10-14
 
 ### Added
 

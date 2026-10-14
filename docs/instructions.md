@@ -563,8 +563,9 @@ advance and users will continue installing the previous version.
 
 - Entries are **newest-first** — the in-progress version is always at the top.
 - Use `## [X.Y.Z] - Unreleased` while the feature is being built.
-- After post-release verification confirms the GitHub release exists, update
-  the header to `## [X.Y.Z] - YYYY-MM-DD` (actual release date).
+- Before tagging, update the header to `## [X.Y.Z] - YYYY-MM-DD` using the release
+  attempt's actual date. CI requires the ISO date on the tagged commit. A dated
+  changelog does not confirm publication; verify the release and assets separately.
 - The generic `## [Unreleased]` section at the top is only for changes not yet
   assigned to a version number. Move its contents into the versioned section
   before running `release`.
