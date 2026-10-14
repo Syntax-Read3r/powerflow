@@ -167,7 +167,7 @@ nav my-react-app
 
 # Enhanced Git workflow
 git-a               # Beautiful add → commit → push interface
-git-rl              # Interactive release: pick patch/minor/major, commit, tag, push
+release              # Interactive release: pick patch/minor/major, commit, tag, push
 
 # Cut and paste files
 mv important-file   # Cuts file
@@ -178,7 +178,7 @@ mv-t               # Pastes file
 git-l              # Beautiful log viewer with actions
 
 # GitHub repo browser
-gh-l               # Browse your repos with activity stats
+github             # Browse your repos; select one to clone/open
 
 # Learn Linux as you go
 l grep             # a lesson on grep — runs nothing, always safe
@@ -302,7 +302,7 @@ nav .. src           # Go up one level, then into 'src' directory
 ```powershell
 # Enhanced add-commit-push
 git-a                # Interactive workflow with file preview
-git-rl               # Interactive release: bump version, commit, tag, push
+release               # Interactive release: bump version, commit, tag, push
 
 # Rollback system
 git-rb abc123        # Create rollback branch from commit
@@ -335,26 +335,52 @@ ls -t                # Sort by time (real GNU flag)
 ### GitHub Integration
 
 ```powershell
-# Browse your repositories
-gh-l                 # List repos with activity stats
-gh-l 20              # Show top 20 repos
+# Browse your repositories (gh remains the GitHub CLI)
+github                    # 10 recent repos; choose action 1 to clone here
+github 20                 # Show 20 recent repos
+github 50 --oldest         # Oldest last push first
+github org my-team        # Browse an organization's repos
 
-# Token management (automatic secure storage)
-gh-l-status          # Check if token is saved
-gh-l-reset           # Remove saved token
+# Review projects that might be ready to retire
+github stale                  # All owned repos, oldest last push first
+github stale --older-than 1y  # No push for a year (also 180d or 6m)
+github stale --pages          # Pages-enabled repos, including custom domains
+
+# Token management
+github token status       # Check token sources without revealing the value
+github token reset        # Remove saved token; GITHUB_TOKEN is unchanged
+github help               # Full command reference
 ```
+
+Last push measures repository activity, not whether a project is still used. Review shows
+Pages hosting, build status, site URLs, and archived/fork/template context. A Pages site with
+unavailable details stays marked as enabled; unknown dates are grouped last. Review offers
+inspect, open, copy, and clone actions. It never deletes or archives repositories.
+
+With fzf in an interactive terminal, select a repository and choose an action; otherwise the
+command prints a report. `gh-l`, `gh-l-org`, `gh-l-status`, and `gh-l-reset` still work and
+print a migration hint once per session. Windows retains the existing Credential Manager
+store; Linux uses `GITHUB_TOKEN` or an interactively entered token for the invocation.
 
 ## 🔧 Version Control Setup
 
 ### Release Workflow
 
-PowerFlow releases are managed through `git-rl` (`git-release`), an interactive fzf workflow that handles the full release pipeline in one command.
+PowerFlow releases are prepared through `release`: an interactive fzf workflow that bumps the version, commits, tags, and pushes to trigger the project's CI/CD pipeline. The pipeline validates, builds, and publishes the release.
 
 #### How It Works
 
 ```powershell
-git-rl   # or: git-release
+release         # Prepare a release and push its tag
+release setup   # Confirm this project and write its setup guide
+release help    # Read-only usage reference (also --help or -h)
 ```
+
+`git-rl` and `git-release` remain compatibility commands with a migration hint once per
+session. Their existing `-h`/`--help` flags still open setup; the new `release -h`/`--help`
+shows usage without writing files. An existing `docs/git-release-help.md` is recognized,
+while new setup runs write `docs/release-help.md`. The command lives in the release chapter
+of `pwsh-h`; versioning, tag creation, and publication behavior are unchanged.
 
 The workflow:
 1. Reads the current version from `config/PowerFlow.settings.ps1`
@@ -405,7 +431,7 @@ git checkout main
 git pull upstream main
 
 # 2. Run the release workflow
-git-rl              # fzf picker: choose patch/minor/major/custom
+release              # fzf picker: choose patch/minor/major/custom
 
 # This will:
 # - Present a version bump selector
@@ -453,8 +479,8 @@ PowerFlow includes automated release workflows:
 - Don't create version tags (maintainers only)
 
 **For Maintainers:**
-- Use `git-rl` for all version releases
-- Update `CHANGELOG.md` before running `git-rl`
+- Use `release` for all version releases
+- Update `CHANGELOG.md` before running `release`
 - Test the release workflow in development
 - Monitor GitHub Actions for build status
 
@@ -509,8 +535,9 @@ kernel-backed pseudo-filesystem to navigate to. On Windows the folders are read 
 | Command           | Description                                          |
 | ----------------- | ---------------------------------------------------- |
 | `git-a`           | Beautiful add → commit → push workflow               |
-| `git-rl`          | Interactive release: bump version, commit, tag, push. Reads any project's own version file — `package.json`, `pyproject.toml`, `Cargo.toml`, `*.csproj`, `build.gradle`, `VERSION` — and keeps several in sync. In a project **not yet set up** for releases it says so and points at `git-rl -h`, writing nothing |
-| `git-rl -h`       | Set up `git-rl` in **another** project. Confirms you are in the right folder first, then writes the walkthrough to `docs/git-release-help.md` **in that project** and copies an AI setup prompt to your clipboard. With an assistant open in the repo there is nothing to paste — point it at the file |
+| `release`          | Interactive release: bump version, commit, tag, push. Reads any project's own version file — `package.json`, `pyproject.toml`, `Cargo.toml`, `*.csproj`, `build.gradle`, `VERSION` — and keeps several in sync. In a project **not yet set up** for releases it says so and points at `release setup`, writing nothing |
+| `release setup`       | Set up `release` in **another** project. Confirms you are in the right folder first, then writes the walkthrough to `docs/release-help.md` **in that project** and copies an AI setup prompt to your clipboard. With an assistant open in the repo there is nothing to paste — point it at the file |
+| `release help` | Show usage without prompting, writing, or preparing a release |
 | `git-rb <commit>` | Create rollback branch from commit                   |
 | `git-rba`         | Rollback branch add-commit-push                      |
 

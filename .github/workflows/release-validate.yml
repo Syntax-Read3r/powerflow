@@ -463,6 +463,10 @@ jobs:
         shell: pwsh
         run: ./tests/network/run.ps1
 
+      - name: 🐙 GitHub oldest-first review, Pages evidence, and legacy routes
+        shell: pwsh
+        run: ./tests/github/run.ps1
+
       - name: 🐳 dkr/pman engine parity, compose-correctness, and flag parsing
         shell: pwsh
         run: ./tests/containers/run.ps1
@@ -479,7 +483,7 @@ jobs:
         shell: pwsh
         run: ./tests/flags/run.ps1
 
-      - name: 🎯 git-rl points at the setup flow instead of "cancelled", and writes nothing
+      - name: 🚀 release routing, read-only help, and confirmed setup regressions
         shell: pwsh
         run: ./tests/git/run.ps1
 

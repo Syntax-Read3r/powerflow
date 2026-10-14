@@ -2,6 +2,37 @@
 
 All notable changes to PowerFlow will be documented in this file.
 
+## [5.2.0] - Unreleased
+
+### Added
+
+- `release` command family: `release` prepares the version/commit/tag/push workflow,
+  `release setup` confirms a target before delivering `docs/release-help.md`, and
+  `release help` / `--help` / `-h` show read-only usage. The old `git-rl` and `git-release`
+  commands retain their setup flags with once-per-session migration hints; old generated
+  guide names remain recognized. Release commands have their own `pwsh-h` chapter.
+- `github` command family: browse and clone repositories, browse organizations, inspect token
+  sources, and show executable help. `gh` remains the GitHub CLI; the existing `gh-l` commands
+  remain compatibility wrappers with a once-per-session migration hint.
+- `github 50 --oldest` sorts by oldest last push before limiting results. `github stale`
+  reviews all accessible owned repositories with optional `--older-than 180d|6m|1y` and
+  `--pages` filters. Unknown push dates remain explicitly unknown; age is not a redundancy verdict.
+- GitHub Pages evidence for account sites, project sites, and custom domains: site URL, build
+  status, and source when available. Failed metadata requests retain known Pages-enabled
+  state. Review offers inspect/open/copy/clone actions without deletion or archiving.
+- Readable reports without fzf or with redirected output, explicit incomplete-list reporting,
+  stable repository-ID selection, and mocked GitHub regressions in release validation.
+
+### Changed
+
+- Release helpers now use `Invoke-PFRelease`, `Show-PFReleaseSetup`, `Get-PFReleaseDocs`,
+  and `Write-PFReleaseGuide`. Documentation uses the release family; installed runtime
+  document paths remain compatible. A successful tag push reports preparation, with
+  publication confirmed separately through CI/CD.
+- Shared GitHub fetching, sorting, and Pages enrichment replace duplicate browser logic.
+  Review avoids per-repository commit-count requests. Credential storage calls now use matching
+  platform adapters; Windows retains the existing saved-token key and Linux supports session tokens.
+
 ## [5.1.0] - 2026-08-19
 
 ### Added

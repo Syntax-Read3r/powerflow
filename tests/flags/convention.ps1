@@ -146,7 +146,7 @@ $realCases = @(
     @{ Impl = 'Invoke-PFTeamRoom';          Forms = @('--all') }
     @{ Impl = 'Set-PFPathEntry';            Forms = @('--system') }
     @{ Impl = 'Invoke-PFSelfUpdate';        Forms = @('--yes') }
-    @{ Impl = 'Invoke-GitReleaseCommand';   Forms = @('-h', '--help') }
+    @{ Impl = 'Invoke-PFRelease';           Forms = @('-h', '--help') }
 )
 # The param block is lifted out of the source and rebuilt as a probe function, rather than
 # loading the components that define these. Loading them would drag in their whole dependency
@@ -236,17 +236,29 @@ Ok ($offenders.Count -eq 0) (
 $shimFiles = Get-ChildItem (Join-Path $root 'components'), (Join-Path $root 'windows-only') -Recurse -Filter *.ps1
 $shimCount = 0
 foreach ($file in $shimFiles) {
-    $text = Get-Content -LiteralPath $file.FullName -Raw
-    foreach ($m in [regex]::Matches($text, '(?m)^function ([a-z][\w\.-]*) \{ Invoke-PFParamCommand -Target ''([^'']+)'' -Command ''([^'']+)'' -Argv \$args \}')) {
-        $shimCount++
-        Ok ($m.Groups[1].Value -ceq $m.Groups[3].Value) `
-            "the shim for $($m.Groups[1].Value) passes -Command '$($m.Groups[3].Value)' — they must match, or the messages name the wrong command"
-        # The implementation must exist in the same file, and must not be kebab-named itself
-        # (or the help gate would demand a registration for an internal helper).
-        Ok ($text -cmatch "(?m)^function $([regex]::Escape($m.Groups[2].Value))\b") `
-            "$($m.Groups[2].Value) should be defined in $($file.Name) alongside its shim"
-        Ok ($m.Groups[2].Value -cmatch '^[A-Z]') `
-            "$($m.Groups[2].Value) should be Verb-Noun so pwsh-h treats it as internal"
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$null)
+    $defined = @($ast.FindAll({ $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true))
+    foreach ($fn in $defined) {
+        if ($fn.Name -cnotmatch '^[a-z][\w\.-]*$') { continue }
+        $calls = @($fn.Body.FindAll({ $args[0] -is [System.Management.Automation.Language.CommandAst] -and
+            $args[0].GetCommandName() -eq 'Invoke-PFParamCommand' }, $true))
+        foreach ($call in $calls) {
+            $shimCount++
+            $values = @{}
+            for ($i = 1; $i -lt $call.CommandElements.Count - 1; $i++) {
+                $element = $call.CommandElements[$i]
+                if ($element -is [System.Management.Automation.Language.CommandParameterAst]) {
+                    $values[$element.ParameterName] = $call.CommandElements[$i + 1]
+                }
+            }
+            $targetName = $values.Target.Value
+            $commandName = $values.Command.Value
+            Ok ($fn.Name -ceq $commandName) "the shim for $($fn.Name) passes its own -Command name"
+            Ok (@($defined | Where-Object { $_.Name -ceq $targetName }).Count -eq 1) "$targetName is defined in $($file.Name) alongside its shim"
+            Ok ($targetName -cmatch '^[A-Z]') "$targetName is an internal Verb-Noun helper"
+            Ok (-not $fn.Body.ParamBlock -and $values.Argv -is [System.Management.Automation.Language.VariableExpressionAst] -and
+                $values.Argv.VariablePath.UserPath -eq 'args') "the shim for $($fn.Name) forwards the entire argument list"
+        }
     }
 }
 Ok ($shimCount -ge 10) "expected at least 10 migrated commands, found $shimCount"

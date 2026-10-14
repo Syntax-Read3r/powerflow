@@ -1,95 +1,12 @@
 # ==============================================================================
 # PowerFlow — GitHub Repository Browser
-# ==============================================================================
 # Domain   : GitHub
 # File     : components/github/browser.ps1
-# Purpose  : Browse, clone, open, and delete GitHub repositories via API with fzf interface
-# Functions: gh-l, gh-l-reset, gh-l-status, gh-l-org
-# Depends  : none
+# Purpose  : Repository browser actions and organization browsing
+# Functions: Show-PFGitHubBrowser, Show-PFGitHubRepositoryAction, Invoke-PFGitHubOrgBrowser,
+#            Format-PFGitHubRow, Show-PFGitHubDetails, Test-PFGitHubInteractive, _GhL-CommitCount
+# Depends  : repositories.ps1, platform GitHub credential and opener adapters
 # ==============================================================================
-
-# ── Internal helpers (shared by gh-l and gh-l-org) ───────────────────────────
-
-function _GhL-SetToken {
-    param([string]$Token)
-    $credentialName = "gh-l-github-token"
-    try {
-        $result = & cmdkey /generic:$credentialName /user:github /pass:$Token 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "✅ Token saved securely in Windows Credential Manager" -ForegroundColor Green
-            return $true
-        } else {
-            Write-Host "⚠️ Could not save to Credential Manager: $result" -ForegroundColor Yellow
-            return $false
-        }
-    } catch {
-        Write-Host "⚠️ Could not save token: $($_.Exception.Message)" -ForegroundColor Yellow
-        return $false
-    }
-}
-
-function _GhL-GetToken {
-    $credentialName = "gh-l-github-token"
-    try {
-        $result = & cmdkey /list:$credentialName 2>&1
-        if ($LASTEXITCODE -eq 0 -and $result -match "GENERIC") {
-            if (-not ([System.Management.Automation.PSTypeName]'CredentialManager').Type) {
-                Add-Type -TypeDefinition @"
-                using System;
-                using System.Runtime.InteropServices;
-                using System.Text;
-
-                public class CredentialManager
-                {
-                    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-                    public static extern bool CredRead(string target, int type, int reservedFlag, out IntPtr credentialPtr);
-
-                    [DllImport("advapi32.dll", SetLastError = true)]
-                    public static extern void CredFree(IntPtr cred);
-
-                    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-                    public struct CREDENTIAL
-                    {
-                        public int Flags;
-                        public int Type;
-                        public string TargetName;
-                        public string Comment;
-                        public long LastWritten;
-                        public int CredentialBlobSize;
-                        public IntPtr CredentialBlob;
-                        public int Persist;
-                        public int AttributeCount;
-                        public IntPtr Attributes;
-                        public string TargetAlias;
-                        public string UserName;
-                    }
-
-                    public static string GetPassword(string target)
-                    {
-                        IntPtr credPtr;
-                        if (CredRead(target, 1, 0, out credPtr))
-                        {
-                            var credential = (CREDENTIAL)Marshal.PtrToStructure(credPtr, typeof(CREDENTIAL));
-                            var password = Marshal.PtrToStringUni(credential.CredentialBlob, credential.CredentialBlobSize / 2);
-                            CredFree(credPtr);
-                            return password;
-                        }
-                        return null;
-                    }
-                }
-"@
-            }
-            $password = [CredentialManager]::GetPassword($credentialName)
-            if ($password) {
-                Write-Host "🔐 Using saved token from Credential Manager" -ForegroundColor DarkGreen
-                return $password
-            }
-        }
-        return $null
-    } catch {
-        return $null
-    }
-}
 
 function _GhL-CommitCount {
     param(
@@ -102,550 +19,219 @@ function _GhL-CommitCount {
         $commits = Invoke-RestMethod -Uri $commitsUrl -Headers $Headers -ErrorAction SilentlyContinue
         return $commits.Count
     } catch {
-        return 0
+        return $null
     }
 }
 
-# ── Public functions ──────────────────────────────────────────────────────────
+function Test-PFGitHubInteractive { return (-not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected) }
 
-function gh-l {
-    param (
-        [int]$Count = 10,
-        [string]$Token
-    )
-
-    # Allow positional parameter for count: gh-l 15
-    if ($args.Count -gt 0 -and $args[0] -match '^\d+$') {
-        $Count = [int]$args[0]
+function Format-PFGitHubRow {
+    param($Model, [datetime]$Now = [datetime]::UtcNow, [string]$Activity = '')
+    $pushDate = 'unknown last push'
+    $idle = 'unknown'
+    if ($null -ne $Model.LastPush) {
+        $pushDate = $Model.LastPush.ToString('yyyy-MM-dd')
+        $idle = "{0}d" -f [Math]::Max(0, [Math]::Floor(($Now - $Model.LastPush).TotalDays))
     }
-
-    $credentialName = "gh-l-github-token"
-
-    # Get token from various sources
-    if (-not $Token) {
-        $Token = $env:GITHUB_TOKEN
-        if (-not $Token) {
-            $Token = _GhL-GetToken
-        }
-    }
-
-    # If still no token, prompt for it
-    if (-not $Token) {
-        Write-Host "❌ GitHub Personal Access Token required for private repos" -ForegroundColor Red
-        Write-Host ""
-        Write-Host "🔧 Setup instructions:" -ForegroundColor Cyan
-        Write-Host "  1. Go to: https://github.com/settings/tokens" -ForegroundColor DarkGray
-        Write-Host "  2. Generate new token (classic) with 'repo' scope" -ForegroundColor DarkGray
-        Write-Host "  3. Copy the token and paste it below" -ForegroundColor DarkGray
-        Write-Host ""
-
-        $secureInput = Read-Host "🔑 Enter your GitHub token (input hidden)" -AsSecureString
-        $Token = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-            [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureInput)
-        )
-
-        if ($Token) {
-            $save = Read-Host "💾 Save token securely in Windows Credential Manager? (y/n)"
-            if ($save -eq 'y') {
-                _GhL-SetToken -Token $Token
-            }
-        }
-    }
-
-    if (-not $Token) {
-        Write-Host "❌ No token provided" -ForegroundColor Red
-        return
-    }
-
-    # Calculate date filters
-    $now = Get-Date
-    $yesterday = $now.AddDays(-1).ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $lastWeek = $now.AddDays(-7).ToString("yyyy-MM-ddTHH:mm:ssZ")
-
-    $allRepos = @()
-    $page = 1
-    $perPage = 100
-
-    try {
-        $headers = @{
-            "Authorization" = "Bearer $Token"
-            "Accept" = "application/vnd.github.v3+json"
-            "User-Agent" = "pwsh-gh-l"
-        }
-
-        Write-Host "🔐 Fetching all your repositories to ensure proper sorting..." -ForegroundColor Cyan
-
-        do {
-            $url = "https://api.github.com/user/repos?per_page=$perPage&page=$page&affiliation=owner"
-            $pageRepos = Invoke-RestMethod -Uri $url -Headers $headers
-
-            if ($pageRepos.Count -gt 0) {
-                $allRepos += $pageRepos
-                Write-Host "📦 Fetched $($allRepos.Count) repositories..." -ForegroundColor DarkGray
-                $page++
-            }
-        } while ($pageRepos.Count -eq $perPage)
-
-        Write-Host "✅ Found $($allRepos.Count) total repositories" -ForegroundColor Green
-
-        Write-Host "🔍 Debugging: Sorting $($allRepos.Count) repositories by push date..." -ForegroundColor Yellow
-
-        $sortedRepos = $allRepos | ForEach-Object {
-            $pushDate = try {
-                [DateTime]$_.pushed_at
-            } catch {
-                [DateTime]"1900-01-01"
-            }
-
-            [PSCustomObject]@{
-                Repo = $_
-                PushDate = $pushDate
-                PushDateString = $pushDate.ToString("yyyy-MM-dd HH:mm")
-            }
-        } | Sort-Object PushDate -Descending
-
-        Write-Host "🔍 Top 3 most recent pushes:" -ForegroundColor Yellow
-        $sortedRepos | Select-Object -First 3 | ForEach-Object {
-            Write-Host "   $($_.Repo.name) - $($_.PushDateString)" -ForegroundColor DarkGray
-        }
-
-        $repos = $sortedRepos | Select-Object -First $Count -ExpandProperty Repo
-
-        Write-Host "🎯 Showing top $Count most recently pushed repositories" -ForegroundColor Cyan
-
-        if (-not $repos) {
-            Write-Host "ℹ️ No repositories found." -ForegroundColor Yellow
-            return
-        }
-
-        Write-Host "📊 Analyzing commit activity..." -ForegroundColor Yellow
-
-        $terminalWidth = try {
-            $Host.UI.RawUI.WindowSize.Width
-        } catch {
-            120
-        }
-
-        $maxHeight = [Math]::Min($repos.Count + 5, 25)
-
-        $choices = $repos | ForEach-Object {
-            $repoName = $_.name
-            $privacy = if ($_.private) { "🔒" } else { "🌐" }
-            $language = if ($_.language) { $_.language } else { "Text" }
-            $lastPush = ([DateTime]$_.pushed_at).ToString("yyyy-MM-dd")
-            $commits24h = _GhL-CommitCount -RepoFullName $_.full_name -Since $yesterday -Headers $headers
-            $commits1w = _GhL-CommitCount -RepoFullName $_.full_name -Since $lastWeek -Headers $headers
-
-            $nameWidth = [Math]::Min(30, [Math]::Max(20, $terminalWidth * 0.25))
-            $langWidth = [Math]::Min(12, [Math]::Max(8, $terminalWidth * 0.12))
-
-            "{0} {1,-$nameWidth}  📅{2}  📊24h:{3,2}  📈1w:{4,2}  💻{5,-$langWidth}" -f `
-                $privacy, $repoName, $lastPush, $commits24h, $commits1w, $language
-        }
-
-        $header = "🔒=Private 🌐=Public | 📅=Last Push (YYYY-MM-DD) | 📊=Commits 24h | 📈=Commits 1w | 💻=Language"
-
-        $selection = $choices | fzf --ansi --reverse --height=$maxHeight --border --no-sort `
-            --prompt="📦 Recent Repos ($Count shown): " --header="$header"
-
-        $fzfExit = $LASTEXITCODE
-        if (-not $selection -and $fzfExit -ne 130) {
-            Write-PFNothingFound 'No repository matched what you typed.'
-        }
-        if ($selection) {
-            Write-Host "🔍 Debug: Selection = '$selection'" -ForegroundColor Yellow
-
-            if ($selection -match '^\S+\s+(\S+)') {
-                $selectedRepoName = $matches[1].Trim()
-                Write-Host "🔍 Debug: Extracted repo name = '$selectedRepoName'" -ForegroundColor Yellow
-
-                $selectedRepo = $repos | Where-Object { $_.name -eq $selectedRepoName }
-                if ($selectedRepo) {
-                    $repoUrl = $selectedRepo.html_url
-                    $repoFullName = $selectedRepo.full_name
-
-                    Copy-ToClipboard $repoUrl
-                    Write-Host "📋 Copied URL: $repoUrl" -ForegroundColor Green
-                    Write-Host "`n🔧 What would you like to do with '$selectedRepoName'?" -ForegroundColor Cyan
-                    Write-Host "  1. Clone repository" -ForegroundColor DarkGray
-                    Write-Host "  2. Open in browser" -ForegroundColor DarkGray
-                    Write-Host "  3. Copy SSH URL instead" -ForegroundColor DarkGray
-                    Write-Host "  4. Delete repository (⚠️ PERMANENT)" -ForegroundColor Red
-                    Write-Host "  5. Just copied HTTP URL" -ForegroundColor DarkGray
-
-                    $action = Read-Host "Choose action (1-5)"
-                    switch ($action) {
-                        "1" {
-                            Write-Host "📂 Cloning repository..." -ForegroundColor Cyan
-                            Write-Host "Running: git clone $repoUrl" -ForegroundColor DarkGray
-                            git clone $repoUrl
-                            if ($LASTEXITCODE -eq 0) {
-                                Write-Host "✅ Repository cloned successfully!" -ForegroundColor Green
-                            } else {
-                                Write-Host "❌ Clone failed. Check your git configuration." -ForegroundColor Red
-                            }
-                        }
-                        "2" {
-                            Write-Host "🌐 Opening in browser..." -ForegroundColor Cyan
-                            Open-Url $repoUrl
-                        }
-                        "3" {
-                            $sshUrl = $repoUrl -replace "https://github.com/", "git@github.com:" -replace "\.git$", "" + ".git"
-                            Copy-ToClipboard $sshUrl
-                            Write-Host "📋 Copied SSH URL: $sshUrl" -ForegroundColor Green
-                        }
-                        "4" {
-                            Write-Host "`n⚠️ WARNING: YOU ARE ABOUT TO DELETE A REPOSITORY!" -ForegroundColor Red -BackgroundColor Yellow
-                            Write-Host "Repository: $repoFullName" -ForegroundColor White -BackgroundColor Red
-                            Write-Host "This action is PERMANENT and CANNOT be undone!" -ForegroundColor Red
-                            Write-Host "All code, issues, pull requests, and history will be lost forever!" -ForegroundColor Red
-
-                            Write-Host "`n🔴 CONFIRMATION 1 of 3:" -ForegroundColor Red
-                            $confirm1 = Read-Host "Type the repository name '$selectedRepoName' to continue"
-                            if ($confirm1 -ne $selectedRepoName) {
-                                Write-Host "❌ Refused: the name you typed does not match. NOTHING was deleted." -ForegroundColor Red
-                                break
-                            }
-
-                            Write-Host "`n🔴 CONFIRMATION 2 of 3:" -ForegroundColor Red
-                            $confirm2 = Read-Host "Type 'DELETE' (in capitals) to confirm you want to delete this repository"
-                            if ($confirm2 -ne "DELETE") {
-                                Write-Host "❌ Refused: confirmation did not match. NOTHING was deleted." -ForegroundColor Red
-                                break
-                            }
-
-                            Write-Host "`n🔴 FINAL CONFIRMATION 3 of 3:" -ForegroundColor Red
-                            Write-Host "This is your LAST CHANCE to cancel!" -ForegroundColor Red
-                            $confirm3 = Read-Host "Type 'I UNDERSTAND THIS IS PERMANENT' to proceed with deletion"
-                            if ($confirm3 -ne "I UNDERSTAND THIS IS PERMANENT") {
-                                Write-Host "❌ Refused: final confirmation did not match. NOTHING was deleted." -ForegroundColor Red
-                                break
-                            }
-
-                            Write-Host "`n💀 Deleting repository..." -ForegroundColor Red
-                            try {
-                                $deleteUrl = "https://api.github.com/repos/$repoFullName"
-                                $deleteResult = Invoke-RestMethod -Uri $deleteUrl -Method DELETE -Headers $headers
-                                Write-Host "💀 Repository '$selectedRepoName' has been permanently deleted." -ForegroundColor Red
-                                Write-Host "🔄 You may want to run gh-l again to refresh the list." -ForegroundColor Yellow
-                            } catch {
-                                if ($_.Exception.Message -match "404") {
-                                    Write-Host "❌ Repository not found. It may have already been deleted." -ForegroundColor Yellow
-                                } elseif ($_.Exception.Message -match "403") {
-                                    Write-Host "❌ Permission denied. You may not have delete permissions for this repository." -ForegroundColor Red
-                                } else {
-                                    Write-Host "❌ Failed to delete repository: $($_.Exception.Message)" -ForegroundColor Red
-                                }
-                            }
-                        }
-                        default {
-                            Write-Host "✅ Done. HTTPS URL is on your clipboard." -ForegroundColor Green
-                        }
-                    }
-                } else {
-                    Write-Host "❌ Could not find repository details for: '$selectedRepoName'" -ForegroundColor Red
-                    Write-Host "🔍 Available repos: $($repos.name -join ', ')" -ForegroundColor DarkGray
-                }
-            } else {
-                Write-Host "❌ Could not extract repository name from selection" -ForegroundColor Red
-                Write-Host "🔍 Selection format: '$selection'" -ForegroundColor DarkGray
-                Write-Host "💡 Try selecting a different repository" -ForegroundColor Yellow
-            }
-        }
-    } catch {
-        if ($_.Exception.Message -match "401") {
-            Write-Warning "❌ Authentication failed. Token may be invalid or expired."
-            $remove = Read-Host "🗑️ Remove saved token from Credential Manager? (y/n)"
-            if ($remove -eq 'y') {
-                & cmdkey /delete:$credentialName 2>$null
-                Write-Host "🗑️ Saved token removed from Credential Manager" -ForegroundColor Yellow
-            }
-        } elseif ($_.Exception.Message -match "403") {
-            Write-Warning "❌ Forbidden. Token may lack proper permissions (needs 'repo' scope)."
-        } else {
-            Write-Warning "❌ Failed to fetch repos: $($_.Exception.Message)"
-        }
-    }
+    $created = if ($null -ne $Model.Created) { $Model.Created.ToString('yyyy-MM-dd') } else { 'unknown' }
+    $visibility = if ($Model.Repository.private) { 'private' } else { 'public' }
+    $context = $Model.Context
+    if ($Model.PagesEnabled -eq $true) { $context = "$context hosts a site — review before retiring".Trim() }
+    return ('{0,-38} {1,-17} {2,-8} {3,-29} created {4} · {5} {6} {7}' -f
+        (Format-PFGitHubText $Model.FullName), $pushDate, $idle, $Model.PagesState, $created,
+        $visibility, $context, $Activity).TrimEnd()
 }
 
-function gh-l-reset {
-    $credentialName = "gh-l-github-token"
-    try {
-        $result = & cmdkey /delete:$credentialName 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "🗑️ GitHub token removed from Credential Manager" -ForegroundColor Green
-        } else {
-            Write-Host "ℹ️ No saved token found in Credential Manager" -ForegroundColor Yellow
-        }
-    } catch {
-        Write-Host "⚠️ Error removing token: $($_.Exception.Message)" -ForegroundColor Yellow
+function Show-PFGitHubDetails {
+    param($Model)
+    Write-Host "Repository: $(Format-PFGitHubText $Model.FullName)" -ForegroundColor Cyan
+    Write-Host "Pages: $($Model.PagesState)" -ForegroundColor DarkGray
+    if ($Model.PagesEnabled -eq $true) {
+        Write-PFWarning 'Hosts a site — review before retiring this repository.'
     }
+    if ($Model.PagesUrl) { Write-Host "Site: $(Format-PFGitHubText $Model.PagesUrl)" }
+    if ($Model.PagesDomain) { Write-Host "Custom domain: $(Format-PFGitHubText $Model.PagesDomain)" }
+    if ($Model.PagesBuildType) { Write-Host "Publishing: $(Format-PFGitHubText $Model.PagesBuildType)" }
+    if ($Model.PagesSource) {
+        Write-Host "Source: $(Format-PFGitHubText $Model.PagesSource.branch) $(Format-PFGitHubText $Model.PagesSource.path)"
+    }
+    if ($Model.PagesError) { Write-Host "Details unavailable: $($Model.PagesError). Fine-grained tokens may need Pages read permission." -ForegroundColor Yellow }
+    if ($Model.PagesHint -and $Model.PagesEnabled -ne $true) {
+        Write-Host 'Name/homepage resembles a github.io site; Pages hosting is not confirmed.' -ForegroundColor DarkGray
+    }
+    Write-Host 'Age measures last push across the repository, not usage, visitors, or redundancy.' -ForegroundColor DarkGray
 }
 
-function gh-l-status {
-    $credentialName = "gh-l-github-token"
-    try {
-        $result = & cmdkey /list:$credentialName 2>&1
-        if ($LASTEXITCODE -eq 0 -and $result -match "GENERIC") {
-            Write-Host "✅ GitHub token is saved in Credential Manager" -ForegroundColor Green
-        } else {
-            Write-Host "ℹ️ No GitHub token saved" -ForegroundColor Yellow
-        }
-    } catch {
-        Write-Host "ℹ️ No GitHub token saved" -ForegroundColor Yellow
+function Show-PFGitHubRepositoryAction {
+    param($Model, [hashtable]$Headers, [switch]$Review, [object[]]$OrgModels = @(), [string]$Org)
+    $repository = $Model.Repository
+    Show-PFGitHubDetails $Model
+    # Preserve the original browser's automatic URL copy, but review is explicit.
+    if (-not $Review) { Copy-ToClipboard $repository.html_url }
+    Write-Host '  1. Clone repository' -ForegroundColor DarkGray
+    if ($Org) {
+        Write-Host "  2. Clone all $($OrgModels.Count) displayed repositories into ./$Org/" -ForegroundColor DarkGray
+        Write-Host '  3. Open repository in browser' -ForegroundColor DarkGray
+        Write-Host '  4. Copy HTTPS URL' -ForegroundColor DarkGray
+        Write-Host '  5. Copy SSH URL' -ForegroundColor DarkGray
+    } else {
+        Write-Host '  2. Open repository in browser' -ForegroundColor DarkGray
+        Write-Host '  3. Copy SSH URL' -ForegroundColor DarkGray
+        if ($Review) { Write-Host '  4. Inspect repository details' -ForegroundColor DarkGray }
+        else { Write-Host '  4. Delete repository (PERMANENT)' -ForegroundColor Red }
+        Write-Host '  5. Copy HTTPS URL' -ForegroundColor DarkGray
     }
-}
-
-function gh-l-org {
-    param (
-        [string]$Org,
-        [int]$Count = 100
-    )
-
-    # ── Authenticate ──────────────────────────────────────────────────────────
-    $token = $env:GITHUB_TOKEN
-    if (-not $token) { $token = _GhL-GetToken }
-
-    if (-not $token) {
-        Write-Host "❌ GitHub Personal Access Token required" -ForegroundColor Red
-        Write-Host ""
-        Write-Host "🔧 Setup instructions:" -ForegroundColor Cyan
-        Write-Host "  1. Go to: https://github.com/settings/tokens" -ForegroundColor DarkGray
-        Write-Host "  2. Generate new token (classic) with 'repo' and 'read:org' scopes" -ForegroundColor DarkGray
-        Write-Host "  3. Copy the token and paste it below" -ForegroundColor DarkGray
-        Write-Host ""
-
-        $secureInput = Read-Host "🔑 Enter your GitHub token (input hidden)" -AsSecureString
-        $token = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-            [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureInput)
-        )
-
-        if ($token) {
-            $save = Read-Host "💾 Save token securely in Windows Credential Manager? (y/n)"
-            if ($save -eq 'y') { _GhL-SetToken -Token $token }
-        }
+    if ($Model.PagesUrl) { Write-Host '  6. Open Pages site' -ForegroundColor DarkGray }
+    $action = Read-Host 'Choose action (Enter to finish)'
+    if ($Org) {
+        $action = switch ($action) { '2' { '7' }; '3' { '2' }; '4' { '5' }; '5' { '3' }; default { $action } }
     }
-
-    if (-not $token) { Write-Host "❌ No token provided" -ForegroundColor Red; return }
-
-    $headers = @{
-        "Authorization" = "Bearer $token"
-        "Accept"        = "application/vnd.github.v3+json"
-        "User-Agent"    = "pwsh-gh-l-org"
-    }
-
-    # ── Org selection ─────────────────────────────────────────────────────────
-    $selectedOrg = $Org
-
-    if (-not $selectedOrg) {
-        Write-Host "🏢 Fetching your organisations..." -ForegroundColor Cyan
-        try {
-            $orgs = Invoke-RestMethod -Uri "https://api.github.com/user/orgs?per_page=100" -Headers $headers
-        } catch {
-            Write-Host "❌ Failed to fetch organisations: $($_.Exception.Message)" -ForegroundColor Red
-            return
-        }
-
-        if (-not $orgs -or $orgs.Count -eq 0) {
-            Write-Host "ℹ️ You are not a member of any GitHub organisations." -ForegroundColor Yellow
-            return
-        }
-
-        $orgChoices = $orgs | ForEach-Object {
-            $desc = if ($_.description) { $_.description } else { "no description" }
-            "$($_.login)`t$("🏢 {0,-30}  {1}" -f $_.login, $desc)"
-        }
-
-        $orgSelection = $orgChoices | fzf --ansi --reverse --height=20 --border `
-            --with-nth=2.. `
-            --delimiter="`t" `
-            --prompt="🏢 Select organisation: " --header="Enter to select · Esc to cancel"
-
-        $fzfExit = $LASTEXITCODE
-        if (-not $orgSelection) {
-            if ($fzfExit -eq 1) { Write-PFNothingFound 'No organisation matched what you typed.' }
-            return
-        }
-
-        $parsedOrg = ($orgSelection -split "`t", 2)[0].Trim()
-        if ($parsedOrg -and ($orgs.login -contains $parsedOrg)) {
-            $selectedOrg = $parsedOrg
-        } else {
-            Write-Host "❌ Could not parse organisation name from selection." -ForegroundColor Red
-            Write-Host "   Raw selection: $orgSelection" -ForegroundColor DarkGray
-            return
-        }
-    }
-
-    Write-Host "🏢 Organisation: $selectedOrg" -ForegroundColor Cyan
-
-    # ── Fetch org repos ───────────────────────────────────────────────────────
-    Write-Host "📦 Fetching repositories for '$selectedOrg'..." -ForegroundColor Cyan
-
-    $allOrgRepos = @()
-    $repoTypes   = @("all", "public")
-
-    foreach ($repoType in $repoTypes) {
-        $allOrgRepos = @()
-        $page        = 1
-        $shouldRetry = $false
-        $pageRepos   = @()
-
-        do {
-            $url = "https://api.github.com/orgs/$selectedOrg/repos?type=$repoType&per_page=100&page=$page"
-            try {
-                $pageRepos = Invoke-RestMethod -Uri $url -Headers $headers
-                if ($pageRepos.Count -gt 0) {
-                    $allOrgRepos += $pageRepos
-                    Write-Host "   Fetched $($allOrgRepos.Count) repositories..." -ForegroundColor DarkGray
-                    $page++
-                }
-            } catch {
-                if ($_.Exception.Message -match "403" -and $repoType -eq "all") {
-                    Write-Host "⚠️ Token may lack 'read:org' scope — showing public repos only." -ForegroundColor Yellow
-                    Write-Host "   Regenerate at https://github.com/settings/tokens with read:org checked." -ForegroundColor DarkGray
-                    $shouldRetry = $true
-                    $pageRepos   = @()
-                } else {
-                    Write-Host "❌ Failed to fetch repositories: $($_.Exception.Message)" -ForegroundColor Red
-                    return
-                }
-            }
-        } while ($pageRepos.Count -eq 100)
-
-        if (-not $shouldRetry) { break }
-    }
-
-    if (-not $allOrgRepos -or $allOrgRepos.Count -eq 0) {
-        Write-Host "ℹ️ No repositories found in '$selectedOrg'." -ForegroundColor Yellow
-        return
-    }
-
-    Write-Host "✅ Found $($allOrgRepos.Count) repositories in '$selectedOrg'" -ForegroundColor Green
-
-    # Sort by pushed_at descending and apply limit
-    $displayRepos = $allOrgRepos | ForEach-Object {
-        $pushDate = try { [DateTime]$_.pushed_at } catch { [DateTime]"1900-01-01" }
-        [PSCustomObject]@{ Repo = $_; PushDate = $pushDate }
-    } | Sort-Object PushDate -Descending | Select-Object -First $Count -ExpandProperty Repo
-
-    # ── Repo picker ───────────────────────────────────────────────────────────
-    $now       = Get-Date
-    $yesterday = $now.AddDays(-1).ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $lastWeek  = $now.AddDays(-7).ToString("yyyy-MM-ddTHH:mm:ssZ")
-
-    Write-Host "📊 Analysing commit activity..." -ForegroundColor Yellow
-
-    $terminalWidth = try { $Host.UI.RawUI.WindowSize.Width } catch { 120 }
-    $maxHeight     = [Math]::Min($displayRepos.Count + 5, 25)
-
-    $repoChoices = $displayRepos | ForEach-Object {
-        $privacy    = if ($_.private) { "🔒" } else { "🌐" }
-        $language   = if ($_.language) { $_.language } else { "Text" }
-        $lastPush   = ([DateTime]$_.pushed_at).ToString("yyyy-MM-dd")
-        $commits24h = _GhL-CommitCount -RepoFullName $_.full_name -Since $yesterday -Headers $headers
-        $commits1w  = _GhL-CommitCount -RepoFullName $_.full_name -Since $lastWeek  -Headers $headers
-
-        $nameWidth = [Math]::Min(30, [Math]::Max(20, $terminalWidth * 0.25))
-        $langWidth = [Math]::Min(12, [Math]::Max(8,  $terminalWidth * 0.12))
-
-        "{0} {1,-$nameWidth}  📅{2}  📊24h:{3,2}  📈1w:{4,2}  💻{5,-$langWidth}" -f `
-            $privacy, $_.name, $lastPush, $commits24h, $commits1w, $language
-    }
-
-    $repoHeader = "🔒=Private 🌐=Public | 📅=Last Push | 📊=Commits 24h | 📈=Commits 1w | 💻=Language  [$selectedOrg · $($displayRepos.Count) repos]"
-
-    $repoSelection = $repoChoices | fzf --ansi --reverse --height=$maxHeight --border --no-sort `
-        --prompt="📦 $selectedOrg repos: " --header="$repoHeader"
-
-    $fzfExit = $LASTEXITCODE
-    if (-not $repoSelection) {
-        if ($fzfExit -eq 1) { Write-PFNothingFound 'No repository matched what you typed.' }
-        return
-    }
-
-    $selectedRepoName = $null
-    if ($repoSelection -match '^\S+\s+(\S+)') {
-        $selectedRepoName = $Matches[1].Trim()
-    }
-
-    $selectedRepo = $displayRepos | Where-Object { $_.name -eq $selectedRepoName }
-
-    if (-not $selectedRepo) {
-        Write-Host "❌ Could not resolve repo '$selectedRepoName' from selection." -ForegroundColor Red
-        return
-    }
-
-    $repoUrl = $selectedRepo.html_url
-    $sshUrl  = "git@github.com:$($selectedRepo.full_name).git"
-    Copy-ToClipboard $repoUrl
-    Write-Host "📋 Copied URL: $repoUrl" -ForegroundColor Green
-
-    # ── Action menu ───────────────────────────────────────────────────────────
-    Write-Host "`n🔧 What would you like to do with '$selectedRepoName'?" -ForegroundColor Cyan
-    Write-Host "  1. Clone selected repo" -ForegroundColor DarkGray
-    Write-Host "  2. Clone ALL $($displayRepos.Count) repos in '$selectedOrg'  (creates .\$selectedOrg\)" -ForegroundColor DarkGray
-    Write-Host "  3. Open selected repo in browser" -ForegroundColor DarkGray
-    Write-Host "  4. Copy HTTPS URL" -ForegroundColor DarkGray
-    Write-Host "  5. Copy SSH URL" -ForegroundColor DarkGray
-
-    $action = Read-Host "Choose action (1-5)"
-
     switch ($action) {
-        "1" {
-            Write-Host "📂 Cloning $selectedRepoName..." -ForegroundColor Cyan
-            git clone $repoUrl
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "✅ Cloned successfully." -ForegroundColor Green
-            } else {
-                Write-Host "❌ Clone failed. Check your git configuration." -ForegroundColor Red
+        '1' {
+            git clone $repository.html_url
+            $cloneExit = $LASTEXITCODE
+            if ($cloneExit -eq 0) { Write-Host '✅ Repository cloned successfully.' -ForegroundColor Green }
+            else { Write-PFFailure "Clone failed (exit $cloneExit)." -Hint 'Check the Git output above.' }
+        }
+        '2' { Open-Url $repository.html_url }
+        '3' { Copy-ToClipboard $repository.ssh_url }
+        '4' {
+            if ($Review) { Show-PFGitHubDetails $Model; return }
+            # Three independent confirmations, as in the original browser.
+            Write-PFWarning 'This permanently deletes the repository, its issues, pull requests, and history.'
+            if ($Model.PagesEnabled -eq $true) { Write-PFWarning 'This repository has Pages enabled; deleting it also removes its site.' }
+            if ((Read-Host "Type repository name '$($repository.name)' to continue") -cne $repository.name) {
+                Write-PFFailure 'Refused: repository name did not match. Nothing was deleted.'; return
             }
-        }
-        "2" {
-            Write-Host "`n⚠️ This will clone $($displayRepos.Count) repos into .\$selectedOrg\" -ForegroundColor Yellow
-            $confirm = Read-Host "Proceed? (y/n)"
-            if ($confirm -ne 'y') { Write-Host "Cancelled." -ForegroundColor DarkGray; return }
-
-            New-Item -ItemType Directory -Path $selectedOrg -ErrorAction SilentlyContinue | Out-Null
-            Write-Host "📁 Created .\$selectedOrg\" -ForegroundColor Green
-
-            Push-Location $selectedOrg
-            $cloned = 0
-            $failed = 0
-            foreach ($r in $displayRepos) {
-                Write-Host "  [$($cloned + $failed + 1)/$($displayRepos.Count)] Cloning $($r.name)..." -ForegroundColor DarkGray
-                git clone $r.clone_url *>$null
-                if ($LASTEXITCODE -eq 0) {
-                    $cloned++
-                } else {
-                    Write-Host "  ❌ Failed: $($r.name)" -ForegroundColor Red
-                    $failed++
-                }
+            if ((Read-Host 'Type DELETE to confirm') -cne 'DELETE') {
+                Write-PFFailure 'Refused: confirmation did not match. Nothing was deleted.'; return
             }
-            Pop-Location
-
-            Write-Host "✅ Done — $cloned cloned, $failed failed  →  .\$selectedOrg\" -ForegroundColor Green
+            if ((Read-Host 'Type I UNDERSTAND THIS IS PERMANENT to proceed') -cne 'I UNDERSTAND THIS IS PERMANENT') {
+                Write-PFFailure 'Refused: final confirmation did not match. Nothing was deleted.'; return
+            }
+            try {
+                $null = Invoke-RestMethod -Uri "https://api.github.com/repos/$($Model.FullName)" -Method DELETE -Headers $Headers -ErrorAction Stop
+                Write-Host "Repository '$(Format-PFGitHubText $Model.FullName)' was permanently deleted." -ForegroundColor Red
+            } catch { Write-PFFailure 'Could not delete repository.' -Hint (Get-PFGitHubError $_) }
         }
-        "3" {
-            Open-Url $repoUrl
-            Write-Host "🌐 Opened in browser." -ForegroundColor Cyan
+        '5' { Copy-ToClipboard $repository.html_url }
+        '6' {
+            if ($Model.PagesUrl) { Open-Url $Model.PagesUrl }
+            else { Write-PFFailure 'No confirmed Pages URL is available.' }
         }
-        "4" {
-            Copy-ToClipboard $repoUrl
-            Write-Host "📋 Copied HTTPS URL: $repoUrl" -ForegroundColor Green
+        '7' {
+            if (-not $Org) { Write-PFFailure 'Clone-all is only available in organization browsing.'; return }
+            if ((Read-Host "Clone all $($OrgModels.Count) displayed repositories into ./$Org/? (y/n)") -ne 'y') {
+                Write-PFCancelled; return
+            }
+            $cloned = 0; $failed = 0
+            try {
+                $null = New-Item -ItemType Directory -Path $Org -Force -ErrorAction Stop
+                Push-Location -LiteralPath $Org -ErrorAction Stop
+                try {
+                    foreach ($orgModel in $OrgModels) {
+                        git clone $orgModel.Repository.clone_url
+                        $cloneExit = $LASTEXITCODE
+                        if ($cloneExit -eq 0) { $cloned++ } else { $failed++ }
+                    }
+                } finally { Pop-Location }
+                if ($failed) { Write-PFWarning "$cloned cloned; $failed failed. Check the Git output above." }
+                else { Write-Host "✅ $cloned repositories cloned into ./$Org/." -ForegroundColor Green }
+            } catch { Write-PFFailure 'Could not complete organization cloning.' -Hint 'Check the destination folder and Git output.' }
         }
-        "5" {
-            Copy-ToClipboard $sshUrl
-            Write-Host "📋 Copied SSH URL: $sshUrl" -ForegroundColor Green
-        }
-        default {
-            Write-Host "✅ HTTPS URL already on clipboard: $repoUrl" -ForegroundColor Green
-        }
+        '' { return }
+        default { Write-PFFailure 'Unknown action. Run github again and choose one of the displayed numbers.' }
     }
 }
 
-# ── pwsh-h registration ───────────────────────────────────────────────────────
-Register-PFCommand -Name 'gh-l'        -Section '🐙 GITHUB BROWSER' -Synopsis 'browse your repos with activity stats; clone from the picker'
-Register-PFCommand -Name 'gh-l-org'    -Section '🐙 GITHUB BROWSER' -Synopsis 'browse an org - clone one repo or all' -Example 'gh-l-org my-team'
-Register-PFCommand -Name 'gh-l-status' -Section '🐙 GITHUB BROWSER' -Synopsis 'show the stored GitHub token status'
-Register-PFCommand -Name 'gh-l-reset'  -Section '🐙 GITHUB BROWSER' -Synopsis 'forget the stored GitHub token'
+function Show-PFGitHubBrowser {
+    param([int]$Count = 10, [string]$Token, [switch]$Oldest, [string]$OlderThan,
+          [switch]$Pages, [switch]$Review, [string]$Org)
+    if ($Count -lt 1) { Write-PFFailure 'Count must be positive.' -Hint 'Try github 50 --oldest.'; return }
+    # Validate before authentication/network access.
+    if ($OlderThan) { $null = Get-PFGitHubAgeCutoff $OlderThan }
+    $resolvedToken = Get-PFGitHubToken -Token $Token
+    if (-not $resolvedToken) { return }
+    $headers = New-PFGitHubHeaders $resolvedToken
+    $listing = Get-PFGitHubListing -Headers $headers -Count $Count -Oldest:$Oldest -OlderThan $OlderThan -Pages:$Pages -Org $Org
+    if ($null -eq $listing) { return }
+    $models = @($listing.Models)
+    if (-not $models.Count) {
+        if ($listing.Complete) { Write-PFNothingFound 'No repositories match this review.' -Hint 'Try github stale without filters.' }
+        else { Write-PFWarning 'No matches in the incomplete repository list. Retry before drawing a conclusion.' }
+        return
+    }
+    $pagesCount = @($models | Where-Object { $_.PagesEnabled -eq $true }).Count
+    $unknownCount = @($models | Where-Object { $_.PagesState -match 'unknown|unavailable' }).Count
+    $order = if ($Oldest) { 'oldest last push first' } else { 'newest last push first' }
+    Write-Host "Showing $($models.Count) of $($listing.Total) fetched repositories · $order · $pagesCount Pages-enabled · $unknownCount Pages unknown/unavailable" -ForegroundColor Cyan
+    Write-Host 'Old does not mean redundant. Last push does not measure site traffic or external usage.' -ForegroundColor DarkGray
+    $now = [datetime]::UtcNow
+    $interactive = Test-PFGitHubInteractive
+    $usePicker = $interactive -and [bool](Get-Command fzf -ErrorAction SilentlyContinue)
+    $choices = @()
+    foreach ($model in $models) {
+        $activity = ''
+        if (-not $Review -and $usePicker) {
+            $dayCount = _GhL-CommitCount -RepoFullName $model.FullName -Since $now.AddDays(-1).ToString('yyyy-MM-ddTHH:mm:ssZ') -Headers $headers
+            $weekCount = _GhL-CommitCount -RepoFullName $model.FullName -Since $now.AddDays(-7).ToString('yyyy-MM-ddTHH:mm:ssZ') -Headers $headers
+            $dayText = if ($null -eq $dayCount) { '?' } else { $dayCount }
+            $weekText = if ($null -eq $weekCount) { '?' } else { $weekCount }
+            $activity = "commits 24h:$dayText 1w:$weekText"
+        }
+        $row = Format-PFGitHubRow -Model $model -Now $now -Activity $activity
+        $choices += "$($model.Key)`t$row"
+        if (-not $usePicker) {
+            Write-Host $row
+            if ($model.PagesUrl) { Write-Host "  Site: $(Format-PFGitHubText $model.PagesUrl)" -ForegroundColor DarkGray }
+            if ($model.PagesError) { Write-Host "  Pages details unavailable: $($model.PagesError)" -ForegroundColor Yellow }
+        }
+    }
+    if (-not $usePicker) {
+        Write-Host 'Use an interactive terminal with fzf to select a repository and clone/open it.' -ForegroundColor DarkGray
+        return
+    }
+    $selection = $choices | fzf --reverse --border --no-sort --height=25 --delimiter="`t" --with-nth=2.. `
+        --prompt='GitHub repositories: ' --header='Repository | Last push | Idle | Pages | Created / context · Enter: actions · Esc: cancel'
+    $pickerExit = $LASTEXITCODE
+    if ($pickerExit -eq 130) { Write-PFCancelled; return }
+    if ($pickerExit -eq 1) { Write-PFNothingFound 'No repository matched what you typed.'; return }
+    if ($pickerExit -ne 0) { Write-PFFailure "Repository picker failed (exit $pickerExit)."; return }
+    if (-not $selection) { Write-PFFailure 'Repository picker returned no selection.'; return }
+    $key = ([string]$selection -split "`t", 2)[0]
+    $selected = @($models | Where-Object { $_.Key -ceq $key })
+    if ($selected.Count -ne 1) { Write-PFFailure 'Could not uniquely resolve the selected repository.'; return }
+    Show-PFGitHubRepositoryAction -Model $selected[0] -Headers $headers -Review:$Review -OrgModels $models -Org $Org
+}
+
+function Invoke-PFGitHubOrgBrowser {
+    param([string]$Org, [int]$Count = 100)
+    if ($Count -lt 1) { throw 'Count must be positive. Try github org my-team --count 50.' }
+    if ($Org -and $Org -notmatch '^[A-Za-z0-9][A-Za-z0-9-]*$') { throw 'Use an organization name, such as github org my-team.' }
+    $resolvedToken = Get-PFGitHubToken
+    if (-not $resolvedToken) { return }
+    $headers = New-PFGitHubHeaders $resolvedToken
+    if (-not $Org) {
+        if (-not (Test-PFGitHubInteractive) -or -not (Get-Command fzf -ErrorAction SilentlyContinue)) {
+            Write-PFFailure 'Specify an organization in this terminal.' -Hint 'Try github org my-team.'; return
+        }
+        $organizations = @(); $page = 1
+        try {
+            do {
+                $batch = @(Invoke-RestMethod -Uri "https://api.github.com/user/orgs?per_page=100&page=$page" -Headers $headers -ErrorAction Stop)
+                $organizations += @($batch | Where-Object { $null -ne $_ }); $page++
+            } while ($batch.Count -eq 100)
+        } catch { Write-PFFailure 'Could not fetch organizations.' -Hint (Get-PFGitHubError $_); return }
+        if (-not $organizations.Count) { Write-PFNothingFound 'No organizations found.'; return }
+        $selection = $organizations | ForEach-Object { $_.login } | fzf --reverse --height=20 --prompt='Organization: '
+        $pickerExit = $LASTEXITCODE
+        if ($pickerExit -eq 130) { Write-PFCancelled; return }
+        if ($pickerExit -eq 1) { Write-PFNothingFound 'No organization matched.'; return }
+        if ($pickerExit -ne 0) { Write-PFFailure "Organization picker failed (exit $pickerExit)."; return }
+        if ($selection -notin $organizations.login) { Write-PFFailure 'Could not resolve the organization.'; return }
+        $Org = $selection
+    }
+    # Organization names also become clone-all destination directory names.
+    if ($Org -notmatch '^[A-Za-z0-9][A-Za-z0-9-]*$') { throw 'Use an organization name, such as github org my-team.' }
+    Show-PFGitHubBrowser -Count $Count -Token $resolvedToken -Org $Org
+}

@@ -267,9 +267,9 @@ if ($preserved.Count -gt 0 -and (Test-Path $newSettings)) {
     }
 }
 
-# Runtime docs. `git-rl -h` READS docs/git-rl/ at runtime to print the setup prompt and
+# Runtime docs. `release setup` READS docs/git-rl/ at runtime to print the setup prompt and
 # write the guide into a user's project — so these are not documentation, they are a
-# dependency. Without them, git-rl -h has to fall back to fetching from GitHub, which
+# dependency. Without them, release setup has to fall back to fetching from GitHub, which
 # fails offline. The rest of docs/ (logs, plans) is deliberately NOT installed.
 $docsSrc = Join-Path $source 'docs/git-rl'
 if (Test-Path $docsSrc) {
@@ -279,7 +279,7 @@ if (Test-Path $docsSrc) {
     Copy-Item "$docsSrc/*" $docsDst -Recurse -Force
 
     Get-ChildItem $docsDst -Recurse -File | ForEach-Object { $installedFiles.Add($_.FullName) }
-    Write-Host "   ✅ docs/git-rl/  (git-rl -h reads these at runtime)" -ForegroundColor Green
+    Write-Host "   ✅ docs/git-rl/  (release setup reads these at runtime)" -ForegroundColor Green
 }
 
 # uninstall.ps1 ships alongside so the profile can remove itself later

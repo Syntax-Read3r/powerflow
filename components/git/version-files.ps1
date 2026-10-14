@@ -4,7 +4,7 @@
 # Domain   : Git
 # File     : components/git/version-files.ps1
 # Purpose  : Detect, read and write a project's NATIVE version file, whatever the
-#            language. Lets git-rl work in any repository, not just PowerFlow's.
+#            language. Lets release work in any repository, not just PowerFlow's.
 # Functions: Get-ProjectVersionSource, Get-ProjectVersion, Set-ProjectVersion,
 #            Update-ProjectVersion, Test-VersionDrift
 # Depends  : none (pure text handling — platform-agnostic)
@@ -12,7 +12,7 @@
 #
 # WHY THIS EXISTS
 #
-# git-rl used to read ONE hardcoded location:
+# release used to read ONE hardcoded location:
 #
 #     config/PowerFlow.settings.ps1  ->  $script:POWERFLOW_VERSION = "X.Y.Z"
 #

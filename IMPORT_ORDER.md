@@ -86,7 +86,9 @@ Shared domain logic, loaded in dependency order:
    `Create-RemoteRepository`. And `version-files.ps1` **before** `release.ps1`, because
    `git-rl` calls `Get-ProjectVersion` to find the project's version file. The rest are
    standalone.
-6. **github** — after git; `gh-l` may `git clone` after a selection.
+6. **github** — after git; `repositories` → `browser` → `review` → `command`.
+   Shared authentication/data precedes browser actions, review delegates to that browser,
+   and the thin `github` dispatcher loads last. Legacy `gh-l` wrappers use the same flow.
 7. **terminal** — after navigation, so `open-nt` reports the correct current directory.
 8. **projects** — `create-next.ps1` reads DB settings from Stage 1.
 9. **system** — standalone; nothing depends on them.

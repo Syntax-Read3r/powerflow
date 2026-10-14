@@ -342,30 +342,52 @@ Test-Path .git
 cd "C:\path\to\your\git\repo"
 ```
 
-### ❌ GitHub Integration (gh-l) Issues
+### ❌ GitHub Integration (`github`) Issues
 
 **Symptoms:**
-- `gh-l` shows authentication errors
+- `github` shows authentication errors
 - Can't access private repositories
 
 **Solutions:**
 ```powershell
 # Check if token is saved
-gh-l-status
+github token status
 
 # Reset saved token
-gh-l-reset
+github token reset
 
 # Generate new GitHub token:
 # 1. Go to https://github.com/settings/tokens
 # 2. Generate new token (classic)
 # 3. Select 'repo' scope
-# 4. Run gh-l and enter token when prompted
+# 4. Run github and enter token when prompted
 
 # Test API access
 $headers = @{ "Authorization" = "Bearer YOUR_TOKEN" }
 Invoke-RestMethod -Uri "https://api.github.com/user" -Headers $headers
 ```
+
+`gh-l` and its token/organization companions remain compatibility commands. `gh` is still the
+GitHub CLI. If another command already uses `github`, PowerFlow reports the collision and
+leaves it in place; resolve the conflicting command and reload the profile. You can still use
+`gh-l`, including `gh-l stale`, in the meantime.
+
+**Pages details unavailable:** A fine-grained token may need **Pages: read** on the selected
+repositories. Public Pages metadata may be accessible without authentication. Check token
+access and retry; a 403 can also mean a rate limit. A 404 can mean inaccessible metadata,
+not that a known Pages-enabled repository is safe to remove. PowerFlow keeps the enabled
+marker, shows the uncertainty, and does not invent a site URL from the repository's name.
+
+**Old projects still host sites:** `github stale --pages` includes project sites and custom
+domains as well as account `github.io` sites. Last push does not measure visitors or external
+usage. Build status describes GitHub's build record, not current reachability.
+
+**Report instead of picker:** Use an interactive terminal with fzf to select clone/open actions.
+Redirected input/output and a missing fzf produce a report without interactive prompts.
+If repository fetching fails partway, results are labeled incomplete; retry before treating
+the review as an account-wide inventory. `github token reset` removes the saved Windows
+credential only and leaves an environment token unchanged. Linux has no persistent token
+store in this feature; use `GITHUB_TOKEN` or the hidden prompt in an interactive terminal.
 
 ---
 

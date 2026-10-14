@@ -1,6 +1,6 @@
-# `git-rl` — AI Setup Prompt
+# `release` — AI Setup Prompt
 
-> This file is what `git-rl -h` prints. Copy **everything inside the fenced block below**
+> This file is what `release setup` prints. Copy **everything inside the fenced block below**
 > and paste it into an AI coding assistant (Claude Code, Cursor, Copilot Chat …) that is
 > open in the repository you want to set up.
 >
@@ -9,26 +9,26 @@
 ---
 
 ```text
-You are setting up this repository so that the `git-rl` release command works in it.
+You are setting up this repository so that the `release` release command works in it.
 
-`git-rl` is an interactive release tool from PowerFlow (a PowerShell profile). It does NOT
+`release` is an interactive release tool from PowerFlow (a PowerShell profile). It does NOT
 exist in this repo — it runs on my machine. Your job is to make THIS repository satisfy the
-contract `git-rl` expects, and to build the GitHub Actions pipeline it triggers.
+contract `release` expects, and to build the GitHub Actions pipeline it triggers.
 
 Do not install PowerFlow here. Do not add PowerShell as a project dependency. You are only
 creating a version file, a CHANGELOG, and CI workflows.
 
 ================================================================================
-PART 0 — WHAT git-rl DOES (so you understand what you are wiring up)
+PART 0 — WHAT release DOES (so you understand what you are wiring up)
 ================================================================================
 
-When I run `git-rl` in this repo, it will:
+When I run `release` in this repo, it will:
 
   1. Verify it is inside a git repository.
   2. Detect the project's version file(s) — package.json, pyproject.toml, Cargo.toml,
      *.csproj, build.gradle, VERSION, or config/PowerFlow.settings.ps1 — and read the
-     current version from them. If none exists, fall back to the latest git tag, then
-     to 0.0.0.
+     current version from them. If none exists, fall back to the latest git tag. With
+     neither a version source nor a v* tag, report the missing setup and stop.
   3. Warn if several version files DISAGREE, and offer to bring them into sync.
   4. Show an fzf picker: patch / minor / major / custom.
   5. Prompt me for a one-line release description.
@@ -48,7 +48,7 @@ PART 1 — THE VERSION FILE
 
 GOOD NEWS: you almost certainly do not need to do anything here.
 
-`git-rl` reads the project's OWN version file. It detects and rewrites any of these,
+`release` reads the project's OWN version file. It detects and rewrites any of these,
 automatically:
 
     package.json                  "version": "X.Y.Z"          (Node)
@@ -64,10 +64,10 @@ Notes:
     PRESERVED. It does not reserialise your package.json.
   * A `version` under [dependencies] or a nested "version" key is NOT touched — only the
     project's own version.
-  * If SEVERAL of these exist (e.g. package.json AND a VERSION file), git-rl updates
+  * If SEVERAL of these exist (e.g. package.json AND a VERSION file), release updates
     ALL of them together and warns you if they currently disagree. Version drift is
     handled at the source; you do NOT need a CI check to police it.
-  * If NONE exists, git-rl falls back to the latest git tag and rewrites nothing. That
+  * If NONE exists, release falls back to the latest git tag and rewrites nothing. That
     works, but the version then lives nowhere in the source tree.
 
 SO: if this project already has one of the files above, YOU ARE DONE with this part.
@@ -110,7 +110,7 @@ Example:
     ## [1.1.0] - 2026-01-15
     ...
 
-Seed it with the project's current version so the first `git-rl` run has something to
+Seed it with the project's current version so the first `release` run has something to
 extract.
 
 ================================================================================
@@ -131,7 +131,7 @@ them and adapt, do not write YAML from memory:
 Required behaviour of each:
 
 --- release.yml (ORCHESTRATOR) ------------------------------------------------
-  * Trigger:  on: push: tags: ['v*']          <-- MANDATORY. git-rl pushes a v* tag.
+  * Trigger:  on: push: tags: ['v*']          <-- MANDATORY. release pushes a v* tag.
   * permissions: contents: read  (the publish job elevates to write)
   * Calls, in order:
       validate  ->  (build jobs in parallel)  ->  publish  ->  notify
@@ -143,7 +143,7 @@ Required behaviour of each:
   * Parses the version out of the tag:  $version = $tagName -replace '^v',''
   * Outputs `version` and `tag_name` for the downstream jobs.
   * MUST FAIL the release if the tag disagrees with the project's version file.
-    git-rl writes both, so they should always agree — this catches a hand-edited tag or
+    release writes both, so they should always agree — this catches a hand-edited tag or
     a bad merge, which is exactly when you want the release to stop.
   * Add whatever project-specific gates make sense here (lint, typecheck, unit tests).
     Anything that must not ship broken belongs in this job.
@@ -177,7 +177,7 @@ PART 4 — REPOSITORY PREREQUISITES
   * A GitHub remote named `origin`. Verify: `git remote get-url origin`
   * Actions enabled, and Settings > Actions > General > Workflow permissions set to
     "Read and write permissions" (otherwise the publish job cannot create a release).
-  * `fzf` must be installed on MY machine (git-rl uses it for the bump picker). That is
+  * `fzf` must be installed on MY machine (release uses it for the bump picker). That is
     my problem, not yours — but mention it if you notice it missing.
   * Tags must be semver with a leading v: `v1.2.3`. Not `1.2.3`, not `v1.2`.
 
@@ -188,7 +188,7 @@ PART 5 — VERIFY BEFORE YOU TELL ME IT IS DONE
 Do not report success until you have actually checked these. Run the commands.
 
   [ ] `git remote get-url origin` resolves to a GitHub URL.
-  [ ] The project has a version file git-rl understands (see Part 1), OR you have told me
+  [ ] The project has a version file release understands (see Part 1), OR you have told me
       plainly that it does not and the tag will carry the version.
   [ ] If SEVERAL version files exist, their numbers AGREE right now.
   [ ] CHANGELOG.md has a `## [X.Y.Z]` section for the current version.
@@ -211,7 +211,7 @@ by hand if the tooling ever goes away. It must cover:
   * The exact file(s) that hold the version, and how they stay in sync.
   * The CHANGELOG format contract (and that CI parses it).
   * What each workflow does and in what order.
-  * The manual equivalent of `git-rl`, as copy-pasteable commands:
+  * The manual equivalent of `release`, as copy-pasteable commands:
 
         # 1. bump the version file(s) by hand
         # 2. update CHANGELOG.md: ## [X.Y.Z] - Unreleased

@@ -1,14 +1,18 @@
-# `git-rl` — Release Tooling
+# `release` — Release Tooling
 
-`git-rl` (alias of `git-release`) is PowerFlow's one-command release: it bumps the version,
+`release` is PowerFlow's release preparation command: it bumps the version,
 commits, tags, pushes the tag, and the tag push triggers the CI pipeline that builds and
 publishes the GitHub Release.
 
 It only works in a repository that is **set up for it**. This directory explains that setup.
 
+Use `release help` for read-only usage, and `release setup` to confirm a target folder and
+deliver its setup guide. `git-rl` and `git-release` remain compatibility commands; their
+old help flags still open setup. Runtime docs retain the `docs/git-rl/` installation path.
+
 | File | Purpose |
 |---|---|
-| [SETUP-PROMPT.md](SETUP-PROMPT.md) | The setup prompt. `git-rl -h` copies it to your clipboard and embeds it in the guide it writes into your project. |
+| [SETUP-PROMPT.md](SETUP-PROMPT.md) | The setup prompt. `release setup` copies it to your clipboard and embeds it in the guide it writes into your project. |
 | [../git-rl-project-setup.md](../git-rl-project-setup.md) | The deep technical reference — every workflow, field by field. |
 | This file | What the setup *is*, and how to run a release **by hand** if the tooling is unavailable. |
 
@@ -17,7 +21,7 @@ It only works in a repository that is **set up for it**. This directory explains
 ## Quick start
 
 ```powershell
-git-rl -h        # confirm the folder, write docs/git-release-help.md into it, copy the prompt
+release setup        # confirm the folder, write docs/release-help.md into it, copy the prompt
 ```
 
 Paste it into an AI assistant that is open in the target repository. It will create the
@@ -25,13 +29,13 @@ version file, the CHANGELOG, and the CI pipeline, then verify them.
 
 ---
 
-## What `git-rl` actually does
+## What `release` actually does
 
 ```
-git-rl
+release
   │
   ├─ 1. detect the project's version file(s) and read the current version
-  │      (falls back to the latest git tag, then 0.0.0)
+  │      (falls back to the latest git tag; without either, points at release setup)
   ├─ 2. warn if several version files DISAGREE, and offer to sync them
   ├─ 3. fzf picker → patch / minor / major / custom
   ├─ 4. prompt for a one-line description
@@ -51,7 +55,7 @@ Everything downstream hangs off the last step. The tag is the trigger; nothing e
 
 ### 1. A version source
 
-`git-rl` reads **your project's own version file**. It detects and rewrites any of these:
+`release` reads **your project's own version file**. It detects and rewrites any of these:
 
 | Project | File | Pattern |
 |---|---|---|
@@ -73,7 +77,7 @@ and reindent the whole file, which is an unacceptable diff for a version bump.
 key inside `package.json`, is never touched — only the project's own version.
 
 > ✅ **Version drift is handled at the source.** If a project has *several* version files
-> (say `package.json` **and** a `VERSION` file), `git-rl` updates **all of them together**
+> (say `package.json` **and** a `VERSION` file), `release` updates **all of them together**
 > and warns you before bumping if they currently disagree. You do not need a CI check to
 > police it — though `release-validate.yml` still asserts the tag matches, which catches a
 > hand-edited tag or a bad merge.
@@ -107,12 +111,12 @@ on:
 
 ## Running a release by hand
 
-If `git-rl` is unavailable, this is the whole thing:
+If `release` is unavailable, this is the whole thing:
 
 ```bash
 # 1. Bump EVERY version file the project has — package.json, pyproject.toml,
 #    Cargo.toml, *.csproj, build.gradle, VERSION, config/PowerFlow.settings.ps1.
-#    If you miss one, they drift. (git-rl does all of them for you.)
+#    If you miss one, they drift. (release does all of them for you.)
 
 # 2. Add the CHANGELOG section
 #    ## [1.2.0] - Unreleased

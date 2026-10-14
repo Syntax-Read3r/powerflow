@@ -202,6 +202,10 @@ The moment an issue is fixed, the agent must:
 
 ## 5. Behaviour Rules for the Agent
 
+- **Test the changed work and its direct dependencies.** Do not run every project suite
+  or investigate unrelated failures unless the human explicitly requests broader testing.
+  Apply this scope to release verification as well. This file must be updated whenever
+  a new rule is given.
 - **Check the current date** before writing to `docs/log/`. Compute the day-of-week
   abbreviation from the actual date — never copy it from an existing folder name.
   Create new folders as needed.
@@ -525,23 +529,23 @@ Next version    : vA.B.C
 
 Before releasing:
   1. Review the [A.B.C] entry in CHANGELOG.md and adjust wording if needed.
-  2. Run: git-rl
+  2. Run: release
   3. In the fzf picker, select: <patch|minor|major>
-     → git-rl will update config/PowerFlow.settings.ps1, commit, tag vA.B.C, push, and trigger CI.
+     → release will update config/PowerFlow.settings.ps1, commit, tag vA.B.C, push, and trigger CI.
 ---
 ```
 
 ### Notes
 
-- `git-rl` is **fully interactive** — there is no CLI flag for bump type. The agent
+- `release` is **fully interactive** — there is no CLI flag for bump type. The agent
   cannot pre-select the option. Always tell the user which option to pick.
-- The agent must NOT run `git-rl` itself. Release commits must be initiated by the human.
+- The agent must NOT run `release` itself. Release commits must be initiated by the human.
 - If a session contains both a bug fix and a new feature, use the higher bump (minor).
 - The release prompt is **in addition to** the normal session log — do not skip the log.
 
 ### Post-release verification (mandatory)
 
-After the human runs `git-rl`, the release is NOT complete until the following
+After the human runs `release`, the release is NOT complete until the following
 is confirmed — do not close the session without verifying:
 
 1. Open `https://github.com/Syntax-Read3r/powerflow/releases` — the new version
@@ -563,7 +567,7 @@ advance and users will continue installing the previous version.
   the header to `## [X.Y.Z] - YYYY-MM-DD` (actual release date).
 - The generic `## [Unreleased]` section at the top is only for changes not yet
   assigned to a version number. Move its contents into the versioned section
-  before running `git-rl`.
+  before running `release`.
 - **Do NOT add installation commands to CHANGELOG entries.** The CI workflow
   (`release-generate-scripts.yml`) automatically appends a `## 📦 Installation`
   section with the versioned `irm` and `curl` one-liners to every `RELEASE_NOTES.md`

@@ -33,6 +33,7 @@ $script:PF_HelpSections = @(
     '🧭 SMART NAVIGATION & BOOKMARKS'
     '🎯 ENHANCED GIT WORKFLOW'
     '🐙 GITHUB BROWSER'
+    '🚀 RELEASE WORKFLOWS'
     '📂 ENHANCED FILE OPERATIONS'
     '🎓 LEARN LINUX'
     '🐚 BASH BUILTINS'
@@ -56,6 +57,7 @@ $script:PF_HelpChapters = @(
     @{ Title = '🧭 NAVIGATION';     Sections = @('🧭 SMART NAVIGATION & BOOKMARKS') }
     @{ Title = '📂 FILES';          Sections = @('📂 ENHANCED FILE OPERATIONS') }
     @{ Title = '🎯 GIT & GITHUB';   Sections = @('🎯 ENHANCED GIT WORKFLOW', '🐙 GITHUB BROWSER') }
+    @{ Title = '🚀 RELEASES';       Sections = @('🚀 RELEASE WORKFLOWS') }
     @{ Title = '🎓 LEARN LINUX';    Sections = @('🎓 LEARN LINUX', '🐚 BASH BUILTINS') }
     @{ Title = '🖥️ SYSTEM & DISK';  Sections = @('🖥️ MACHINE HEALTH', '🐳 CONTAINERS', '⚡ PROXMOX VE', '🌐 SSH SERVERS', '🗄️ DISK RECLAIM') }
     @{ Title = '⚙️ SETUP & CONFIG'; Sections = @('⚙️ CONFIGURATION & SETTINGS', '🪟 TERMINAL TABS', '🧱 PROJECT GENERATORS', '🐧 WSL (WINDOWS-ONLY)') }

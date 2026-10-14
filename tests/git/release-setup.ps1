@@ -1,16 +1,16 @@
 # ==============================================================================
-# git-rl in a project that was never set up: report and point, never write, never lie
+# release in a project that was never set up: report and point, never write, never lie
 # ==============================================================================
-# Reported from a real machine. Running `git-rl` in a repo with no version file and no
+# Reported from a real machine. Running `release` in a repo with no version file and no
 # v* tag printed a small warning, dropped into the bump-type picker anyway, and — when the
 # user escaped a release that could never have worked — reported "❌ Release cancelled".
 # That is false twice: no release was possible, so nothing was cancelled, and the message
 # blamed the user for backing out.
 #
 # The correct behaviour, per the owner: say the project is not set up and point at
-# `git-rl -h`, which already owns delivering the walkthrough AND asks "are you in your
+# `release setup`, which already owns delivering the walkthrough AND asks "are you in your
 # project folder?" before writing a byte. A first fix wrote the guide straight into the
-# current repo; that was rejected because bare `git-rl` may be run in any repo — a clone,
+# current repo; that was rejected because bare `release` may be run in any repo — a clone,
 # a scratch checkout — and creating files there as the side effect of a status query
 # assumes it is the project the user wants a pipeline in.
 #
@@ -31,6 +31,7 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 # ── stubs, defined AFTER the real file so they win ────────────────────────────
 function Register-PFCommand { }
 . (Join-Path $root 'components/shared/flags.ps1')
+. (Join-Path $root 'components/shared/outcome.ps1')
 . (Join-Path $root 'components/git/release.ps1')
 
 $script:POWERFLOW_REPO = 'example/powerflow'
@@ -40,7 +41,7 @@ function Get-ProjectVersion { param($RepoRoot)
     return [pscustomobject]@{ Version = '0.0.0'; Sources = @(); From = 'default' } }
 
 # The guide content, canned: no test may depend on the network.
-function Get-GitReleaseDocs {
+function Get-PFReleaseDocs {
     return [pscustomobject]@{ Prompt = 'CANNED SETUP PROMPT'; Manual = 'CANNED MANUAL' } }
 $script:clipboard = $null
 function Copy-ToClipboard { param($Text) $script:clipboard = $Text }
@@ -50,7 +51,7 @@ function Copy-ToClipboard { param($Text) $script:clipboard = $Text }
 function Read-Host { param($Prompt) throw "TRIPWIRE: nothing may prompt ($Prompt)" }
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  A · `git-rl -h`, answered "yes": deliver, and SAY the delivery already happened
+#  A · `release setup`, answered "yes": deliver, and SAY the delivery already happened
 # ══════════════════════════════════════════════════════════════════════════════
 # Second field report on this command. The guide was written correctly, but the
 # clipboard-led messaging ("paste the prompt into your AI assistant") read as though some
@@ -59,7 +60,7 @@ function Read-Host { param($Prompt) throw "TRIPWIRE: nothing may prompt ($Prompt
 # in-repo assistant route first, and spell out that "paste" means Ctrl+V.
 #
 # fzf is stubbed to pick the first choice — the "yes" row — so the interactive flow runs
-# headless with the REAL Write-GitReleaseGuide underneath.
+# headless with the REAL Write-PFReleaseGuide underneath.
 function fzf { $input | Select-Object -First 1 }
 
 $sandboxA = Join-Path ([IO.Path]::GetTempPath()) "pf-rl-h-$([guid]::NewGuid().ToString('N'))"
@@ -67,10 +68,10 @@ New-Item -ItemType Directory -Path $sandboxA | Out-Null
 Push-Location $sandboxA
 try {
     git init --quiet 2>$null
-    $out = @(Show-GitReleaseSetupPrompt 6>&1 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $out = @(release setup 6>&1 2>&1 | ForEach-Object { "$_" }) -join "`n"
 
-    Ok (Test-Path (Join-Path $sandboxA 'docs/git-release-help.md')) `
-        'answering yes must write docs/git-release-help.md'
+    Ok (Test-Path (Join-Path $sandboxA 'docs/release-help.md')) `
+        'answering yes must write docs/release-help.md'
     Ok ($script:clipboard -eq 'CANNED SETUP PROMPT') 'the AI prompt must land on the clipboard'
 
     Ok ($out -match 'walkthrough is in your project') `
@@ -79,7 +80,7 @@ try {
         'the in-repo assistant route must say nothing needs pasting'
     Ok ($out -match 'Claude Code|IN this repo') 'the in-repo assistant route must come first and be named'
     Ok ($out -match 'Ctrl\+V') '"paste" must be spelled out as Ctrl+V for the web-chat route'
-    Ok ($out -match 'git-rl') 'must end by pointing back at git-rl for the first release'
+    Ok ($out -match 'release') 'must end by pointing back at release for the first release'
     Ok ($out -notmatch 'paste it into your assistant now') `
         'the old instruction-shaped clipboard line must not come back'
 }
@@ -89,16 +90,16 @@ finally {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  B · bare `git-rl` in a project that was never set up
+#  B · bare `release` in a project that was never set up
 # ══════════════════════════════════════════════════════════════════════════════
 # TRIPWIRES. Reaching any of these is a regression:
 #   fzf                  -> the bump picker opened for an impossible release
 #   Read-Host            -> something prompted during a status report
-#   Write-GitReleaseGuide -> bare git-rl wrote into a repo nobody confirmed as the target
+#   Write-PFReleaseGuide -> bare release wrote into a repo nobody confirmed as the target
 function fzf { throw 'TRIPWIRE: the bump picker must not open in a project that is not set up' }
 function Read-Host { param($Prompt) throw "TRIPWIRE: nothing may prompt ($Prompt)" }
-function Write-GitReleaseGuide { param($ProjectRoot)
-    throw 'TRIPWIRE: bare git-rl must not write the guide — only git-rl -h may, after asking' }
+function Write-PFReleaseGuide { param($ProjectRoot)
+    throw 'TRIPWIRE: bare release must not write the guide — only release setup may, after asking' }
 
 # ── a real, empty git repo ────────────────────────────────────────────────────
 $sandbox = Join-Path ([IO.Path]::GetTempPath()) "pf-rl-setup-$([guid]::NewGuid().ToString('N'))"
@@ -107,13 +108,13 @@ Push-Location $sandbox
 try {
     git init --quiet 2>$null
 
-    # ── no guide present: report, and point at git-rl -h ──────────────────────
-    $out = @(Invoke-GitReleaseCommand 6>&1 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    # ── no guide present: report, and point at release setup ──────────────────────
+    $out = @(release 6>&1 2>&1 | ForEach-Object { "$_" }) -join "`n"
 
     Ok ($out -notmatch 'Release cancelled') 'must not claim a release was cancelled'
-    Ok ($out -match "isn't set up for git-rl") 'must say plainly that the project is not set up'
+    Ok ($out -match "isn't set up for release") 'must say plainly that the project is not set up'
     Ok ($out -match 'version source') 'must name what a release needs'
-    Ok ($out -match 'git-rl -h') 'must point at git-rl -h, the flow that asks before writing'
+    Ok ($out -match 'release setup') 'must point at release setup, the flow that asks before writing'
 
     # NOTHING may have been created. The first fix made a docs/ directory and a guide file
     # in whatever repo the user stood in; both are asserted away.
@@ -121,18 +122,26 @@ try {
     Ok (@(Get-ChildItem $sandbox -Force | Where-Object { $_.Name -ne '.git' }).Count -eq 0) `
         'must not create any file in the repo — this is a status report, not a delivery'
 
-    # ── guide already present (delivered by git-rl -h earlier): point at IT ───
+    # ── guide already present (delivered by release setup earlier): point at IT ───
     New-Item -ItemType Directory -Path (Join-Path $sandbox 'docs') | Out-Null
-    Set-Content -Path (Join-Path $sandbox 'docs/git-release-help.md') -Value 'existing guide'
-    $before = (Get-Item (Join-Path $sandbox 'docs/git-release-help.md')).LastWriteTimeUtc
+    Set-Content -Path (Join-Path $sandbox 'docs/release-help.md') -Value 'existing guide'
+    $before = (Get-Item (Join-Path $sandbox 'docs/release-help.md')).LastWriteTimeUtc
 
-    $again = @(Invoke-GitReleaseCommand 6>&1 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $again = @(Invoke-PFRelease 6>&1 2>&1 | ForEach-Object { "$_" }) -join "`n"
 
     Ok ($again -match 'already in this project') 'with the guide present, point at the file'
-    Ok ($again -notmatch 'git-rl -h') 'must not send the user to rewrite a guide they already have'
+    Ok ($again -notmatch 'release setup') 'must not send the user to rewrite a guide they already have'
     Ok ($again -notmatch 'Release cancelled') 'still no cancellation claim'
-    Ok (((Get-Item (Join-Path $sandbox 'docs/git-release-help.md')).LastWriteTimeUtc) -eq $before) `
+    Ok (((Get-Item (Join-Path $sandbox 'docs/release-help.md')).LastWriteTimeUtc) -eq $before) `
         'the existing guide must not be touched'
+
+    # Older installed profiles generated this name. Keep recognizing it without writing.
+    Move-Item -LiteralPath (Join-Path $sandbox 'docs/release-help.md') -Destination (Join-Path $sandbox 'docs/git-release-help.md')
+    $legacyBefore = (Get-Item (Join-Path $sandbox 'docs/git-release-help.md')).LastWriteTimeUtc
+    $legacyOut = @(release 6>&1 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    Ok ($legacyOut -match 'already in this project' -and $legacyOut -match 'git-release-help.md') 'legacy generated guide remains recognized'
+    Ok (-not (Test-Path (Join-Path $sandbox 'docs/release-help.md'))) 'bare release must not migrate or rewrite an old guide'
+    Ok (((Get-Item (Join-Path $sandbox 'docs/git-release-help.md')).LastWriteTimeUtc) -eq $legacyBefore) 'legacy guide remains untouched'
 }
 finally {
     Pop-Location
@@ -160,7 +169,7 @@ Push-Location $sandbox2
 try {
     git init --quiet 2>$null
     $reachedPicker = $false
-    try { $null = Invoke-GitReleaseCommand 6>$null 2>$null }
+    try { $null = Invoke-PFRelease 6>$null 2>$null }
     catch { $reachedPicker = ($_.Exception.Message -match 'bump picker') }
     Ok $reachedPicker 'a set-up project must proceed to the bump picker, not the walkthrough'
 }
@@ -169,4 +178,4 @@ finally {
     Remove-Item $sandbox2 -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host "  git-rl setup path: $assertions assertions passed" -ForegroundColor Green
+Write-Host "  release setup path: $assertions assertions passed" -ForegroundColor Green

@@ -147,7 +147,10 @@ $_pf_components = @(
     "components\git\release.ps1"
     "components\git\reset.ps1"
 
+    "components\github\repositories.ps1"
     "components\github\browser.ps1"
+    "components\github\review.ps1"
+    "components\github\command.ps1"
 
     "components\terminal\tabs.ps1"
 

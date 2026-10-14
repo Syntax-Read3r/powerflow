@@ -161,16 +161,16 @@ jobs:
           test -f "$HOME/.config/powershell/.powerflow-manifest.json" \
             || { echo "::error::manifest was not written"; exit 1; }
 
-          # `git-rl -h` READS these at runtime to write a setup guide into a user's
+          # `release setup` READS these at runtime to write a setup guide into a user's
           # project. They are a dependency, not documentation — install.ps1 originally
-          # copied only config/components/platform/windows-only, so git-rl -h found
+          # copied only config/components/platform/windows-only, so release setup found
           # nothing after a real install and had to fall back to a network fetch.
           test -f "$HOME/.config/powershell/docs/git-rl/SETUP-PROMPT.md" \
-            || { echo "::error::docs/git-rl/SETUP-PROMPT.md did not survive install — git-rl -h will break"; exit 1; }
+            || { echo "::error::docs/git-rl/SETUP-PROMPT.md did not survive install — release setup will break"; exit 1; }
           test -f "$HOME/.config/powershell/docs/git-rl/README.md" \
             || { echo "::error::docs/git-rl/README.md did not survive install"; exit 1; }
 
-          echo "✅ installed (including the git-rl runtime docs)"
+          echo "✅ installed (including the release runtime docs)"
 
       # Dependency install is where the real breakage hides: apt needs an index
       # refresh on a clean box, and starship/lsd are not in Ubuntu's repos at all,
@@ -229,7 +229,7 @@ jobs:
           # uses fzf, so this can never hang.
           $help = pwsh-h 6>&1 | Out-String
           if ($help -notmatch 'NAVIGATION' -or $help -notmatch 'Command Manual') { Write-Error "❌ pwsh-h did not render the manual"; exit 1 }
-          if ($help -notmatch '\bgit-rl\b' -or $help -notmatch '\bsrv\b') { Write-Error "❌ pwsh-h is missing registered commands"; exit 1 }
+          if ($help -notmatch '\brelease\b' -or $help -notmatch '\bsrv\b') { Write-Error "❌ pwsh-h is missing registered commands"; exit 1 }
           # The Linux-shadowing story is registry data now: del/mvf are Platform=Linux
           # entries and MUST appear in a Linux render.
           if ($help -notmatch '\bdel\b' -or $help -notmatch '\bmvf\b') { Write-Error "❌ pwsh-h is missing the Linux del/mvf entries"; exit 1 }

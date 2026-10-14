@@ -1,8 +1,12 @@
 # Release Checklist
 
-**Work through this top to bottom before every `git-rl`. Every item on this list exists
+**Work through this top to bottom before every `release`. Every item on this list exists
 because skipping it shipped (or nearly shipped) a real failure — the incident is named so
 nobody relitigates the item.**
+
+Apply the owner's testing scope: validate the changed work and its direct dependencies;
+do not run every suite or investigate unrelated failures unless explicitly requested.
+The behavior checks below apply to the features affected by the release.
 
 ---
 
@@ -90,10 +94,10 @@ nobody relitigates the item.**
   ```
   *Incident: v3.5.0's examples, CHANGELOG, README and commit message all carried the author's real username + server address. Scrubbing the tree and release bodies afterwards is easy; a pushed commit message is forever without a history rewrite.*
 
-- [ ] **`git status` is clean** of everything that belongs in the release — `git-rl`
+- [ ] **`git status` is clean** of everything that belongs in the release — `release`
   commits the tree, and the tag points wherever HEAD is.
   *Incident: the first v3.3.0 tag was cut before half the work was committed. It pointed at the file-destroying `touch`. The failing CI was the only thing that stopped it shipping.*
-- [ ] Run `git-rl` with a description (it becomes the commit message; the GitHub release
+- [ ] Run `release` with a description (it becomes the commit message; the GitHub release
   body comes from CHANGELOG automatically).
 
 ## 5 · After the tag — the release is not done until this passes

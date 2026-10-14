@@ -22,18 +22,25 @@
 
 ### 🚀 Streamlined Git Workflow
 
-- **One-command releases** - Update version and release with `git-a -vr` for instant GitHub releases
-- **Automated release generation** - GitHub Actions integration creates install scripts and release notes automatically
 - **Interactive commit workflow** - Beautiful fuzzy-search interface for staging, committing, and pushing changes
 - **Smart rollback system** - Create rollback branches from any commit with automatic naming and branch management
 - **Branch management** - Interactive branch switching, creation, and deletion with safety checks
 
+### 🚀 Release Automation
+
+- **Release preparation** - `release` interactively updates the project's version files, commits, tags, and pushes to trigger CI/CD. GitHub Actions then validates, builds, and publishes the release.
+- **Explicit setup** - `release setup` confirms the project folder, writes `docs/release-help.md`, and copies its AI setup prompt. Existing `docs/git-release-help.md` guides remain recognized; bare release never writes a setup guide.
+- **Read-only help** - `release help`, `release --help`, and `release -h` explain usage without prompting or changing anything.
+- **Compatibility** - `git-rl` and `git-release` keep working; their existing help flags still run setup. Commands appear in a dedicated release chapter of `pwsh-h`.
+
 ### 🔗 GitHub Integration
 
-- **Repository browser** - List, filter, and manage your GitHub repositories with commit activity statistics
-- **Secure token management** - GitHub tokens stored safely in Windows Credential Manager with automatic fallback
-- **One-click actions** - Clone, browse, or delete repositories directly from the terminal interface
-- **Rate limit handling** - Intelligent API usage with automatic cooldowns and error recovery
+- **Repository browser** - `github` opens recent repositories; `github 50 --oldest` reverses last-push order before limiting the list. The existing `gh-l` family remains compatible.
+- **Stale project review** - `github stale` reviews all accessible owned repositories, oldest first. `--older-than 180d|6m|1y` filters by last push; missing dates remain unknown. Age is a review signal, not proof of redundancy.
+- **Pages awareness** - Identify account sites, project sites, and custom domains from GitHub metadata. Show site URL, build status, and source when available; keep enabled sites marked when details cannot be fetched. `github stale --pages` selects enabled sites.
+- **Explicit actions** - Select a repository to inspect, clone, open, or copy its URL. Review has no delete/archive action; ordinary browsing retains the existing three-confirmation deletion flow. Organization browsing retains selected/all-repository cloning.
+- **Token management** - `github token status|reset` retains the Windows Credential Manager store. Both platforms accept `GITHUB_TOKEN`; Linux also accepts a hidden token prompt without persistent storage.
+- **Honest reports** - Missing fzf or redirected output produces a readable report. Partial fetching and permission/rate-limit failures are disclosed without printing tokens. Pages build status does not prove current site reachability.
 
 ### 🎨 Beautiful User Experience
 

@@ -1,15 +1,15 @@
-# `git-rl` Project Setup Guide
+# `release` Project Setup Guide
 
-> 🚀 **You probably want `git-rl -h` instead of reading this by hand.**
+> 🚀 **You probably want `release setup` instead of reading this by hand.**
 >
 > Run it from inside the project you want to set up. It writes
-> **`docs/git-release-help.md`** into that project and copies a ready-made AI setup prompt
+> **`docs/release-help.md`** into that project and copies a ready-made AI setup prompt
 > to your clipboard — paste it into any AI assistant and it builds the whole pipeline, then
 > verifies it.
 >
 > | | |
 > |---|---|
-> | [`docs/git-rl/SETUP-PROMPT.md`](git-rl/SETUP-PROMPT.md) | The prompt `git-rl -h` copies to your clipboard and embeds in the guide. |
+> | [`docs/git-rl/SETUP-PROMPT.md`](git-rl/SETUP-PROMPT.md) | The prompt `release setup` copies to your clipboard and embeds in the guide. |
 > | [`docs/git-rl/README.md`](git-rl/README.md) | The short manual — releasing by hand, aborting a bad release. |
 > | **This file** | The deep technical reference: every workflow, field by field. |
 
@@ -17,16 +17,16 @@
 
 ## Overview
 
-`git-rl` is a two-part release system:
+`release` is a two-part release system:
 
-1. **Local** — the `git-rl` PowerShell command bumps the version, commits, creates a `vX.Y.Z` tag, and pushes it
+1. **Local** — the `release` PowerShell command bumps the version, commits, creates a `vX.Y.Z` tag, and pushes it
 2. **CI/CD** — pushing the tag triggers a GitHub Actions pipeline that validates, builds, publishes, and notifies
 
 Both parts must be set up for the full system to work. The sections below describe exactly what each part needs.
 
 ---
 
-## Part 1 — Local: What `git-rl` Needs
+## Part 1 — Local: What `release` Needs
 
 ### Version resolution (priority order)
 
@@ -34,7 +34,7 @@ Both parts must be set up for the full system to work. The sections below descri
 |----------|--------|-------------|
 | 1 | `config/PowerFlow.settings.ps1` | File exists AND contains `$script:POWERFLOW_VERSION = "X.Y.Z"` |
 | 2 | Latest git tag | A tag matching `vX.Y.Z` exists |
-| 3 | Neither | **Stops.** `git-rl` reports that the project is not set up and points at `git-rl -h`, writing nothing. It does not fall back to `0.0.0` and open the bump picker |
+| 3 | Neither | **Stops.** `release` reports that the project is not set up and points at `release setup`, writing nothing. It does not fall back to `0.0.0` and open the bump picker |
 
 **Priority 1 is the recommended setup** — it auto-updates the version file as part of the release commit. Priority 2 (tag-only) works but leaves no version in source files.
 
@@ -46,12 +46,12 @@ Create `config/PowerFlow.settings.ps1` at the repo root containing at minimum:
 $script:POWERFLOW_VERSION = "1.0.0"
 ```
 
-Additional variables are fine in the same file. `git-rl` only reads and writes the `POWERFLOW_VERSION` line.
+Additional variables are fine in the same file. `release` only reads and writes the `POWERFLOW_VERSION` line.
 
 **Read pattern:** `\$script:POWERFLOW_VERSION = "([^"]+)"`
 **Write pattern (replaces):** `\$script:POWERFLOW_VERSION = "[^"]+"` → `$script:POWERFLOW_VERSION = "$newVersion"`
 
-### What `git-rl` does step by step
+### What `release` does step by step
 
 1. Reads current version from `config/PowerFlow.settings.ps1`
 2. Presents fzf bump picker (patch / minor / major / custom)
@@ -121,14 +121,14 @@ on:
 
 ```yaml
 env:
-  SETTINGS_FILE: config/PowerFlow.settings.ps1   # keep this — it's what git-rl writes
+  SETTINGS_FILE: config/PowerFlow.settings.ps1   # keep this — it's what release writes
 ```
 
 Change the required/optional files list to match the project:
 
 ```powershell
 $required = @(
-    "config/PowerFlow.settings.ps1",   # always required — git-rl writes here
+    "config/PowerFlow.settings.ps1",   # always required — release writes here
     "src/index.ts",                    # your project's entry point
     "package.json"                     # or whatever is critical
 )
@@ -255,45 +255,19 @@ Update the log messages and install commands to match the project. The structure
 - [ ] Ensure `CHANGELOG.md` exists with entries in `## [X.Y.Z]` format
 
 ### Verification
-- [ ] Run `git-rl` → fzf header shows `Current: vX.Y.Z (config/PowerFlow.settings.ps1)`
+- [ ] Run `release` → fzf header shows `Current: vX.Y.Z (config/PowerFlow.settings.ps1)`
 - [ ] Complete a release → GitHub Actions pipeline runs all 4 stages green
 - [ ] GitHub release page shows expected assets
 
 ---
 
-## Adapting the Version File for Non-PowerShell Projects
+## Native Version Files
 
-If the project also tracks version in a native file, add a sync block inside `git-release` (in PowerFlow's `components/git/release.ps1`) after the `# ── Update settings.ps1` block:
+The release command already detects and updates native project versions through
+`components/git/version-files.ps1`: `package.json`, `pyproject.toml`, `Cargo.toml`,
+`*.csproj`, `build.gradle`, and `VERSION`. No manual synchronization block or JSON
+reserialization is required. When several version sources exist, release warns about
+drift and updates them together while preserving formatting.
 
-**`package.json`**
-```powershell
-$pkgPath = Join-Path $repoRoot "package.json"
-if (Test-Path $pkgPath) {
-    $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
-    $pkg.version = $newVersion
-    $pkg | ConvertTo-Json -Depth 10 | Set-Content $pkgPath -Encoding UTF8
-    Write-Host "✅ package.json → $newVersion" -ForegroundColor Green
-}
-```
-
-**`pyproject.toml`**
-```powershell
-$pyPath = Join-Path $repoRoot "pyproject.toml"
-if (Test-Path $pyPath) {
-    $raw = Get-Content $pyPath -Raw
-    $raw = $raw -replace '(?m)^version = "[^"]+"', "version = `"$newVersion`""
-    Set-Content $pyPath $raw -Encoding UTF8
-    Write-Host "✅ pyproject.toml → $newVersion" -ForegroundColor Green
-}
-```
-
-**`VERSION` file**
-```powershell
-$verPath = Join-Path $repoRoot "VERSION"
-if (Test-Path $verPath) {
-    Set-Content $verPath $newVersion -Encoding UTF8 -NoNewline
-    Write-Host "✅ VERSION → $newVersion" -ForegroundColor Green
-}
-```
-
-Add the corresponding sync to `release-validate.yml` as an advisory (warn-only) check so mismatches are surfaced in CI without blocking the release.
+Match CI validation to the version source used by the project. A settings-file requirement
+is appropriate for PowerFlow; other projects should validate their own native version file.
